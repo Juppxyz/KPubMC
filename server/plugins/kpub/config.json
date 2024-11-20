@@ -1,0 +1,18 @@
+{
+  "serverMOTD":"§6§kKlotzscherPub §f§lMinecraft Server \n§fAktuell: §cWeihnachts-Projekt",
+  "tradeTax": 0.01,
+  "netherTransferTax": 0.05,
+  "deathTax": 0.01,
+  "shopItems": [
+    {"name": "", "price": 10, "sell": true, "amount": 64, "description": "", "material": "OAK_LOG"},
+    {"name": "", "price": 40, "sell": false, "amount": 32, "description": "", "material":  "IRON_INGOT"},
+    {"name": "", "price": 18, "sell": true, "amount": 64, "description": "", "material": "STONEBRICKS"},
+    {"name": "", "price": 8, "sell": false, "amount": 64, "description": "", "material": "COOKED_BEEF"},
+    {"name": "", "price": 50, "sell": false, "amount": 1, "description": "", "material": "ENDER_PEARL"},
+    {"name": "", "price": 40, "sell": true, "amount": 64, "description": "", "material": "CACTUS"},
+    {"name": "", "price": 114, "sell": true, "amount": 32, "description": "", "material": "LAPIS_LAZULI"},
+    {"name": "", "price": 340, "sell": false, "amount": 1, "description": "", "material": "MULE_SPAWN_EGG"},
+    {"name": "", "price": 2500, "sell": false, "amount": 1, "description": "§9Steige empor!", "material": "ELYTRA"},
+    {"name": "", "price": 250, "sell": true, "amount": 16, "description": "", "material": "PUMPKIN_PIE"}
+  ]
+}

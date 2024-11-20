@@ -1,0 +1,25 @@
+name: KPubMC
+version: 'v0.0.1'
+main: xyz.jupp.minecraft.Main
+api-version: '1.21'
+description: "Offizielles Plugin für den KlotzscherPub Minecraft Server."
+
+
+commands:
+  money:
+  geld:
+  schilling:
+  config:
+  hilfe:
+  help:
+  sc:
+  slimechunk:
+  einladungen:
+  invites:
+  team:
+  ranking:
+  createshop:
+  hover:
+  head:
+  kopf:
+  warp:
