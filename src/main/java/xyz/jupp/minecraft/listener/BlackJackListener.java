@@ -22,7 +22,7 @@ public class BlackJackListener implements Listener {
 
     private final HashMap<UUID, BlackJackInventory> activeGames = new HashMap<>();
     SimpleEntry<String, Integer>[] deck = createDeck();
-
+    // help
     // Create dealer and player card arrays
     ArrayList<SimpleEntry<String, Integer>> dealerCards = new ArrayList<>();
     ArrayList<SimpleEntry<String, Integer>> playerCards = new ArrayList<>();
