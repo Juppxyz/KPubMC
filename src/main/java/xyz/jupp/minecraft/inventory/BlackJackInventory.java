@@ -142,7 +142,7 @@ public class BlackJackInventory {
     public NamespacedKey getSplitKey() {return control_split;}
     public NamespacedKey getDoubleKey() {return control_double;}
 
-    public void renderCard(Integer value, Integer location) {
+    public void renderCard(String value, Integer location) {
         ItemStack card = new ItemStack(Material.BOOK);
         ItemMeta cardMeta = card.getItemMeta();
         if (cardMeta != null) {
