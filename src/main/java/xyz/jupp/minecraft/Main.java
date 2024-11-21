@@ -41,6 +41,7 @@ public final class Main extends JavaPlugin {
         this.getCommand("kopf").setExecutor(new PlayerHeadsCommand());
         this.getCommand("head").setExecutor(new PlayerHeadsCommand());
         this.getCommand("warp").setExecutor(new WarpCommand());
+        this.getCommand("customItem").setExecutor(new ItemCommand());
 
     }
 
@@ -56,6 +57,7 @@ public final class Main extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new ShopListener(), this);
         Bukkit.getPluginManager().registerEvents(new CreateLocalShopListener(), this);
         Bukkit.getPluginManager().registerEvents(new WarpInventoryListener(), this);
+        Bukkit.getPluginManager().registerEvents(new SwordListener(), this);
 
     }
 
