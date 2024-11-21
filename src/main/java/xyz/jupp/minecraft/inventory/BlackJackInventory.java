@@ -3,15 +3,30 @@ package xyz.jupp.minecraft.inventory;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.persistence.PersistentDataType;
+import xyz.jupp.minecraft.Main;
+
 
 public class BlackJackInventory {
 
+
     private final Inventory inventory;
 
+    private final NamespacedKey control_hit;
+    private final NamespacedKey control_stay;
+    private final NamespacedKey control_double;
+    private final NamespacedKey control_split;
+
+
     public BlackJackInventory() {
+        control_hit = new NamespacedKey(Main.getInstance(), "control_hit");
+        control_stay = new NamespacedKey(Main.getInstance(), "control_stay");
+        control_double = new NamespacedKey(Main.getInstance(), "control_double");
+        control_split = new NamespacedKey(Main.getInstance(), "control_split");
         // Create an inventory with a size of 54 (6 rows of 9) and a custom title
         this.inventory = Bukkit.createInventory(null, 54, "Blackjack: Choose Your Bet");
 
@@ -79,8 +94,64 @@ public class BlackJackInventory {
         inventory.setItem(40, playerCard);
 
         // Fill the rest of the inventory with placeholder glass panes
+        renderBJControls();
         fillPlaceholders();
     }
+
+
+    public void renderBJControls() {
+        ItemStack controlHit = new ItemStack(Material.DIAMOND);
+        ItemMeta controlHitMeta = controlHit.getItemMeta();
+        if (controlHitMeta != null) {
+            controlHitMeta.setDisplayName(ChatColor.GOLD + "Hit");
+            controlHitMeta.getPersistentDataContainer().set(control_hit, PersistentDataType.BYTE, (byte) 1);
+            controlHit.setItemMeta(controlHitMeta);
+        }
+        inventory.setItem(17, controlHit);
+
+        ItemStack controlStay = new ItemStack(Material.REDSTONE);
+        ItemMeta controlStayMeta = controlStay.getItemMeta();
+        if (controlStayMeta != null) {
+            controlStayMeta.setDisplayName(ChatColor.GOLD + "Stay");
+            controlStayMeta.getPersistentDataContainer().set(control_stay, PersistentDataType.BYTE, (byte) 1);
+            controlStay.setItemMeta(controlStayMeta);
+        }
+        inventory.setItem(26, controlStay);
+
+        ItemStack controlSplit = new ItemStack(Material.GLOW_BERRIES);
+        ItemMeta controlSplitMeta = controlSplit.getItemMeta();
+        if (controlSplitMeta != null) {
+            controlSplitMeta.setDisplayName(ChatColor.GOLD + "Split");
+            controlSplitMeta.getPersistentDataContainer().set(control_split, PersistentDataType.BYTE, (byte) 1);
+            controlSplit.setItemMeta(controlSplitMeta);
+        }
+        inventory.setItem(35, controlSplit);
+
+        ItemStack controlDouble = new ItemStack(Material.GOLD_ORE);
+        ItemMeta controlDoubleMeta = controlDouble.getItemMeta();
+        if (controlDoubleMeta != null) {
+            controlDoubleMeta.setDisplayName(ChatColor.GOLD + "Double");
+            controlDoubleMeta.getPersistentDataContainer().set(control_double, PersistentDataType.BYTE, (byte) 1);
+            controlDouble.setItemMeta(controlDoubleMeta);
+        }
+        inventory.setItem(44, controlDouble);
+    }
+
+    public NamespacedKey getHitKey() {return control_hit;}
+    public NamespacedKey getStayKey() {return control_stay;}
+    public NamespacedKey getSplitKey() {return control_split;}
+    public NamespacedKey getDoubleKey() {return control_double;}
+
+    public void renderCard(Integer value, Integer location) {
+        ItemStack card = new ItemStack(Material.BOOK);
+        ItemMeta cardMeta = card.getItemMeta();
+        if (cardMeta != null) {
+            cardMeta.setDisplayName(ChatColor.WHITE + String.valueOf(value));
+            card.setItemMeta(cardMeta);
+        }
+        inventory.setItem(location, card);
+    }
+
 
     // Fill empty slots with black stained glass panes
     private void fillPlaceholders() {

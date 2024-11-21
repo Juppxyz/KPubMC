@@ -1,41 +1,78 @@
 package xyz.jupp.minecraft.listener;
 
-import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
-import org.bukkit.Material;
-import org.bukkit.Sound;
+import org.bukkit.*;
 import org.bukkit.entity.*;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.EntityDamageEvent;
-import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
-import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.Inventory;
-import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.persistence.PersistentDataContainer;
+import org.bukkit.persistence.PersistentDataType;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
-import xyz.jupp.minecraft.config.ConfigManager;
-import xyz.jupp.minecraft.config.ShopItem;
-import xyz.jupp.minecraft.database.PlayerCollection;
 import xyz.jupp.minecraft.inventory.BlackJackInventory;
-import xyz.jupp.minecraft.inventory.ShopInventory;
-import xyz.jupp.minecraft.utils.Logger;
-
-import java.util.HashMap;
-import java.util.List;
-import java.util.Random;
-import java.util.UUID;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.AbstractMap.SimpleEntry;
+import java.util.*;
 
 public class BlackJackListener implements Listener {
 
     private final HashMap<UUID, BlackJackInventory> activeGames = new HashMap<>();
+    SimpleEntry<String, Integer>[] deck = createDeck();
+
+    // Create dealer and player card arrays
+    ArrayList<SimpleEntry<String, Integer>> dealerCards = new ArrayList<>();
+    ArrayList<SimpleEntry<String, Integer>> playerCards = new ArrayList<>();
+
+
+    private static SimpleEntry<String, Integer>[] createDeck() {
+        // Card names and values
+        String[] cardNames = {"Ace", "2", "3", "4", "5", "6", "7", "8", "9", "10", "Jack", "Queen", "King"};
+        int[] cardValues = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10}; // Aces are 1; face cards are 10
+
+        // Array to hold the deck
+        SimpleEntry<String, Integer>[] deck = new SimpleEntry[52];
+
+        int index = 0;
+
+        // Build the deck
+        for (int i = 0; i < cardNames.length; i++) {
+            for (int j = 0; j < 4; j++) { // Four copies of each card
+                deck[index++] = new SimpleEntry<>(cardNames[i], cardValues[i]);
+            }
+        }
+        System.out.println(Arrays.toString(deck));
+        return deck;
+    }
+
+
+    public static void drawDealer(ArrayList<SimpleEntry<String, Integer>> deck, ArrayList<SimpleEntry<String, Integer>> dealerCards) {
+        drawCard(deck, dealerCards);
+    }
+
+    public static void drawPlayer(ArrayList<SimpleEntry<String, Integer>> deck, ArrayList<SimpleEntry<String, Integer>> playerCards) {
+        drawCard(deck, playerCards);
+    }
+
+    private static void drawCard(ArrayList<SimpleEntry<String, Integer>> deck, ArrayList<SimpleEntry<String, Integer>> hand) {
+        if (deck.isEmpty()) {
+            System.out.println("Deck is empty. No more cards to draw.");
+            return;
+        }
+        Random random = new Random();
+        int index = random.nextInt(deck.size()); // Select a random card
+        SimpleEntry<String, Integer> card = deck.remove(index); // Remove card from deck
+        hand.add(card); // Add card to the player's or dealer's hand
+    }
+
+    private static void printHand(ArrayList<SimpleEntry<String, Integer>> hand) {
+        for (SimpleEntry<String, Integer> card : hand) {
+            System.out.println(card.getKey() + " - " + card.getValue());
+        }
+    }
 
 
     @EventHandler
@@ -103,6 +140,34 @@ public class BlackJackListener implements Listener {
 
                 }
             }
+
+            // check for hit click
+            if (clickedItem.getType() == Material.DIAMOND) {
+                ItemMeta meta = clickedItem.getItemMeta();
+                PersistentDataContainer data = meta.getPersistentDataContainer();
+                if (data.has(new NamespacedKey(Main.getInstance(), "control_hit"), PersistentDataType.BYTE)) {
+                    blackJackInventory.renderCard(10, 14);
+
+
+
+                }
+            }
+
+
+
+
         }
     }
+    /*
+    @EventHandler
+    public void onInventoryClose(InventoryCloseEvent event) {
+        Player player = (Player) event.getPlayer();
+
+        // remove player from activegames
+        if (activeGames.containsKey(player.getUniqueId())) {
+            activeGames.remove(player.getUniqueId());
+        }
+    }
+
+     */
 }
