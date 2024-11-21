@@ -37,7 +37,6 @@ public final class Main extends JavaPlugin {
         this.getCommand("team").setExecutor(new TeamCommand());
         this.getCommand("ranking").setExecutor(new RankingCommand());
         this.getCommand("createshop").setExecutor(new CreateShopCommand());
-        this.getCommand("createblackjack").setExecutor(new CreateBlackJackCommand());
         this.getCommand("hover").setExecutor(new HoverTextCommand());
         this.getCommand("kopf").setExecutor(new PlayerHeadsCommand());
         this.getCommand("head").setExecutor(new PlayerHeadsCommand());
@@ -55,7 +54,6 @@ public final class Main extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new NetherTransferListener(), this);
         Bukkit.getPluginManager().registerEvents(new DeathListener(), this);
         Bukkit.getPluginManager().registerEvents(new ShopListener(), this);
-        Bukkit.getPluginManager().registerEvents(new BlackJackListener(), this);
         Bukkit.getPluginManager().registerEvents(new CreateLocalShopListener(), this);
         Bukkit.getPluginManager().registerEvents(new WarpInventoryListener(), this);
 
