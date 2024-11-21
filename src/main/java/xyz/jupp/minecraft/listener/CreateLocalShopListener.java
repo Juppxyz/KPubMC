@@ -121,7 +121,7 @@ public class CreateLocalShopListener implements Listener {
 
                 Material shopItem = Material.getMaterial(sign.getLine(2).replace("§a", ""));
                 OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(sign.getLine(1).replace("§6", ""));
-                if (offlinePlayer.getUniqueId() == null || !offlinePlayer.hasPlayedBefore()) {
+                if (offlinePlayer == null || offlinePlayer.getUniqueId() == null || !offlinePlayer.hasPlayedBefore()) {
                     player.sendMessage(Main.getChatPrefix() + "§cDer Spieler war leider noch nie auf dem Server.");
                     player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 1f);
                     return;
