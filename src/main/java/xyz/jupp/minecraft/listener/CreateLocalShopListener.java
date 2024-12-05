@@ -2,32 +2,44 @@ package xyz.jupp.minecraft.listener;
 
 import org.bukkit.*;
 import org.bukkit.block.Block;
-import org.bukkit.block.BlockFace;
 import org.bukkit.block.Chest;
 import org.bukkit.block.Sign;
+import org.bukkit.block.data.BlockData;
 import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.block.BlockFace;
+import org.bukkit.event.EventHandler;
+import org.bukkit.block.data.type.WallSign;
 import org.bukkit.event.block.SignChangeEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import xyz.jupp.minecraft.database.PlayerCollection;
+import xyz.jupp.minecraft.utils.Logger;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import xyz.jupp.minecraft.Main;
-import xyz.jupp.minecraft.database.PlayerCollection;
-import xyz.jupp.minecraft.utils.Logger;
 
 public class CreateLocalShopListener implements Listener {
 
-// TODO CHECK EINBAUEN
-    /**
+    @EventHandler
+    public void onShopChestShop(PlayerInteractEvent event) {
+        Player player = event.getPlayer();
+        Block clicked = event.getClickedBlock();
+        if (clicked == null || !(clicked.getState() instanceof Chest)) return;
+        BlockData blockData = clicked.getBlockData();
+        org.bukkit.block.data.type.Chest chestData = (org.bukkit.block.data.type.Chest) blockData;
+        BlockFace facing = chestData.getFacing();
 
-     if ("§6Shop von".equalsIgnoreCase(shopPrefixTitle) && !event.getLine(1).equals("§6" + player.getName())) {
-     event.setCancelled(true);
-     player.sendMessage(Main.getChatPrefix() + "§cDu kannst keine fremden Shops anpassen.");
-     player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
-     return;
-     }
-     * */
+        Block frontBlock = clicked.getRelative(facing);
+        if (frontBlock.getState() instanceof Sign) {
+            Sign sign = (Sign) frontBlock.getState();
+            if ("§6Shop von".equals(sign.getLine(0))) {
+                if (!player.getName().equals(sign.getLine(1).replace("§6", ""))) {
+                    player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 1f);
+                    event.setCancelled(true);
+                }
+            }
+        }
+    }
 
 
     @EventHandler
@@ -104,13 +116,6 @@ public class CreateLocalShopListener implements Listener {
                     player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 1f);
                     return;
                 }
-
-
-                //if (chest.getInventory().getSize() < amount) {
-                //    player.sendMessage(Main.getChatPrefix() + "§fDer Shop von §6" + secondLine + " §fist aktuell nicht ausreichend gefüllt.");
-                //    player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 1f);
-                //    return;
-                //}
 
                 int updatedMoney = currentMoney - sellPrice;
                 if (sellPrice > currentMoney || updatedMoney < 0) {
@@ -191,26 +196,36 @@ public class CreateLocalShopListener implements Listener {
             return;
         }
 
-        // Prüfen, ob eine angrenzende Truhe existiert
         Block signBlock = event.getBlock();
         Block adjChest = null;
-        for (BlockFace face : BlockFace.values()) {
-            Block adjacentBlock = signBlock.getRelative(face);
-            if (adjacentBlock.getType() == Material.CHEST) {
-                adjChest = adjacentBlock;
-                break;
-            }
+
+        if (!(signBlock.getBlockData() instanceof WallSign)) {
+            event.getPlayer().sendMessage(Main.getChatPrefix() + "§cBitte platziere das Shop-Schild an der Vorderseite einer Truhe.");
+            event.setCancelled(true);
+            return;
         }
 
+        WallSign wallSign = (WallSign) signBlock.getBlockData();
+        BlockFace attachedFace = wallSign.getFacing().getOppositeFace();
+
+        Block attachedBlock = signBlock.getRelative(attachedFace);
+        if (attachedBlock.getType() != Material.CHEST) {
+            event.getPlayer().sendMessage(Main.getChatPrefix() + "§cBitte platziere das Shop-Schild an der Vorderseite einer Truhe.");
+            event.setCancelled(true);
+            return;
+        }
+
+        adjChest = attachedBlock;
+
         if (adjChest == null || !(adjChest.getState() instanceof Chest)) {
-            player.sendMessage(Main.getChatPrefix() + "§cBitte platziere das Shop-Schild an einer normalen Truhe.");
+            player.sendMessage(Main.getChatPrefix() + "§cBitte platziere das Shop-Schild an der Vorderseite einer normalen Truhe.");
             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
             return;
         }
 
         Chest chest = (Chest) adjChest.getState();
         Material chestItem = hasOnlyOneMaterialType(chest) ;
-        if (chestItem== null) {
+        if (chestItem == null) {
             player.sendMessage(Main.getChatPrefix() + "§cDer Shop konnte nicht erstellt werden!");
             player.sendMessage("§8» §fIn der Truhe muss mindestens ein Item sein.");
             player.sendMessage("§8» §fIn der Truhe dürfen nicht verschiedene Item-Typen sein.");
@@ -279,5 +294,10 @@ public class CreateLocalShopListener implements Listener {
         return remainingAmount <= 0;
     }
 
+
+
 }
+
+
+
 

@@ -31,6 +31,7 @@ public class PlayerCollection {
         playerDocument.append("cheatingKicks", 0);
         playerDocument.append("money", 250);
         playerDocument.append("teamID", null);
+        playerDocument.append("loginStreak", 0);
         playerDocument.append("uuid", getPlayer().getUniqueId().toString());
         Bukkit.getConsoleSender().sendMessage(Main.getConsolePrefix() + "create new player " + getPlayer().getUniqueId() + " in database.");
         playerCollection.insertOne(playerDocument);
@@ -67,6 +68,27 @@ public class PlayerCollection {
         return true;
     }
 
+    public int getLoginStreak() {
+        Bson filter = eq("uuid", getUuid());
+        Document document = playerCollection.find(filter).first();
+        int loginStreak = document.getInteger("loginStreak");
+        Bukkit.getConsoleSender().sendMessage(Main.getChatPrefix() + "get loginStreak from" + getPlayer().getUniqueId() + "(" + loginStreak + ")");
+        return loginStreak;
+    }
+
+    public void incLoginStreak() {
+        Bson filter = eq("uuid", getUuid());
+        Document updatedDocument = new Document("$inc", new Document("loginStreak", 1));
+        playerCollection.updateOne(filter, updatedDocument);
+        Bukkit.getConsoleSender().sendMessage(Main.getChatPrefix() + "increment loginStreak (" + getPlayer().getUniqueId() + ")");
+    }
+
+    public void resetLoginStreak() {
+        Bson filter = eq("uuid", getUuid());
+        Document updatedDocument = new Document("$set", new Document("loginStreak", 0));
+        playerCollection.updateOne(filter, updatedDocument);
+        Bukkit.getConsoleSender().sendMessage(Main.getChatPrefix() + "reset loginStreak (" + getPlayer().getUniqueId() + ")");
+    }
 
     public int getMoney() {
         Bson filter = eq("uuid", getUuid());

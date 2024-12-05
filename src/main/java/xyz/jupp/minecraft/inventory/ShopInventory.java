@@ -89,7 +89,7 @@ public class ShopInventory {
         ItemStack itemStack = new ItemStack(Material.EXPERIENCE_BOTTLE);
         ItemMeta itemMeta = itemStack.getItemMeta();
         List<String> lore = new ArrayList<>(1);
-        int price = (int) Math.round((allPrices / shopItems.size()) * 0.75);
+        int price = (int) Math.round((allPrices / shopItems.size()) * 0.80);
         lore.add("§fPreis: " + Main.getCurrencyName(price));
         itemMeta.setLore(lore);
         itemMeta.setDisplayName("§5§oZufall");

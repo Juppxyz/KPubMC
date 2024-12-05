@@ -15,7 +15,7 @@ import xyz.jupp.minecraft.database.PlayerCollection;
 
 public class MoneyInventory {
 
-    public final static String moneySendName = "§aGeld senden";
+    public final static String moneySendName = "§aGeld verwalten";
     public final static String closeInventoryName = "§6Bye";
 
     public enum MoneyInventoryTypes { MAIN, SEND }
@@ -43,12 +43,11 @@ public class MoneyInventory {
 
     private static Inventory createMainInventory(Player player, int money) {
          Inventory inventory = Bukkit.createInventory(player, 9, "§aGeldbeutel §8» §fÜbersicht");
-         boolean isServerEmpty = Bukkit.getServer().getOnlinePlayers().size()<=1;
         for (int i = 0; i < 9; i++) {
             if (i == 0) {
                 inventory.setItem(i, createItemStack("§fDein Guthaben§8: " + Main.getCurrencyName(money), Material.GOLD_INGOT));
-            } else if ((i == 4) && (money > 0) && (!isServerEmpty))  {
-                inventory.setItem(i, createItemStack(moneySendName, Material.IRON_NUGGET));
+            } else if ((i == 4) && (money > 0))  {
+                inventory.setItem(i, createItemStack(moneySendName, Material.EMERALD));
             } else if (i == 8) {
                 inventory.setItem(i, createItemStack(closeInventoryName, Material.BARRIER));
             } else {
@@ -60,7 +59,7 @@ public class MoneyInventory {
 
 
     private static Inventory createSendInventory(Player player) {
-        Inventory inventory = Bukkit.createInventory(player, 54, "§aGeldbeutel §8» §fGeld senden");
+        Inventory inventory = Bukkit.createInventory(player, 54, "§aGeldbeutel §8» §fGeld verwalten");
 
         int invIndex = 0;
         for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
@@ -82,7 +81,7 @@ public class MoneyInventory {
         inventory.setItem(49, createItemStack("§a+ 1", Material.LIME_DYE));
         inventory.setItem(50, createItemStack("§a+ 10", Material.LIME_WOOL));
         inventory.setItem(51, createItemStack("§a+ 100", Material.LIME_WOOL));
-        inventory.setItem(52, createItemStack("§aÜberweisen", Material.NETHER_STAR));
+        inventory.setItem(52, createItemStack("§aAbheben", Material.NETHER_STAR));
         inventory.setItem(53, createItemStack(closeInventoryName, Material.BARRIER));
         player.openInventory(inventory);
         return inventory;

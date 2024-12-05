@@ -50,6 +50,7 @@ public class TeamCollection {
         document.append("teamColor", teamColor);
         document.append("teamPoints", 0);
         document.append("members", memberList);
+        document.append("alreadyPurchased", 0);
         teamsCollection.insertOne(document);
         Logger.console(String.format("create new team %s (%s)", teamName, teamID));
         Bukkit.broadcastMessage(Main.getChatPrefix() + "§fDas Team " + teamColor + teamName + " §fwurde von §6" + owner.getName() + " §fgegründet!");

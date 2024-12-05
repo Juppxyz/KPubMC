@@ -18,14 +18,14 @@ public class TeamBlockCacheObject {
 
 
     TeamBlockCacheObject(String teamID, double x,double y,double z, boolean isActive) {
-        this.location = new Location(Bukkit.getWorld("world"), x, y, z);
+        this.location = new Location(Bukkit.getWorld("world_MCWinter"), x, y, z);
         this.teamID = teamID;
         this.teamBlockCollection = new TeamBlockCollection(teamID);
         this.isActive = isActive;
     }
 
     private void updateLocation(double x, double y, double z) {
-        this.location = new Location(Bukkit.getWorld("world"), x, y, z);
+        this.location = new Location(Bukkit.getWorld("world_MCWinter"), x, y, z);
         teamBlockCollection.updateTeamBlockLocation(x, y, z);
     }
 

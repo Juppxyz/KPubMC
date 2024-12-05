@@ -27,7 +27,7 @@ public class DeathListener implements Listener {
         Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
             PlayerCollection playerCollection = new PlayerCollection(player);
             int money = playerCollection.getMoney();
-            if (money <= 500) {
+            if (money <= 250) {
                 player.sendMessage(Main.getChatPrefix() + "Dir wurde §ckeine §fTodes-Steuer berechnet.");
                 return;
             }

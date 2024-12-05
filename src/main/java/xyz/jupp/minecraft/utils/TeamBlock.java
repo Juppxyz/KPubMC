@@ -18,24 +18,22 @@ public class TeamBlock {
     private final static HashMap<String, Integer> teamMap = new HashMap<>();
     public static HashMap<String, Integer> getRedeemableItems() {
         if (teamMap.isEmpty()) {
-            teamMap.put("DRAGON_EGG", 50);
-            teamMap.put("BLAZE_ROD", 2);
-            teamMap.put("EMERALD_BLOCK", 2);
-            teamMap.put("DIAMOND_BLOCK", 10);
-            teamMap.put("ELYTRA", 60);
-            teamMap.put("NETHER_STAR", 100);
-            teamMap.put("TOTEM_OF_UNDYING", 10);
-            teamMap.put("CONDUIT", 20);
-            teamMap.put("MUSIC_DISC_PIGSTEP", 50);
-            teamMap.put("ENCHANTED_GOLDEN_APPLE", 10);
-            teamMap.put("WITHER_SKELETON_SKULL", 10);
-            teamMap.put("HONEY_BLOCK", 2);
-            teamMap.put("PUFFERFISH", 2);
-            teamMap.put("TRIDENT", 5);
-            teamMap.put("ZOMBIE_HEAD", 22);
-            teamMap.put("CREEPER_HEAD", 22);
-            teamMap.put("TURTLE_HELMET", 5);
-            teamMap.put("SHULKER_SHELL", 8);
+            teamMap.put("SHULKER_BOX", 10);
+            teamMap.put("AMETHYST_BLOCK", 1);
+            teamMap.put("NETHERITE_BLOCK", 5);
+            teamMap.put("ELYTRA", 10);
+            teamMap.put("DIAMOND_HORSE_ARMOR", 3);
+            teamMap.put("MACE", 8);
+            teamMap.put("NETHER_STAR", 10);
+            teamMap.put("HEART_OF_THE_SEA", 4);
+            teamMap.put("TOTEM_OF_UNDYING", 1);
+            teamMap.put("NETHERITE_SCRAP", 3);
+            teamMap.put("NETHERITE_INGOT", 5);
+            teamMap.put("SNIFFER_EGG", 1);
+            teamMap.put("BEACON", 12);
+            teamMap.put("DRAGON_HEAD", 10);
+            teamMap.put("PIGLIN_HEAD", 12);
+            teamMap.put("CREEPER_HEAD", 10);
         }
         return teamMap;
     }

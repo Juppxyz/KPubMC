@@ -1,8 +1,6 @@
 package xyz.jupp.minecraft.listener;
 
-import org.bukkit.Bukkit;
-import org.bukkit.Location;
-import org.bukkit.Sound;
+import org.bukkit.*;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -12,7 +10,14 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.TeamCacheObject;
+import xyz.jupp.minecraft.commands.SpecCommand;
 import xyz.jupp.minecraft.database.PlayerCollection;
+
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 
 public class JoinQuitListener implements Listener {
 
@@ -30,15 +35,29 @@ public class JoinQuitListener implements Listener {
         Player player = event.getPlayer();
 
         if (!player.hasPlayedBefore()) {
-            player.teleport(new Location(Bukkit.getWorld("world"), -388.500D, 122.5000, -106.500D));
+            player.teleport(new Location(Bukkit.getWorld("world_MCWinter"), 92624.500D, 72.5000D, 114430.500D));
+        }
+
+        ArrayList<UUID> specMode = SpecCommand.getSpecMode();
+        if (!specMode.isEmpty()) {
+            for (UUID onlineUUID : specMode){
+                Player target = Bukkit.getPlayer(onlineUUID);
+                if (target != null && target.isOnline()) {
+                    player.hidePlayer(target);
+                }
+            }
         }
 
         Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
+            //handleDailyLoginStreak(player);
             handleFirstJoinMessages(player);
             setTeamDisplayNames(player);
             Bukkit.broadcastMessage(String.format("§8[§a+§8] %s §fhat den Server betreten.", player.getPlayerListName()));
         });
     }
+
+
+
 
     private void handleFirstJoinMessages(Player player) {
         if (!player.hasPlayedBefore()) {
@@ -78,6 +97,11 @@ public class JoinQuitListener implements Listener {
     public void onQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
         CacheHandler.getInstance().removePlayerFromCache(player);
+        if (SpecCommand.getSpecMode(player.getUniqueId())) {
+            SpecCommand.changeSpecMode(player.getUniqueId());
+            event.setQuitMessage(null);
+            return;
+        }
         event.setQuitMessage("§8[§c-§8] §a" + player.getPlayerListName() + " §fhat den Server verlassen.");
     }
 }

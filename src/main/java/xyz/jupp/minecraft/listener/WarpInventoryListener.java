@@ -20,6 +20,7 @@ import xyz.jupp.minecraft.cache.WarpCache;
 import xyz.jupp.minecraft.cache.WarpCacheObject;
 import xyz.jupp.minecraft.database.PlayerCollection;
 import xyz.jupp.minecraft.inventory.WarpInventory;
+import xyz.jupp.minecraft.utils.PlayerTeleport;
 
 import java.util.Objects;
 import java.util.regex.Matcher;
@@ -155,15 +156,14 @@ public class WarpInventoryListener implements Listener {
                                 player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
                                 return;
                             }
-                            playerCollection.updateMoney(money - 200);
+
+                            PlayerTeleport playerTeleport = new PlayerTeleport();
                             Location location = new Location(Bukkit.getWorld(targetWarpObject.getWorldName()), targetWarpObject.getX(), targetWarpObject.getY(), targetWarpObject.getZ());
-                            Bukkit.getScheduler().runTask(Main.getInstance(), () -> {
-                               player.teleport(location);
-                            });
+                            playerTeleport.teleportAfter(player, location);
 
                             player.sendMessage(Main.getChatPrefix() + "§fDu wurdest zum Warp von §a" + owner.getPlayer().getName() + " §fteleportiert.");
                             player.sendMessage(Main.getChatPrefix() + "§c-200 " + Main.getCurrencyName());
-                            player.playSound(player.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 2f,2f);
+                            playerCollection.updateMoney(money - 200);
                         }
                     }
 
