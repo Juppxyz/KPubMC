@@ -1,18 +1,18 @@
 {
-  "serverMOTD":"§6§kKlotzscherPub §f§lMinecraft Server \n§fAktuell: §cWeihnachts-Projekt",
-  "tradeTax": 0.01,
-  "netherTransferTax": 0.05,
-  "deathTax": 0.01,
+  "serverMOTD":"§6§lKlotzscherPub §f§lMinecraft Server",
+  "tradeTax": 0.10,
+  "netherTransferTax": 0.06,
+  "deathTax": 0.12,
   "shopItems": [
-    {"name": "", "price": 10, "sell": true, "amount": 64, "description": "", "material": "OAK_LOG"},
-    {"name": "", "price": 40, "sell": false, "amount": 32, "description": "", "material":  "IRON_INGOT"},
-    {"name": "", "price": 18, "sell": true, "amount": 64, "description": "", "material": "STONEBRICKS"},
-    {"name": "", "price": 8, "sell": false, "amount": 64, "description": "", "material": "COOKED_BEEF"},
-    {"name": "", "price": 50, "sell": false, "amount": 1, "description": "", "material": "ENDER_PEARL"},
-    {"name": "", "price": 40, "sell": true, "amount": 64, "description": "", "material": "CACTUS"},
-    {"name": "", "price": 114, "sell": true, "amount": 32, "description": "", "material": "LAPIS_LAZULI"},
-    {"name": "", "price": 340, "sell": false, "amount": 1, "description": "", "material": "MULE_SPAWN_EGG"},
-    {"name": "", "price": 2500, "sell": false, "amount": 1, "description": "§9Steige empor!", "material": "ELYTRA"},
-    {"name": "", "price": 250, "sell": true, "amount": 16, "description": "", "material": "PUMPKIN_PIE"}
+    {"name": "", "price": 1500, "sell": false, "amount": 1, "description": "", "material": "SCULK_SENSOR"},
+    {"name": "", "price": 900, "sell": false, "amount": 1, "description": "", "material": "SNIFFER_EGG"},
+    {"name": "", "price": 110, "sell": true, "amount": 16, "description": "", "material": "REDSTONE_BLOCK"},
+    {"name": "", "price": 1500, "sell": false, "amount": 2, "description": "", "material": "TOTEM_OF_UNDYING"},
+    {"name": "", "price": 25, "sell": false, "amount": 64, "description": "", "material": "AMETHYST_BLOCK"},
+    {"name": "", "price": 180, "sell": true, "amount": 32, "description": "", "material": "BAMBOO_BLOCK"},
+    {"name": "", "price": 100, "sell": true, "amount": 32, "description": "", "material": "GOLDEN_CARROT"},
+    {"name": "", "price": 800, "sell": true, "amount": 1, "description": "", "material": "BELL"},
+    {"name": "", "price": 50, "sell": true, "amount": 64, "description": "", "material": "POTATO"},
+    {"name": "", "price": 15000, "sell": false, "amount": 1, "description": "", "material": "ELYTRA"}
   ]
 }

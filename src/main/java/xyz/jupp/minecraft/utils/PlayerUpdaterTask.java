@@ -59,10 +59,10 @@ public class PlayerUpdaterTask implements TaskHandler.Tasks {
                             continue;
                         }
                         int teamPoints = teamCollection.getTeamPoints();
-                        if (teamPoints >= 1000) {
+                        if (teamPoints >= 500) {
                             player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f, 2f);
                             player.sendMessage(Main.getChatPrefix() + "§aDu hast deinen Team XP-Boost bekommen!");
-                            player.giveExpLevels(8);
+                            player.giveExpLevels(5);
                         }
                     }
                 }

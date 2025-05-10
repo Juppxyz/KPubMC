@@ -10,6 +10,7 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
+import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.database.PlayerCollection;
 
 
@@ -81,7 +82,7 @@ public class MoneyInventory {
         inventory.setItem(49, createItemStack("§a+ 1", Material.LIME_DYE));
         inventory.setItem(50, createItemStack("§a+ 10", Material.LIME_WOOL));
         inventory.setItem(51, createItemStack("§a+ 100", Material.LIME_WOOL));
-        inventory.setItem(52, createItemStack("§aAbheben", Material.NETHER_STAR));
+        inventory.setItem(52, createItemStack("§aAbheben §8(§6-" + Math.round(ConfigManager.getManager().getTradeTax()*100) + "%§8)", Material.NETHER_STAR));
         inventory.setItem(53, createItemStack(closeInventoryName, Material.BARRIER));
         player.openInventory(inventory);
         return inventory;

@@ -70,6 +70,7 @@ public final class Main extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new ElytraFlyListener(), this);
         Bukkit.getPluginManager().registerEvents(new MobLimiterListener(), this);
         Bukkit.getPluginManager().registerEvents(new TeamBlockListener(), this);
+        Bukkit.getPluginManager().registerEvents(new EnderDragonListener(), this);
     }
 
     private void registerTasks() {

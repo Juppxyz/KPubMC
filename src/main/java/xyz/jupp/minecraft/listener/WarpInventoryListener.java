@@ -161,9 +161,9 @@ public class WarpInventoryListener implements Listener {
                             Location location = new Location(Bukkit.getWorld(targetWarpObject.getWorldName()), targetWarpObject.getX(), targetWarpObject.getY(), targetWarpObject.getZ());
                             playerTeleport.teleportAfter(player, location);
 
-                            player.sendMessage(Main.getChatPrefix() + "§fDu wurdest zum Warp von §a" + owner.getPlayer().getName() + " §fteleportiert.");
                             player.sendMessage(Main.getChatPrefix() + "§c-200 " + Main.getCurrencyName());
                             playerCollection.updateMoney(money - 200);
+                            player.sendMessage(Main.getChatPrefix() + "§fDu wurdest zum Warp von §a" + owner.getName() + " §fteleportiert.");
                         }
                     }
 

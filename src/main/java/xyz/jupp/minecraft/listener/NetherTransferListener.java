@@ -19,13 +19,6 @@ public class NetherTransferListener implements Listener {
         float transferTaxRate = ConfigManager.getManager().getNetherTransferTax();
         if (player.getWorld().getEnvironment() != World.Environment.NORMAL) return;
 
-        if (event.getTo().getWorld().getEnvironment() == World.Environment.THE_END){
-            event.setCancelled(true);
-            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS,1f,1f);
-            player.sendMessage(Main.getChatPrefix() + "§fAktuell ist das §0§lEnd §fnoch nicht offen.");
-            return;
-        }
-
         Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
             PlayerCollection playerCollection = new PlayerCollection(player);
             int money = playerCollection.getMoney();

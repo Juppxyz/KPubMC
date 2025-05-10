@@ -67,13 +67,17 @@ public class ShopListener implements Listener {
                     ItemMeta itemMeta = itemStack.getItemMeta();
 
                     if (itemMeta != null && itemMeta.hasDisplayName() && itemMeta.getDisplayName().equals(Main.getCurrencyName(10))) {
-                        int amountToDeposit = itemStack.getAmount() * 10;
-                        player.getInventory().remove(itemStack);
+                        int stackSize = itemStack.getAmount();
+                        int amountToDeposit = stackSize * 10; // Jeder Emerald entspricht 10 Schilling
+
+                        // Stack aus der Hand entfernen
+                        player.getInventory().setItemInMainHand(null);
 
                         Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
                             PlayerCollection playerCollection = new PlayerCollection(player);
                             int currentMoney = playerCollection.getMoney();
                             playerCollection.updateMoney(currentMoney + amountToDeposit);
+
                             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f, 2f);
                             Bukkit.getConsoleSender().sendMessage(Main.getConsolePrefix() + "deposit from " + player.getUniqueId() + " (" + amountToDeposit + ")");
                             player.sendMessage(Main.getChatPrefix() + "§fDu hast " + Main.getCurrencyName(amountToDeposit) + " §ferfolgreich auf dein Konto eingezahlt.");
@@ -83,7 +87,7 @@ public class ShopListener implements Listener {
                 }
 
                 // Wenn keine gültigen Smaragde in der Hand sind
-                player.sendMessage(Main.getChatPrefix() + "§fDu kannst nur gültiges §2Bargeld §feinzahlen.");
+                player.sendMessage(Main.getChatPrefix() + "§fDu kannst nur gültiges §5Bargeld §feinzahlen.");
             }
         }
     }

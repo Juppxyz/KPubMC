@@ -16,6 +16,7 @@ import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.PlayerCacheObject;
+import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.database.PlayerCollection;
 import xyz.jupp.minecraft.inventory.MoneyInventory;
 
@@ -92,11 +93,11 @@ public class MoneyInventoryListener implements Listener {
                     return;
                 }
 
-                // Withdraw money
-                if (displayName.equals("§aAbheben")  && clickedItem.getType().equals(Material.NETHER_STAR)) {
+                if (displayName.startsWith("§aAbheben") && clickedItem.getType().equals(Material.NETHER_STAR)) {
                     InventoryView inventoryView = player.getOpenInventory();
                     ItemStack itemStack = inventoryView.getTopInventory().getItem(48);
                     int selectedAmount = Integer.parseInt(itemStack.getItemMeta().getDisplayName());
+
                     if (selectedAmount < 10) {
                         player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
                         player.sendMessage(Main.getChatPrefix() + "Du musst mindestens " + Main.getCurrencyName(10) + " §fabheben.");
@@ -112,14 +113,16 @@ public class MoneyInventoryListener implements Listener {
                     Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
                         PlayerCollection playerCollection = new PlayerCollection(player);
                         int playerMoney = playerCollection.getMoney();
+
                         if (playerMoney < selectedAmount) {
-                            Bukkit.getScheduler().runTask(Main.getInstance(), () -> {
-                                player.sendMessage(Main.getChatPrefix() + "Du hast nicht genügend " + Main.getCurrencyName() + "§f.");
-                            });
+                            player.sendMessage(Main.getChatPrefix() + "Du hast nicht genügend " + Main.getCurrencyName() + "§f.");
                             return;
                         }
 
-                        int amountOfCash = selectedAmount / 10;
+                        // Steuerberechnung
+                        int netAmount = (int) Math.floor(selectedAmount * (1 - ConfigManager.getManager().getTradeTax()));
+                        int amountOfCash = netAmount / 10;
+
                         List<ItemStack> cashStacks = new ArrayList<>();
                         while (amountOfCash > 0) {
                             int stackAmount = Math.min(amountOfCash, 64);
@@ -136,7 +139,7 @@ public class MoneyInventoryListener implements Listener {
                             amountOfCash -= stackAmount;
                         }
 
-                        Bukkit.getConsoleSender().sendMessage(Main.getConsolePrefix() + "withdraw from " + player.getUniqueId() + " (" + selectedAmount + ")");
+                        Bukkit.getConsoleSender().sendMessage(Main.getConsolePrefix() + "withdraw from " + player.getUniqueId() + " (" + selectedAmount + " before tax, " + netAmount + " after tax)");
                         playerCollection.updateMoney(playerMoney - selectedAmount);
 
                         Bukkit.getScheduler().runTask(Main.getInstance(), () -> {
@@ -147,7 +150,7 @@ public class MoneyInventoryListener implements Listener {
                                 }
                             }
                             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f, 2f);
-                            player.sendMessage(Main.getChatPrefix() + "§fDu hast §2" + selectedAmount + " " + Main.getCurrencyName() + " §fabgehoben.");
+                            player.sendMessage(Main.getChatPrefix() + "§fDu hast §2" + netAmount + " " + Main.getCurrencyName() + " §fabgehoben");
                         });
                     });
                     return;

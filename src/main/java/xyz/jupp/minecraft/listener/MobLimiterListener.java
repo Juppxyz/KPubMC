@@ -15,12 +15,12 @@ import java.util.Set;
 
 public class MobLimiterListener implements Listener {
 
-    private static final Set<EntityType> ALLOWED_ENTITIES = EnumSet.of(EntityType.VILLAGER, EntityType.CHICKEN, EntityType.IRON_GOLEM);
+    private static final Set<EntityType> ALLOWED_ENTITIES = EnumSet.of(EntityType.VILLAGER, EntityType.CHICKEN, EntityType.IRON_GOLEM, EntityType.SKELETON, EntityType.BREEZE);
     private static final double SPAWN_MIN_X = 92508.0D;
     private static final double SPAWN_MAX_X = 92810.0D;
     private static final double SPAWN_MIN_Z = 114375.0D;
     private static final double SPAWN_MAX_Z = 114626.0D;
-    private static final double SPAWN_Y = 200.0D;
+    private static final double SPAWN_Y = 0.0D;
 
     private static final int NEARBY_ENTITY_RADIUS_XZ = 8;
     private static final int NEARBY_ENTITY_RADIUS_Y = 2;
