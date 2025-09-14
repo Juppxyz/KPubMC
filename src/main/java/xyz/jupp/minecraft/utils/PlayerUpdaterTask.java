@@ -1,80 +1,96 @@
 package xyz.jupp.minecraft.utils;
 
 import org.bukkit.Bukkit;
-import org.bukkit.Sound;
+import org.bukkit.Location;
+import org.bukkit.World;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.PlayerCacheObject;
-import xyz.jupp.minecraft.cache.TeamBlockCache;
-import xyz.jupp.minecraft.cache.TeamBlockCacheObject;
-import xyz.jupp.minecraft.database.TeamBlockCollection;
-import xyz.jupp.minecraft.database.TeamCollection;
-import xyz.jupp.minecraft.listener.TeamBlockListener;
 
-import java.util.ArrayList;
+import java.util.Random;
+
 
 public class PlayerUpdaterTask implements TaskHandler.Tasks {
 
-    private static int xpBoostWave = 0;
+    public static EntityType randomMob() {
+        EntityType[] mobs = {
+                EntityType.ZOMBIE,
+                EntityType.SKELETON,
+                EntityType.SPIDER,
+                EntityType.WITCH,
+                EntityType.RABBIT,
+                EntityType.CAVE_SPIDER,
+                EntityType.PHANTOM,
+                EntityType.PILLAGER,
+                EntityType.VEX,
+                EntityType.BREEZE,
+
+        };
+
+        Random random = new Random();
+        return mobs[random.nextInt(mobs.length)];
+    }
+
+
+    public void spawnMobEvent(Location bedLocation) {
+        Random random = new Random();
+        final int ENTITY_COUNT = 10 + random.nextInt(16);
+        final int MIN_DISTANCE = 32;
+        final int MAX_DISTANCE = 160;
+
+        World world = bedLocation.getWorld();
+        for (int i = 0; i < ENTITY_COUNT; i++) {
+            double distance = MIN_DISTANCE + random.nextDouble() * (MAX_DISTANCE - MIN_DISTANCE);
+            double angle = random.nextDouble() * 2 * Math.PI;
+            double x = bedLocation.getX() + distance * Math.cos(angle);
+            double z = bedLocation.getZ() + distance * Math.sin(angle);
+            int y = world.getHighestBlockYAt((int) x, (int) z) + 1;
+
+            Location spawnLoc = new Location(world, x, y, z);
+
+            EntityType mobType = randomMob();
+            Entity entity = world.spawnEntity(spawnLoc, mobType); // Nur EIN spawn
+
+            if (mobType == EntityType.RABBIT && entity instanceof org.bukkit.entity.Rabbit) {
+                org.bukkit.entity.Rabbit rabbit = (org.bukkit.entity.Rabbit) entity;
+                rabbit.setRabbitType(org.bukkit.entity.Rabbit.Type.THE_KILLER_BUNNY);
+            }
+        }
+    }
+
 
     @Override
     public boolean startTask() {
         Bukkit.getScheduler().scheduleAsyncRepeatingTask(Main.getInstance(), () -> {
-            ArrayList<String> alreadyCheckedTeamBlocks = new ArrayList<>(12);
             Bukkit.getConsoleSender().sendMessage(Main.getConsolePrefix() + "§fupdating players data..");
 
-            Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
+            Random random = new Random();
+            boolean isMonsterEvent = random.nextInt(1000) == 0;
 
+            Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
                 for (Player player : Bukkit.getOnlinePlayers()) {
                     PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
                     playerCacheObject.updatePlayer();
-                    if (playerCacheObject.getTeamID() == null) continue;
-                    if (!alreadyCheckedTeamBlocks.contains(playerCacheObject.getTeamID())) {
-                        alreadyCheckedTeamBlocks.add(playerCacheObject.getTeamID());
-                        TeamBlockCacheObject teamBlockCacheObject = TeamBlockCache.getTeamBlock(playerCacheObject.getTeamID());
 
-                        if (teamBlockCacheObject != null) {
-                            TeamBlockCollection teamBlockCollection = new TeamBlockCollection(playerCacheObject.getTeamID());
-                            boolean isTeamBlockInDBActive = teamBlockCollection.getTeamBlockData().getBoolean("isActive");
-                            if (isTeamBlockInDBActive != teamBlockCacheObject.isActive()) {
-                                teamBlockCacheObject.setActive(teamBlockCollection.getTeamBlockData().getBoolean("isActive"));
-                            }
-
-                            if (teamBlockCacheObject.isActive()
-                                    && !TeamBlockListener.getTeamBlockMaterials().contains(teamBlockCacheObject.getLocation().getBlock().getType().name()) ) {
-
-                                teamBlockCacheObject.setActive(false);
-                                CacheHandler.getInstance().incAlreadyPurchased(playerCacheObject);
-                                Bukkit.getConsoleSender().sendMessage(Main.getChatPrefix() + "modified teamblock active state for " + playerCacheObject.getTeamID());
-                            }
+                    Location bedSpawn = player.getBedSpawnLocation();
+                    if (bedSpawn != null && bedSpawn.getWorld().equals(player.getWorld())) {
+                        double distance = bedSpawn.distance(player.getLocation());
+                        if ( distance <= 160 && isMonsterEvent) {
+                            player.sendMessage(Main.getChatPrefix() + "§cSicherheitsmeldung: Ungeziefer im Schlafbereich erkannt.");
+                            Bukkit.getConsoleSender().sendMessage(Main.getConsolePrefix() + "created monster event for player " + player.getName() + " at " + bedSpawn.toString());
+                            spawnMobEvent(bedSpawn);
                         }
 
                     }
 
-                    if (xpBoostWave >= 12) {
-                        TeamCollection teamCollection = new TeamCollection(playerCacheObject.getTeamID());
-                        TeamBlockCacheObject teamBlockCacheObject = TeamBlockCache.getTeamBlock(teamCollection.getTeamID());
-                        if (teamBlockCacheObject == null || !teamBlockCacheObject.isActive()){
-                            continue;
-                        }
-                        int teamPoints = teamCollection.getTeamPoints();
-                        if (teamPoints >= 500) {
-                            player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f, 2f);
-                            player.sendMessage(Main.getChatPrefix() + "§aDu hast deinen Team XP-Boost bekommen!");
-                            player.giveExpLevels(5);
-                        }
-                    }
                 }
-                if (xpBoostWave >= 12){
-                    xpBoostWave = 0;
-                    return;
-                }
-                xpBoostWave++;
             });
 
             Bukkit.getConsoleSender().sendMessage(Main.getChatPrefix() + "§ffinished updating players data");
-        }, 0, 20L * 300);
+        }, 0, 20L * 900);
         return false;
     }
 

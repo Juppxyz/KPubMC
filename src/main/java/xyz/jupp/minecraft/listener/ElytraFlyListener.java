@@ -18,6 +18,8 @@ import java.util.Objects;
 
 public class ElytraFlyListener implements Listener {
 
+    // NOT IN USE
+
     @EventHandler
     public void onRoundFlightSignChange(SignChangeEvent event) {
         Player player = event.getPlayer();

@@ -13,6 +13,7 @@ import org.bukkit.inventory.meta.SkullMeta;
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.*;
+import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.database.TeamCollection;
 
 import java.util.ArrayList;
@@ -28,10 +29,14 @@ public class TeamInventory {
     // wrapper
     public static void openInventory(@NotNull Player player, @NotNull TeamInventoryTypes teamInventoryTypes) {
         Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () ->{
+
+            PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
+            TeamCollection teamCollection = new TeamCollection(playerCacheObject.getTeamID());
+            int teamPoints =  teamCollection.getTeamPoints();
             Bukkit.getScheduler().runTask(Main.getInstance(), () -> {
                 player.closeInventory();
                 if (teamInventoryTypes.equals(TeamInventoryTypes.MAIN)) {
-                    player.openInventory(createMainTeamInventory(player, CacheHandler.getInstance().getPlayerInCache(player)));
+                    player.openInventory(createMainTeamInventory(player, playerCacheObject, teamPoints));
                     player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f, 2f);
                 }
             });
@@ -91,16 +96,14 @@ public class TeamInventory {
     }
 
 
-    private static Inventory createMainTeamInventory(Player player, PlayerCacheObject playerCacheObject) {
+    private static Inventory createMainTeamInventory(Player player, PlayerCacheObject playerCacheObject, int teamPoints) {
         Inventory inventory = Bukkit.createInventory(player, 9, playerCacheObject.getTeamColor() +"§nTeam-Menü");
         boolean isOwner = playerCacheObject.getTeamCacheObject().getTeamOwner().equals(player.getUniqueId().toString());
         boolean isVice =  playerCacheObject.getTeamCacheObject().getTeamVices().contains(player.getUniqueId().toString());
-        @NotNull String teamID = playerCacheObject.getTeamID();
-        TeamCollection teamCollection = new TeamCollection(teamID);
 
         for (int i = 0; i < 9; i++) {
             inventory.setItem(i, createItemStack( "§7---", Material.GRAY_STAINED_GLASS_PANE));
-            if (i == 1) {
+            if (i == 0) {
                 if (playerCacheObject.getTeamCacheObject().getTeamOwner().equals(player.getUniqueId().toString())) {
                     inventory.setItem(i, createItemStack(
                             "Deine Rolle: "+ playerCacheObject.getTeamColor() + "§lBoss",
@@ -122,7 +125,14 @@ public class TeamInventory {
                 ));
                 continue;
             }
-
+            if (i == 1) {
+                inventory.setItem(i, createItemStack("§fTeam-Punkte: " + playerCacheObject.getTeamColor() + teamPoints, Material.GOLD_INGOT));
+                continue;
+            }
+            if (i == 2) {
+                inventory.setItem(i, getTeamUpgradeItem(playerCacheObject));
+                continue;
+            }
             if (i == 3) {
                 if (isOwner || isVice) {
                     inventory.setItem(i, createItemStack(playerCacheObject.getTeamColor() + "Mitglied hinzufügen", Material.PAPER));
@@ -130,28 +140,40 @@ public class TeamInventory {
                 continue;
             }
 
-            if (i == 4){
-                TeamBlockCacheObject teamBlockCacheObject = TeamBlockCache.getTeamBlock(playerCacheObject.getTeamID());
-                if (playerCacheObject.getTeamCacheObject().getAlreadyPurchased() > 0 && ( teamBlockCacheObject != null && teamBlockCacheObject.isActive())) {
-                    inventory.setItem(i, createItemStack("TeamPunkte: " + playerCacheObject.getTeamColor() + teamCollection.getTeamPoints(), Material.GOLD_INGOT));
-                }else {
-                    if (isOwner && (teamBlockCacheObject == null || !teamBlockCacheObject.isActive())) {
-                        ItemStack itemStack = createItemStack(playerCacheObject.getTeamColor() + "TeamBlock", Material.BEACON);
-                        ItemMeta itemMeta = itemStack.getItemMeta();
-                        ArrayList<String> lores = new ArrayList<>(1);
-                        lores.add("§fFür " + Main.getCurrencyName(2500 + (playerCacheObject.getTeamCacheObject().getAlreadyPurchased() * 2500)) + " §fkaufen?");
-                        itemMeta.setLore(lores);
-                        itemStack.setItemMeta(itemMeta);
-                        inventory.setItem(i, itemStack);
-                    }
-                }
+            //if (i == 4){
+            //    TeamBlockCacheObject teamBlockCacheObject = TeamBlockCache.getTeamBlock(playerCacheObject.getTeamID());
+            //    if (playerCacheObject.getTeamCacheObject().getAlreadyPurchased() > 0 && ( teamBlockCacheObject != null && teamBlockCacheObject.isActive())) {
+            //        inventory.setItem(i, createItemStack("TeamPunkte: " + playerCacheObject.getTeamColor() + teamCollection.getTeamPoints(), Material.GOLD_INGOT));
+            //    }else {
+            //        if (isOwner && (teamBlockCacheObject == null || !teamBlockCacheObject.isActive())) {
+            //            ItemStack itemStack = createItemStack(playerCacheObject.getTeamColor() + "TeamBlock", Material.BEACON);
+            //            ItemMeta itemMeta = itemStack.getItemMeta();
+            //            ArrayList<String> lores = new ArrayList<>(1);
+            //            lores.add("§fFür " + Main.getCurrencyName(2500 + (playerCacheObject.getTeamCacheObject().getAlreadyPurchased() * 2500)) + " §fkaufen?");
+            //            itemMeta.setLore(lores);
+            //            itemStack.setItemMeta(itemMeta);
+            //            inventory.setItem(i, itemStack);
+            //        }
+            //    }
+            //    continue;
+            //}
+
+            // stadt mitte setzen
+            if (i == 4 && (isOwner || isVice)) {
+                inventory.setItem(i, getColoredBanner(playerCacheObject.getTeamColor()));
                 continue;
             }
+            
 
-            if(i==5 && isOwner ) {
+            if(i==5 && isOwner) {
                 if (playerCacheObject.getTeamCacheObject().getMembersList().size() > 1) {
                     inventory.setItem(i, createItemStack( playerCacheObject.getTeamColor() + "Rollen", Material.GOLDEN_HELMET));
                 }
+                continue;
+            }
+            if(i==6) {
+                ItemStack itemStack = getTeamPointsTradeItem(playerCacheObject);
+                inventory.setItem(i, itemStack);
                 continue;
             }
             if (i==7 && !isOwner) inventory.setItem(i, createItemStack( playerCacheObject.getTeamColor() + "§4Team verlassen", Material.DARK_OAK_DOOR));
@@ -159,6 +181,41 @@ public class TeamInventory {
 
         }
         return inventory;
+    }
+
+    private final static int levelMultiple = 10000;
+    private static @NotNull ItemStack getTeamUpgradeItem(PlayerCacheObject playerCacheObject) {
+        TeamCacheObject team = playerCacheObject.getTeamCacheObject();
+        ItemStack itemStack = new ItemStack(Material.NETHER_STAR, 1);
+        ItemMeta itemMeta = itemStack.getItemMeta();
+        itemMeta.setDisplayName(playerCacheObject.getTeamColor() + "§lTeam-Upgrade");
+
+        int currentLevel = team.getLevel();
+        int upgradeCost = currentLevel==0 ? 5000 : (currentLevel * levelMultiple);
+
+        List<String> lore = new ArrayList<>();
+        lore.add("§fAktuelles Level: " + playerCacheObject.getTeamColor() + currentLevel);
+        lore.add("");
+        lore.add("§fUpgrade für " + Main.getCurrencyName(upgradeCost));
+        itemMeta.setLore(lore);
+        itemStack.setItemMeta(itemMeta);
+        return itemStack;
+    }
+
+
+    private static @NotNull ItemStack getTeamPointsTradeItem(PlayerCacheObject playerCacheObject) {
+        ItemStack itemStack = new ItemStack(Material.EMERALD, 1);
+        ItemMeta itemMeta = itemStack.getItemMeta();
+        itemMeta.setDisplayName(playerCacheObject.getTeamColor() + "Team-Punkte kaufen");
+        List<String> lore = new ArrayList<>();
+
+        lore.add("§9Linksklick§8: §f" + Main.getCurrencyName(100) + " §ffür 100 TeamPunkte eintauschen");
+        lore.add("§2Rechtsklick§8: §f" + Main.getCurrencyName(1000) + " §ffür 1000 TeamPunkte eintauschen");
+        lore.add(" ");
+        lore.add("§c-" + (ConfigManager.getManager().getTradeTax()*100) + "% Steuer");
+        itemMeta.setLore(lore);
+        itemStack.setItemMeta(itemMeta);
+        return itemStack;
     }
 
 
@@ -229,5 +286,33 @@ public class TeamInventory {
         }
         return inventory;
     }
+
+
+    private static ItemStack getColoredBanner(@NotNull String teamColor) {
+        Material material;
+
+        switch (teamColor) {
+            case "§0": material = Material.BLACK_BANNER; break;
+            case "§1": material = Material.BLUE_BANNER; break;
+            case "§2": material = Material.GREEN_BANNER; break;
+            case "§3": material = Material.CYAN_BANNER; break;
+            case "§4": material = Material.RED_BANNER; break;
+            case "§5": material = Material.PURPLE_BANNER; break;
+            case "§6": material = Material.BROWN_BANNER; break;
+            case "§7": material = Material.LIGHT_GRAY_BANNER; break;
+            case "§8": material = Material.GRAY_BANNER; break;
+            case "§9": material = Material.BLUE_BANNER; break;
+            case "§a": material = Material.LIME_BANNER; break;
+            case "§b": material = Material.LIGHT_BLUE_BANNER; break;
+            case "§c": material = Material.RED_BANNER; break;
+            case "§d": material = Material.MAGENTA_BANNER; break;
+            case "§e": material = Material.YELLOW_BANNER; break;
+            case "§f": material = Material.WHITE_BANNER; break;
+            default: material = Material.WHITE_BANNER; break;
+        }
+
+        return createItemStack(teamColor + "Aktuellen Chunk beanspruchen §f(§c-500 " + Main.getCurrencyName() + "§f)", material);
+    }
+
 
 }

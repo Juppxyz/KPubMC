@@ -1,6 +1,7 @@
 package xyz.jupp.minecraft.listener;
 
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.entity.HumanEntity;
@@ -14,6 +15,7 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.*;
+import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.database.PlayerCollection;
 import xyz.jupp.minecraft.database.TeamBlockCollection;
 import xyz.jupp.minecraft.database.TeamCollection;
@@ -82,6 +84,7 @@ public class TeamInventoryListener implements Listener {
                     return;
                 }
 
+                /** @Deprecated
                 if (displayName.contains("TeamBlock")) {
                     Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
                         PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
@@ -123,12 +126,87 @@ public class TeamInventoryListener implements Listener {
                     });
                     player.closeInventory();
                     return;
-                }
+                }**/
 
                 if (displayName.contains("Rollen")) {
                     PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
                     TeamInventory.openInventory(TeamInventory.TeamInventoryTypes.SETTINGS, playerCacheObject);;
                     return;
+                }
+
+                if (displayName.contains("Team-Punkte kaufen")) {
+                    Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
+                        PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
+                        PlayerCollection playerCollection = playerCacheObject.getPlayerCollection();
+                        int playerMoney = playerCollection.getMoney();
+                        // Klickt der User mit Links -> 100, Rechts -> 1000
+                        int tradeType = event.getClick().isLeftClick() ? 100 : 1000;
+
+                        if (playerMoney < tradeType) {
+                            player.sendMessage(Main.getChatPrefix() + "§fDu musst mindestens §c" + tradeType + " " + Main.getCurrencyName() + " §fbesitzen um diese §fzu tauschen." );
+                            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
+                            return;
+                        }
+
+                        int tradedMoney = (int) Math.floor(tradeType - (ConfigManager.getManager().getTradeTax() * tradeType) );
+                        TeamCollection teamCollection = new TeamCollection(playerCacheObject.getTeamID());
+                        int teamPoints = teamCollection.getTeamPoints();
+                        teamCollection.changeTeamPoints(teamPoints + tradedMoney);
+
+                        player.sendMessage(Main.getChatPrefix() + "§fDu hast §f" + Main.getCurrencyName(tradedMoney) + " §fin die Team-Kasse eingezahlt!");
+                        player.playSound(player.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 2f,2f);
+                        player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f,2f);
+
+                        for (Player online : Bukkit.getOnlinePlayers()) {
+                            if (online.getName().equals(player.getName())) continue;
+                            PlayerCacheObject tmpPlayerCacheObject = CacheHandler.getInstance().getPlayerInCache(online);
+                            if (tmpPlayerCacheObject.getTeamID() != null && tmpPlayerCacheObject.getTeamID().equals(playerCacheObject.getTeamID())) {
+                                online.sendMessage(Main.getChatPrefix() + "§fEs wurden " + Main.getCurrencyName(tradedMoney) + " §fvon " + playerCacheObject.getTeamColor() + player.getName() + " §fin die Team-Kasse eingezahlt!");
+                            }
+                        }
+
+                    });
+                    return;
+                }
+
+                if (displayName.contains("Aktuellen Chunk beanspruchen")) {
+                    Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
+                        PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
+                        TeamCollection teamCollection = new TeamCollection(playerCacheObject.getTeamID());
+                        int teamPoints = teamCollection.getTeamPoints();
+                        if (teamPoints < 500) {
+                            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
+                            player.sendMessage(Main.getChatPrefix() + "§cDein Team hat leider noch nicht genügend Punkte.");
+                            return;
+                        }
+
+                        Location currentLocation = player.getLocation();
+                        teamCollection.changeTeamPoints(teamPoints - 500);
+                        boolean isChunkClaimed = ChunkCache.getInstance().addChunk(
+                                playerCacheObject.getTeamID(),
+                                currentLocation.getWorld().getName(),
+                                currentLocation.getChunk().getX(),
+                                currentLocation.getChunk().getZ()
+                        );
+                        if (!isChunkClaimed){
+                            player.sendMessage(Main.getChatPrefix() + "§cDu kannst keinen bereits beanspruchten Chunk mehr beanspruchen. (Komischer Satz oder?)");
+                            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
+                            return;
+                        }
+
+                        player.sendMessage(Main.getChatPrefix() + "§aDu hast den aktuellen Chunk, erfolgreich für dein " + playerCacheObject.getTeamColor()+ "Team §abeansprucht!");
+                        player.playSound(player.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 2f,2f);
+                        player.playSound(player.getLocation(), Sound.BLOCK_ANVIL_USE, 2f,2f);
+                        for (Player online : Bukkit.getOnlinePlayers()) {
+                            if (online.getName().equals(player.getName())) continue;
+                            PlayerCacheObject tmpPlayerCacheObject = CacheHandler.getInstance().getPlayerInCache(online);
+                            if (tmpPlayerCacheObject.getTeamID() != null && tmpPlayerCacheObject.getTeamID().equals(playerCacheObject.getTeamID())) {
+                                online.sendMessage(Main.getChatPrefix() + playerCacheObject.getTeamColor() + player.getName() + " §ahat einen neuen Chunk für euer Team beansprucht!");
+                                online.playSound(online.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 2f,2f);
+                            }
+                        }
+
+                    });
                 }
 
                 if (displayName.equals("§4Team verlassen")) {

@@ -23,7 +23,6 @@ public class WarpCache {
             warpCache = new HashMap<>();
             FindIterable<Document> iterable = WarpCollection.getAllWarps();
             for (Document document : iterable) {
-                System.out.println(document.toJson());
                 WarpCacheObject warpCacheObject = new WarpCacheObject(
                         document.getDouble("x"),
                         document.getDouble("y"),

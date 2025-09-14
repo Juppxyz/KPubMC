@@ -9,13 +9,8 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
-import xyz.jupp.minecraft.cache.CacheHandler;
-import xyz.jupp.minecraft.cache.PlayerCacheObject;
-import xyz.jupp.minecraft.cache.TeamBlockCache;
-import xyz.jupp.minecraft.cache.TeamBlockCacheObject;
 import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.config.ShopItem;
-import xyz.jupp.minecraft.database.TeamCollection;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -41,12 +36,12 @@ public class ShopInventory {
 
     private static Inventory createNewMainShopInventory(Player player) {
         boolean isReducedPrice = false;
-        PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
-        if (playerCacheObject.getTeamID() != null) {
-            TeamCollection teamCollection = new TeamCollection(playerCacheObject.getTeamID());
-            TeamBlockCacheObject teamBlockCacheObject = TeamBlockCache.getTeamBlock(teamCollection.getTeamID());
-            isReducedPrice = (teamCollection.getTeamPoints() > 49) && teamBlockCacheObject.isActive();
-        }
+        //PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
+        //if (playerCacheObject.getTeamID() != null) {
+        //    TeamCollection teamCollection = new TeamCollection(playerCacheObject.getTeamID());
+        //    TeamBlockCacheObject teamBlockCacheObject = TeamBlockCache.getTeamBlock(teamCollection.getTeamID());
+        //    isReducedPrice = (teamCollection.getTeamPoints() > 49) && teamBlockCacheObject.isActive();
+        //}
 
         Inventory inventory = Bukkit.createInventory(player, 36, isReducedPrice ? "§aHändler §8(§aRabatte!§8)" : "§aHändler");
         List<ShopItem> shopItems = ConfigManager.getShopItems();

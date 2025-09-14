@@ -9,6 +9,8 @@ import org.bukkit.event.entity.EntitySpawnEvent;
 
 public class EnderDragonListener implements Listener {
 
+    // NOT IN USE
+
     @EventHandler
     public void onDragonSpawn(EntitySpawnEvent event) {
         if (event.getEntity() instanceof EnderDragon) {

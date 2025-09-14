@@ -15,7 +15,6 @@ import xyz.jupp.minecraft.cache.WarpCache;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 
 public class WarpInventory {
@@ -98,7 +97,7 @@ public class WarpInventory {
         }
 
         // Warp setzen oder updaten
-        String warpAction = hasPlayerWarp ? "§bWarp aktualisieren" : "§bWarp setzen §8(" + Main.getCurrencyName(5000) + "§8)";
+        String warpAction = hasPlayerWarp ? "§bWarp zu aktueller Position aktualisieren §8(" + Main.getCurrencyName(500) + "§8)": "§bWarp für aktuelle Position setzen §8(" + Main.getCurrencyName(5000) + "§8)";
         inventory.setItem(53, createItemStack(warpAction, Material.NETHER_STAR));
 
         return inventory;

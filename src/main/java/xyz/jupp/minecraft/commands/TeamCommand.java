@@ -30,8 +30,7 @@ public class TeamCommand implements CommandExecutor {
                 }
 
                 if (args[1].length() < 3 || args[1].length() > 12) {
-                    player.sendMessage(Main.getChatPrefix() + "Bitte achte darauf, dass der Name des Teams §amin. 3");
-                    player.sendMessage(Main.getChatPrefix() + "§fund §amax. 12 §fZeichen lang ist.");
+                    player.sendMessage(Main.getChatPrefix() + "Bitte achte darauf, dass der Name des Teams §amin. 3 §fund §amax. 12 §fZeichen lang ist.");
                     player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
                     return false;
                 }

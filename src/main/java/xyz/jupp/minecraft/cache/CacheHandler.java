@@ -56,10 +56,10 @@ public class CacheHandler {
     }
 
 
-    public void incAlreadyPurchased(@NotNull PlayerCacheObject playerCacheObject) {
+    public void upgradeTeamLevel(@NotNull PlayerCacheObject playerCacheObject) {
         TeamCollection teamCollection = new TeamCollection(playerCacheObject.getTeamID());
-        teamCollection.incTeamBlockAlreadyPurchased();
-        playerCacheObject.getTeamCacheObject().incTeamBlockAlreadyPurchased();
+        teamCollection.incTeamLevel();
+        playerCacheObject.getTeamCacheObject().upgradeTeamLevel();
     }
 
     public TeamCacheObject getTeamCacheObject(@NotNull String teamID) {

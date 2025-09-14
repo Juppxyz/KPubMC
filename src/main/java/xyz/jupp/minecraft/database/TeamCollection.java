@@ -50,7 +50,10 @@ public class TeamCollection {
         document.append("teamColor", teamColor);
         document.append("teamPoints", 0);
         document.append("members", memberList);
-        document.append("alreadyPurchased", 0);
+        document.append("level", 0);
+        document.append("zoneOptionPvP", false);
+        document.append("zoneOptionMobDamage", false);
+        document.append("zoneOptionInteract", false);
         teamsCollection.insertOne(document);
         Logger.console(String.format("create new team %s (%s)", teamName, teamID));
         Bukkit.broadcastMessage(Main.getChatPrefix() + "§fDas Team " + teamColor + teamName + " §fwurde von §6" + owner.getName() + " §fgegründet!");
@@ -110,10 +113,10 @@ public class TeamCollection {
     }
 
 
-    public void incTeamBlockAlreadyPurchased() {
+    public void incTeamLevel() {
         Bson filter = eq("teamID", getTeamID());
-        teamsCollection.updateOne(filter, Updates.inc("alreadyPurchased", 1));
-        Logger.console("update alreadyPurchased teamblock for " + getTeamID());
+        teamsCollection.updateOne(filter, Updates.inc("level", 1));
+        Logger.console("update team-level for " + getTeamID());
     }
     
     // Getter

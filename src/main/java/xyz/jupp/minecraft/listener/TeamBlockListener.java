@@ -25,6 +25,8 @@ import java.util.Random;
 
 public class TeamBlockListener implements Listener {
 
+    // NOT IN USE
+
     @EventHandler
     public void onInteractWithTeamBlock(PlayerInteractEvent event) {
         Player player = event.getPlayer();
@@ -150,7 +152,7 @@ public class TeamBlockListener implements Listener {
                     player.sendMessage(Main.getChatPrefix() + "§fDu hast den TeamBlock von " + teamCacheObject.getTeamColor() + teamCacheObject.getTeamName() + " §fzerstört!");
 
                     cacheObjectEntry.getValue().setActive(false);
-                    teamCacheObject.incTeamBlockAlreadyPurchased();
+                    //teamCacheObject.incTeamBlockAlreadyPurchased();
 
                     PlayerCacheObject tmpPlayerCacheObject = null;
                     for (Player online : Bukkit.getOnlinePlayers()) {

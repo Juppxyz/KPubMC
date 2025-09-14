@@ -67,10 +67,11 @@ public final class Main extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new WarpInventoryListener(), this);
         Bukkit.getPluginManager().registerEvents(new SwordListener(), this);
         Bukkit.getPluginManager().registerEvents(new CreateLocalShopListener(), this);
-        Bukkit.getPluginManager().registerEvents(new ElytraFlyListener(), this);
         Bukkit.getPluginManager().registerEvents(new MobLimiterListener(), this);
-        Bukkit.getPluginManager().registerEvents(new TeamBlockListener(), this);
-        Bukkit.getPluginManager().registerEvents(new EnderDragonListener(), this);
+        Bukkit.getPluginManager().registerEvents(new PlayerMovementListener(), this);
+        //Bukkit.getPluginManager().registerEvents(new EnderDragonListener(), this);
+        //Bukkit.getPluginManager().registerEvents(new ElytraFlyListener(), this);
+        //Bukkit.getPluginManager().registerEvents(new TeamBlockListener(), this);
     }
 
     private void registerTasks() {
