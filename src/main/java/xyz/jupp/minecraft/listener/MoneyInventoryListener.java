@@ -16,10 +16,12 @@ import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.PlayerCacheObject;
+import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.database.PlayerCollection;
 import xyz.jupp.minecraft.inventory.MoneyInventory;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 import static xyz.jupp.minecraft.inventory.MoneyInventory.createItemStack;
@@ -91,6 +93,70 @@ public class MoneyInventoryListener implements Listener {
                     return;
                 }
 
+                if (displayName.startsWith("§aAbheben") && clickedItem.getType().equals(Material.NETHER_STAR)) {
+                    InventoryView inventoryView = player.getOpenInventory();
+                    ItemStack itemStack = inventoryView.getTopInventory().getItem(48);
+                    int selectedAmount = Integer.parseInt(itemStack.getItemMeta().getDisplayName());
+
+                    if (selectedAmount < 10) {
+                        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
+                        player.sendMessage(Main.getChatPrefix() + "Du musst mindestens " + Main.getCurrencyName(10) + " §fabheben.");
+                        return;
+                    }
+
+                    if ((selectedAmount % 10) != 0) {
+                        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
+                        player.sendMessage(Main.getChatPrefix() + "Der abzuhebende Betrag muss ein Vielfaches von 10 sein.");
+                        return;
+                    }
+
+                    Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
+                        PlayerCollection playerCollection = new PlayerCollection(player);
+                        int playerMoney = playerCollection.getMoney();
+
+                        if (playerMoney < selectedAmount) {
+                            player.sendMessage(Main.getChatPrefix() + "Du hast nicht genügend " + Main.getCurrencyName() + "§f.");
+                            return;
+                        }
+
+                        // Steuerberechnung
+                        int netAmount = (int) Math.floor(selectedAmount * (1 - ConfigManager.getManager().getTradeTax()));
+                        int amountOfCash = netAmount / 10;
+
+                        List<ItemStack> cashStacks = new ArrayList<>();
+                        while (amountOfCash > 0) {
+                            int stackAmount = Math.min(amountOfCash, 64);
+                            ItemStack cashStack = new ItemStack(Material.EMERALD, stackAmount);
+                            ItemMeta itemMeta = cashStack.getItemMeta();
+                            if (itemMeta != null) {
+                                List<String> lore = new ArrayList<>();
+                                lore.add("§5Bargeld");
+                                itemMeta.setDisplayName(Main.getCurrencyName(10));
+                                itemMeta.setLore(lore);
+                                cashStack.setItemMeta(itemMeta);
+                            }
+                            cashStacks.add(cashStack);
+                            amountOfCash -= stackAmount;
+                        }
+
+                        Bukkit.getConsoleSender().sendMessage(Main.getConsolePrefix() + "withdraw from " + player.getUniqueId() + " (" + selectedAmount + " before tax, " + netAmount + " after tax)");
+                        playerCollection.updateMoney(playerMoney - selectedAmount);
+
+                        Bukkit.getScheduler().runTask(Main.getInstance(), () -> {
+                            for (ItemStack stack : cashStacks) {
+                                HashMap<Integer, ItemStack> leftovers = player.getInventory().addItem(stack);
+                                if (!leftovers.isEmpty()) {
+                                    leftovers.values().forEach(item -> player.getWorld().dropItemNaturally(player.getLocation(), item));
+                                }
+                            }
+                            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f, 2f);
+                            player.sendMessage(Main.getChatPrefix() + "§fDu hast §2" + netAmount + " " + Main.getCurrencyName() + " §fabgehoben");
+                        });
+                    });
+                    return;
+                }
+
+
                 // Transfer money to player
                 if (displayName.equals("§aÜberweisen") && clickedItem.getType().equals(Material.PLAYER_HEAD)) {
                     String targetName = clickedItem.getItemMeta().getLore().get(0).replace("§2§o", "");
@@ -115,7 +181,7 @@ public class MoneyInventoryListener implements Listener {
                             if (newPlayerMoney < 0) {
                                 // Insufficient funds, notify player on main thread
                                 Bukkit.getScheduler().runTask(Main.getInstance(), () -> {
-                                    player.sendMessage(Main.getChatPrefix() + "Du hast nicht genügend Geld.");
+                                    player.sendMessage(Main.getChatPrefix() + "Du hast nicht genügend " + Main.getCurrencyName() + "§f.");
                                 });
                                 return;
                             }

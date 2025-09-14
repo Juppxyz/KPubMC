@@ -15,6 +15,7 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
@@ -30,14 +31,14 @@ import java.util.regex.Pattern;
 
 public class ShopListener implements Listener {
 
-    @EventHandler
-    public void onInteractWithShopChest(PlayerInteractEvent event) {
-        if (!(event.getAction().equals(Action.LEFT_CLICK_BLOCK) || event.getAction().equals(Action.RIGHT_CLICK_BLOCK))) return;
-        if (!(event.getClickedBlock() != null && event.getClickedBlock().getType().equals(Material.RESPAWN_ANCHOR))) return;
-        event.setCancelled(true);
-        Player player = event.getPlayer();
-        ShopInventory.openInventory(player, ShopInventory.ShopInventoryTypes.MAIN);
-    }
+    //@EventHandler
+    //public void onInteractWithShopChest(PlayerInteractEvent event) {
+    //    if (!(event.getAction().equals(Action.LEFT_CLICK_BLOCK) || event.getAction().equals(Action.RIGHT_CLICK_BLOCK))) return;
+    //    if (!(event.getClickedBlock() != null && event.getClickedBlock().getType().equals(Material.RESPAWN_ANCHOR))) return;
+    //    event.setCancelled(true);
+    //    Player player = event.getPlayer();
+    //    ShopInventory.openInventory(player, ShopInventory.ShopInventoryTypes.MAIN);
+    //}
 
 
     @EventHandler
@@ -48,6 +49,45 @@ public class ShopListener implements Listener {
                 event.setCancelled(true);
                 Player player = event.getPlayer();
                 ShopInventory.openInventory(player, ShopInventory.ShopInventoryTypes.MAIN);
+                return;
+           }
+
+            if (interactedEntity.isCustomNameVisible() && interactedEntity.getCustomName().equals("§5§lFinanz-Fred")) {
+                event.setCancelled(true);
+                Player player = event.getPlayer();
+                ItemStack itemStack = player.getInventory().getItemInMainHand();
+
+                if (itemStack == null || itemStack.getType() == Material.AIR) {
+                    player.sendMessage(Main.getChatPrefix() + "§fDu hast kein Bargeld in der Hand, das du einzahlen kannst.");
+                    return;
+                }
+
+                // Überprüfen, ob es sich um Smaragde handelt
+                if (itemStack.getType() == Material.EMERALD) {
+                    ItemMeta itemMeta = itemStack.getItemMeta();
+
+                    if (itemMeta != null && itemMeta.hasDisplayName() && itemMeta.getDisplayName().equals(Main.getCurrencyName(10))) {
+                        int stackSize = itemStack.getAmount();
+                        int amountToDeposit = stackSize * 10; // Jeder Emerald entspricht 10 Schilling
+
+                        // Stack aus der Hand entfernen
+                        player.getInventory().setItemInMainHand(null);
+
+                        Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
+                            PlayerCollection playerCollection = new PlayerCollection(player);
+                            int currentMoney = playerCollection.getMoney();
+                            playerCollection.updateMoney(currentMoney + amountToDeposit);
+
+                            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f, 2f);
+                            Bukkit.getConsoleSender().sendMessage(Main.getConsolePrefix() + "deposit from " + player.getUniqueId() + " (" + amountToDeposit + ")");
+                            player.sendMessage(Main.getChatPrefix() + "§fDu hast " + Main.getCurrencyName(amountToDeposit) + " §ferfolgreich auf dein Konto eingezahlt.");
+                        });
+                        return;
+                    }
+                }
+
+                // Wenn keine gültigen Smaragde in der Hand sind
+                player.sendMessage(Main.getChatPrefix() + "§fDu kannst nur gültiges §5Bargeld §feinzahlen.");
             }
         }
     }
@@ -57,6 +97,7 @@ public class ShopListener implements Listener {
         if (event.getEntity().getType().equals(EntityType.VILLAGER)) {
             Villager villager = (Villager) event.getEntity();
             if (villager.isCustomNameVisible() && villager.getCustomName().equals(Main.getShopVillagerName())) event.setCancelled(true);
+            if (villager.isCustomNameVisible() && villager.getCustomName().equals("§5§lFinanz-Fred")) event.setCancelled(true);
         }
     }
 
@@ -68,6 +109,7 @@ public class ShopListener implements Listener {
         HumanEntity entity = event.getWhoClicked();
         if (entity instanceof Player) {
             Player player = (Player) entity;
+
             if (title.contains("§aHändler")) {
                 event.setCancelled(true);
                 Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {

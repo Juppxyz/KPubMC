@@ -20,7 +20,10 @@ public class TeamCacheObject {
     private String          teamColor;
     private List<Document>  membersList;
     private TeamCollection  teamCollection;
-    private int             alreadyPurchased;
+    private int             level;
+    private boolean         zoneOptionPvP;
+    private boolean         zoneOptionMobDamage;
+    private boolean         zoneOptionInteract;
 
 
     // roles
@@ -40,6 +43,7 @@ public class TeamCacheObject {
         this.teamColor = document.getString("teamColor");
         this.teamOwner = document.getString("teamOwner");
         this.membersList = (List<Document>) document.get("members");
+        this.level = document.getInteger("level");
         if (!membersList.isEmpty()) {
             for (Document doc : membersList) {
                 if (doc.getString("role").equals("vice")){
@@ -47,6 +51,9 @@ public class TeamCacheObject {
                 }
             }
         }
+        this.zoneOptionPvP = document.getBoolean("zoneOptionPvP");
+        this.zoneOptionMobDamage = document.getBoolean("zoneOptionMobDamage");
+        this.zoneOptionInteract = document.getBoolean("zoneOptionInteract");
     }
 
     public void addPlayerToMemberList(@NotNull Player player) {
@@ -79,10 +86,10 @@ public class TeamCacheObject {
     }
 
 
-    public void incTeamBlockAlreadyPurchased() {
-        this.alreadyPurchased++;
+    public void upgradeTeamLevel() {
+        this.level++;
+        getTeamCollection().incTeamLevel();
     }
-
 
     // Getter
     public TeamCollection getTeamCollection() {
@@ -113,9 +120,17 @@ public class TeamCacheObject {
         return teamID;
     }
 
-    public int getAlreadyPurchased() {
-        return this.alreadyPurchased;
+    public int getLevel() {return level;}
+
+    public boolean isZoneOptionPvP() {
+        return zoneOptionPvP;
     }
 
+    public boolean isZoneOptionMobDamage() {
+        return zoneOptionMobDamage;
+    }
 
+    public boolean isZoneOptionInteract() {
+        return zoneOptionInteract;
+    }
 }

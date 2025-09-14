@@ -1,6 +1,7 @@
 package xyz.jupp.minecraft;
 
 import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import xyz.jupp.minecraft.cache.WarpCache;
 import xyz.jupp.minecraft.commands.*;
@@ -8,6 +9,7 @@ import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.database.MongoDB;
 import xyz.jupp.minecraft.listener.*;
 import xyz.jupp.minecraft.utils.Logger;
+import xyz.jupp.minecraft.utils.PlayerUpdaterTask;
 
 public final class Main extends JavaPlugin {
 
@@ -42,6 +44,13 @@ public final class Main extends JavaPlugin {
         this.getCommand("head").setExecutor(new PlayerHeadsCommand());
         this.getCommand("warp").setExecutor(new WarpCommand());
         this.getCommand("customItem").setExecutor(new ItemCommand());
+        this.getCommand("spenden").setExecutor(new DonateCommand());
+        this.getCommand("donate").setExecutor(new DonateCommand());
+        this.getCommand("spawn").setExecutor(new SpawnCommand());
+        this.getCommand("rules").setExecutor(new RulesCommand());
+        this.getCommand("regeln").setExecutor(new RulesCommand());
+        this.getCommand("createbankier").setExecutor(new CreateBankierCommand());
+        this.getCommand("spec").setExecutor(new SpecCommand());
 
     }
 
@@ -55,10 +64,20 @@ public final class Main extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new NetherTransferListener(), this);
         Bukkit.getPluginManager().registerEvents(new DeathListener(), this);
         Bukkit.getPluginManager().registerEvents(new ShopListener(), this);
-        Bukkit.getPluginManager().registerEvents(new CreateLocalShopListener(), this);
         Bukkit.getPluginManager().registerEvents(new WarpInventoryListener(), this);
         Bukkit.getPluginManager().registerEvents(new SwordListener(), this);
+        Bukkit.getPluginManager().registerEvents(new CreateLocalShopListener(), this);
+        Bukkit.getPluginManager().registerEvents(new MobLimiterListener(), this);
+        Bukkit.getPluginManager().registerEvents(new PlayerMovementListener(), this);
+        //Bukkit.getPluginManager().registerEvents(new EnderDragonListener(), this);
+        //Bukkit.getPluginManager().registerEvents(new ElytraFlyListener(), this);
+        //Bukkit.getPluginManager().registerEvents(new TeamBlockListener(), this);
+    }
 
+    private void registerTasks() {
+        PlayerUpdaterTask playerListUpdate = new PlayerUpdaterTask();
+        Bukkit.getConsoleSender().sendMessage(consolePrefix + "§fregister tasks ..");
+        playerListUpdate.startTask();
     }
 
 
@@ -74,6 +93,7 @@ public final class Main extends JavaPlugin {
         MongoDB.getInstance();
         registerCommands();
         registerListener();
+        registerTasks();
     }
 
     @Override
