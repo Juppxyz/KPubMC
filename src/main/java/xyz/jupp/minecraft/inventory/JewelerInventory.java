@@ -10,6 +10,8 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
 
+import static xyz.jupp.minecraft.utils.ItemStackUtil.createItemStack;
+
 public class JewelerInventory {
 
     // NOT IN USE
@@ -44,11 +46,4 @@ public class JewelerInventory {
         return inventory;
     }
 
-    public static ItemStack createItemStack(@NotNull String itemName, @NotNull Material material) {
-        ItemStack itemStack = new ItemStack(material);
-        ItemMeta itemMeta = itemStack.getItemMeta();
-        itemMeta.setDisplayName(itemName);
-        itemStack.setItemMeta(itemMeta);
-        return itemStack;
-    }
 }

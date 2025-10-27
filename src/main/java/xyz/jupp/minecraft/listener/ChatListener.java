@@ -1,68 +1,89 @@
 package xyz.jupp.minecraft.listener;
 
+import io.papermc.paper.event.player.AsyncChatEvent;
+import io.papermc.paper.chat.ChatRenderer;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.player.AsyncPlayerChatEvent;
-import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.PlayerCacheObject;
 import xyz.jupp.minecraft.cache.TeamCacheObject;
 import xyz.jupp.minecraft.database.TeamCollection;
 
+import java.util.Objects;
+
 public class ChatListener implements Listener {
 
-    @EventHandler
-    public void onSendMessage(AsyncPlayerChatEvent event) {
-        String msg = event.getMessage().replace("&", "§").replace("%", "Prozent");
-        Player player = event.getPlayer();
-        PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
+    private static final LegacyComponentSerializer LEGACY_AMP = LegacyComponentSerializer.legacyAmpersand();
+    private static final LegacyComponentSerializer LEGACY_SEC = LegacyComponentSerializer.legacySection();
 
-        if (playerCacheObject.getTeamID() == null) {
-            event.setFormat(formatChatMessage(player.getPlayerListName(), msg));
-        } else {
-            TeamCacheObject teamCacheObject = playerCacheObject.getTeamCacheObject();
-            if (teamCacheObject != null && msg.startsWith("@")) {
-                handleTeamChat(event, player, msg, playerCacheObject, teamCacheObject);
+    @EventHandler
+    public void onChat(AsyncChatEvent event) {
+        final Player player = event.getPlayer();
+        final PlayerCacheObject pco = CacheHandler.getInstance().getPlayerInCache(player);
+
+        // Rohtext der Nachricht (ohne Farben) ermitteln:
+        final String plain = event.message() == null
+                ? ""
+                : net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(event.message());
+
+        if (plain.startsWith("@")) {
+            if (pco.getTeamID() == null || pco.getTeamCacheObject() == null) {
+                event.setCancelled(true);
+                Bukkit.getScheduler().runTask(Main.getInstance(), () -> {
+                    player.sendMessage(Main.getChatPrefix() + "§cDu bist in keinem Team.");
+                    player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
+                });
                 return;
             }
 
-            String teamPrefix = formatTeamPrefix(teamCacheObject, player.getName());
-            event.setFormat(formatChatMessage(teamPrefix, msg));
-        }
-    }
-
-    private void handleTeamChat(AsyncPlayerChatEvent event, Player player, String msg, PlayerCacheObject playerCacheObject, TeamCacheObject teamCacheObject) {
-        event.setCancelled(true);
-        Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
-            TeamCollection teamCollection = new TeamCollection(playerCacheObject.getTeamID());
-            if (teamCollection.getTeamPoints() >= 15) {
-                sendTeamBroadcast(msg.substring(1), playerCacheObject);
-            } else {
-                player.sendMessage(Main.getChatPrefix() + "§cDein Team hat noch nicht genügend Punkte für den TeamChat.");
-                player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
+            TeamCollection teamCollection = new TeamCollection(pco.getTeamID());
+            if (teamCollection.getTeamPoints() < 15) {
+                event.setCancelled(true);
+                Bukkit.getScheduler().runTask(Main.getInstance(), () -> {
+                    player.sendMessage(Main.getChatPrefix() + "§cDein Team hat noch nicht genügend Punkte für den TeamChat.");
+                    player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
+                });
+                return;
             }
-        });
-    }
 
-    private String formatTeamPrefix(TeamCacheObject teamCacheObject, String playerName) {
-        return String.format("§8[%s%s§8] %s%s", teamCacheObject.getTeamColor(), teamCacheObject.getTeamName(), teamCacheObject.getTeamColor(), playerName);
-    }
+            event.viewers().removeIf(aud -> {
+                if (!(aud instanceof Player tgt)) return true;
+                PlayerCacheObject tco = CacheHandler.getInstance().getPlayerInCache(tgt);
+                return tco.getTeamID() == null || !Objects.equals(tco.getTeamID(), pco.getTeamID());
+            });
 
-    private String formatChatMessage(String prefix, String msg) {
-        return String.format("%s§8» §f%s", prefix, msg);
-    }
+            String teamMsg = plain.substring(1);
+            event.message(LEGACY_AMP.deserialize(teamMsg));
 
-    private void sendTeamBroadcast(@NotNull String msg, PlayerCacheObject playerCacheObject) {
-        String prefix = String.format("§8[%s%s-Chat§8] §f(%s)§8» §f", playerCacheObject.getTeamCacheObject().getTeamColor(), playerCacheObject.getTeamCacheObject().getTeamName(), playerCacheObject.getPlayer().getName());
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            PlayerCacheObject tmpPlayerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
-            if (tmpPlayerCacheObject.getTeamID() != null && tmpPlayerCacheObject.getTeamID().equals(playerCacheObject.getTeamID())) {
-                player.sendMessage(prefix + msg);
-            }
+            TeamCacheObject team = pco.getTeamCacheObject();
+            String prefixLegacy = String.format(
+                    "§8[%s%s-Chat§8] §f(%s)§8» §f",
+                    team.getTeamColor(), team.getTeamName(), player.getName()
+            );
+            Component prefix = LEGACY_SEC.deserialize(prefixLegacy);
+
+            event.renderer(ChatRenderer.viewerUnaware((src, srcName, msg) -> prefix.append(msg)));
+            return;
         }
+
+        // --- Globaler Chat mit Team-Prefix ---
+        final String prefixLegacy;
+        if (pco.getTeamID() == null || pco.getTeamCacheObject() == null) {
+            prefixLegacy = player.getPlayerListName() + "§8» §f";
+        } else {
+            TeamCacheObject team = pco.getTeamCacheObject();
+            prefixLegacy = String.format("§8[%s%s§8] %s%s§8» §f",
+                    team.getTeamColor(), team.getTeamName(), team.getTeamColor(), player.getName());
+        }
+        final Component prefix = LEGACY_SEC.deserialize(prefixLegacy);
+        event.message(LEGACY_AMP.deserialize(plain));
+
+        event.renderer(ChatRenderer.viewerUnaware((src, srcName, msg) -> prefix.append(msg)));
     }
 }

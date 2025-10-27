@@ -3,6 +3,7 @@ package xyz.jupp.minecraft.database;
 import com.mongodb.client.FindIterable;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.model.Updates;
+import com.mongodb.client.result.UpdateResult;
 import org.bson.Document;
 import org.bson.conversions.Bson;
 import org.bukkit.Bukkit;
@@ -10,13 +11,11 @@ import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
+import xyz.jupp.minecraft.utils.AreaOptionsEnum;
 import xyz.jupp.minecraft.utils.Logger;
 import xyz.jupp.minecraft.utils.MemberListDoc;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.UUID;
+import java.util.*;
 
 import static com.mongodb.client.model.Filters.eq;
 
@@ -50,10 +49,10 @@ public class TeamCollection {
         document.append("teamColor", teamColor);
         document.append("teamPoints", 0);
         document.append("members", memberList);
-        document.append("level", 0);
-        document.append("zoneOptionPvP", false);
-        document.append("zoneOptionMobDamage", false);
-        document.append("zoneOptionInteract", false);
+        document.append("level", 1);
+        document.append("zoneOptionPvP", true);
+        document.append("zoneOptionMobDamage", true);
+        document.append("zoneOptionInteract", true);
         teamsCollection.insertOne(document);
         Logger.console(String.format("create new team %s (%s)", teamName, teamID));
         Bukkit.broadcastMessage(Main.getChatPrefix() + "§fDas Team " + teamColor + teamName + " §fwurde von §6" + owner.getName() + " §fgegründet!");
@@ -118,7 +117,32 @@ public class TeamCollection {
         teamsCollection.updateOne(filter, Updates.inc("level", 1));
         Logger.console("update team-level for " + getTeamID());
     }
-    
+
+
+    public boolean changeAreaSettings(@NotNull AreaOptionsEnum areaOption) {
+        final String field = switch (areaOption) {
+            case INTERACTION   -> "zoneOptionInteract";
+            case PVP           -> "zoneOptionPvP";
+            case MOB_GRIEFING  -> "zoneOptionMobDamage";
+        };
+
+        Bson filter = eq("teamID", getTeamID());
+
+        List<Bson> update = List.of(
+                new Document("$set", new Document(
+                        field, new Document("$not", List.of(
+                        new Document("$ifNull", List.of("$" + field, false))
+                ))
+                ))
+        );
+
+        UpdateResult res = teamsCollection.updateOne(filter, update);
+        Logger.console("toggled '%s' for %s (matched=%d, modified=%d)"
+                .formatted(field, getTeamID(), res.getMatchedCount(), res.getModifiedCount()));
+
+        return res.getModifiedCount() > 0;
+    }
+
     // Getter
     public String getTeamID() {
         return teamID;

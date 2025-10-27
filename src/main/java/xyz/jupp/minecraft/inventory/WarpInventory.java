@@ -17,6 +17,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import static xyz.jupp.minecraft.utils.ItemStackUtil.createItemStack;
+
 public class WarpInventory {
 
     public enum WarpInventoryTypes { MAIN }
@@ -90,27 +92,18 @@ public class WarpInventory {
         }
 
         if (page > 1) {
-            inventory.setItem(48, createItemStack("§cZurück", Material.RED_WOOL));
+            inventory.setItem(51, createItemStack("§cZurück", Material.RED_WOOL));
         }
         if (page < totalPages) {
-            inventory.setItem(50, createItemStack("§aWeiter", Material.LIME_WOOL));
+            inventory.setItem(52, createItemStack("§aWeiter", Material.LIME_WOOL));
         }
 
         // Warp setzen oder updaten
         String warpAction = hasPlayerWarp ? "§bWarp zu aktueller Position aktualisieren §8(" + Main.getCurrencyName(500) + "§8)": "§bWarp für aktuelle Position setzen §8(" + Main.getCurrencyName(5000) + "§8)";
+
         inventory.setItem(53, createItemStack(warpAction, Material.NETHER_STAR));
 
         return inventory;
-    }
-
-
-
-    public static ItemStack createItemStack(@NotNull String itemName, @NotNull Material material) {
-        ItemStack itemStack = new ItemStack(material);
-        ItemMeta itemMeta = itemStack.getItemMeta();
-        itemMeta.setDisplayName(itemName);
-        itemStack.setItemMeta(itemMeta);
-        return itemStack;
     }
 
 }

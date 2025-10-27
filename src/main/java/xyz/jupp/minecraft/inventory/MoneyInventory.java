@@ -13,6 +13,8 @@ import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.database.PlayerCollection;
 
+import static xyz.jupp.minecraft.utils.ItemStackUtil.createItemStack;
+
 
 public class MoneyInventory {
 
@@ -88,12 +90,4 @@ public class MoneyInventory {
         return inventory;
     }
 
-
-    public static ItemStack createItemStack(@NotNull String itemName, @NotNull Material material) {
-        ItemStack itemStack = new ItemStack(material);
-        ItemMeta itemMeta = itemStack.getItemMeta();
-        itemMeta.setDisplayName(itemName);
-        itemStack.setItemMeta(itemMeta);
-        return itemStack;
-    }
 }

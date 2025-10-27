@@ -15,7 +15,7 @@ import java.util.Random;
 
 public class PlayerUpdaterTask implements TaskHandler.Tasks {
 
-    public static EntityType randomMob() {
+    private static EntityType randomMob() {
         EntityType[] mobs = {
                 EntityType.ZOMBIE,
                 EntityType.SKELETON,
@@ -35,7 +35,7 @@ public class PlayerUpdaterTask implements TaskHandler.Tasks {
     }
 
 
-    public void spawnMobEvent(Location bedLocation) {
+    private void createMobEvent(Location bedLocation) {
         Random random = new Random();
         final int ENTITY_COUNT = 10 + random.nextInt(16);
         final int MIN_DISTANCE = 32;
@@ -52,7 +52,7 @@ public class PlayerUpdaterTask implements TaskHandler.Tasks {
             Location spawnLoc = new Location(world, x, y, z);
 
             EntityType mobType = randomMob();
-            Entity entity = world.spawnEntity(spawnLoc, mobType); // Nur EIN spawn
+            Entity entity = world.spawnEntity(spawnLoc, mobType);
 
             if (mobType == EntityType.RABBIT && entity instanceof org.bukkit.entity.Rabbit) {
                 org.bukkit.entity.Rabbit rabbit = (org.bukkit.entity.Rabbit) entity;
@@ -81,11 +81,9 @@ public class PlayerUpdaterTask implements TaskHandler.Tasks {
                         if ( distance <= 160 && isMonsterEvent) {
                             player.sendMessage(Main.getChatPrefix() + "§cSicherheitsmeldung: Ungeziefer im Schlafbereich erkannt.");
                             Bukkit.getConsoleSender().sendMessage(Main.getConsolePrefix() + "created monster event for player " + player.getName() + " at " + bedSpawn.toString());
-                            spawnMobEvent(bedSpawn);
+                            createMobEvent(bedSpawn);
                         }
-
                     }
-
                 }
             });
 

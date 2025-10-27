@@ -24,7 +24,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
-import static xyz.jupp.minecraft.inventory.MoneyInventory.createItemStack;
+import static xyz.jupp.minecraft.utils.ItemStackUtil.createItemStack;
 
 public class MoneyInventoryListener implements Listener {
 

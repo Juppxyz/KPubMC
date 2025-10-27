@@ -21,6 +21,8 @@ public final class Main extends JavaPlugin {
     private final static String currencyName = "Schilling";
     private final static String teamName = "§aTeam";
 
+    private final static int teamLevelMultiple = 5000;
+
     // for static Access
     private static Main instance;
 
@@ -65,10 +67,11 @@ public final class Main extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new DeathListener(), this);
         Bukkit.getPluginManager().registerEvents(new ShopListener(), this);
         Bukkit.getPluginManager().registerEvents(new WarpInventoryListener(), this);
-        Bukkit.getPluginManager().registerEvents(new SwordListener(), this);
         Bukkit.getPluginManager().registerEvents(new CreateLocalShopListener(), this);
         Bukkit.getPluginManager().registerEvents(new MobLimiterListener(), this);
         Bukkit.getPluginManager().registerEvents(new PlayerMovementListener(), this);
+        Bukkit.getPluginManager().registerEvents(new PlayerExpListener(), this);
+        //Bukkit.getPluginManager().registerEvents(new SwordListener(), this);
         //Bukkit.getPluginManager().registerEvents(new EnderDragonListener(), this);
         //Bukkit.getPluginManager().registerEvents(new ElytraFlyListener(), this);
         //Bukkit.getPluginManager().registerEvents(new TeamBlockListener(), this);
@@ -112,4 +115,5 @@ public final class Main extends JavaPlugin {
     public static String getCurrencyName(int amount)  {return String.format("§a%d %s", amount, currencyName);}
     public static String getTeamName() {return teamName;}
     public static String getShopVillagerName() {return shopVillagerName;}
+    public static int getTeamLevelMultiple() {return teamLevelMultiple;}
 }

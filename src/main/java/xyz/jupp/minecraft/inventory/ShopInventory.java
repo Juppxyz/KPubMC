@@ -15,7 +15,7 @@ import xyz.jupp.minecraft.config.ShopItem;
 import java.util.ArrayList;
 import java.util.List;
 
-import static xyz.jupp.minecraft.inventory.MoneyInventory.createItemStack;
+import static xyz.jupp.minecraft.utils.ItemStackUtil.createItemStack;
 
 public class ShopInventory {
 

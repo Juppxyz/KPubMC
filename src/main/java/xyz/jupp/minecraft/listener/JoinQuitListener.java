@@ -1,11 +1,13 @@
 package xyz.jupp.minecraft.listener;
 
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.*;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.event.player.PlayerLoginEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
@@ -13,95 +15,95 @@ import xyz.jupp.minecraft.cache.TeamCacheObject;
 import xyz.jupp.minecraft.commands.SpecCommand;
 import xyz.jupp.minecraft.database.PlayerCollection;
 
-import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 public class JoinQuitListener implements Listener {
 
+    private static final LegacyComponentSerializer LEGACY_SEC = LegacyComponentSerializer.legacySection();
+
     @EventHandler
-    public void onPlayerLogin(PlayerLoginEvent event) {
-        Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
-            PlayerCollection playerCollection = new PlayerCollection(event.getPlayer());
-            playerCollection.createNewPlayerInDatabase();
-        });
+    public void onPreLogin(AsyncPlayerPreLoginEvent event) {
+        if (Bukkit.getPlayer(event.getUniqueId()) != null
+                && !Bukkit.getPlayer(event.getUniqueId()).hasPlayedBefore()) {
+            new PlayerCollection(Bukkit.getPlayer(event.getUniqueId())).createNewPlayerInDatabase();
+        }
     }
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
-        event.setJoinMessage(null);
         Player player = event.getPlayer();
 
+        event.joinMessage(Component.empty());
+
         if (!player.hasPlayedBefore()) {
-            player.teleport(new Location(Bukkit.getWorld("world_MCWinter"), 92624.500D, 72.5000D, 114430.500D));
+            player.teleport(new Location(Objects.requireNonNull(Bukkit.getWorld("world_MCWinter")),
+                    92624.5, 72.5, 114430.5));
         }
 
-        ArrayList<UUID> specMode = SpecCommand.getSpecMode();
-        if (!specMode.isEmpty()) {
-            for (UUID onlineUUID : specMode){
-                Player target = Bukkit.getPlayer(onlineUUID);
-                if (target != null && target.isOnline()) {
-                    player.hidePlayer(target);
-                }
+        for (UUID uuid : SpecCommand.getSpecMode()) {
+            Player target = Bukkit.getPlayer(uuid);
+            if (target != null && target.isOnline()) {
+                player.hidePlayer(Main.getInstance(), target);
             }
         }
 
-        Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
-            //handleDailyLoginStreak(player);
-            handleFirstJoinMessages(player);
-            setTeamDisplayNames(player);
-            Bukkit.broadcastMessage(String.format("§8[§a+§8] %s §fhat den Server betreten.", player.getPlayerListName()));
-        });
-    }
+        applyTeamDisplayNames(player);
 
+        Component joinMsg = LEGACY_SEC.deserialize(
+                String.format("§8[§a+§8] %s §fhat den Server betreten.", player.getPlayerListName())
+        );
+        Bukkit.broadcast(joinMsg);
 
-
-
-    private void handleFirstJoinMessages(Player player) {
         if (!player.hasPlayedBefore()) {
-            Bukkit.broadcastMessage("§8§l[§a§l+§8§l] §a§l" + player.getName() + " §f§lhat den Server zum ersten mal betreten.");
-            CacheHandler.getInstance().getPlayerInCache(player);
-            player.setPlayerListName("§a" + player.getName());
-            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f, 2f);
-            sendWelcomeMessages(player);
+            Bukkit.broadcast(LEGACY_SEC.deserialize(
+                    "§8§l[§a§l+§8§l] §a§l" + player.getName() + " §f§lhat den Server zum ersten Mal betreten."));
+            sendWelcome(player);
         }
     }
 
-    private void sendWelcomeMessages(Player player) {
-        player.sendMessage(Main.getChatPrefix() + "§a§lHerzlich Willkommen auf unserem Minecraft-Server!");
-        player.sendMessage(Main.getChatPrefix() + "§fMelde dich bei Fragen oder Problemen einfach");
-        player.sendMessage(Main.getChatPrefix() + "§fim Discord Channel §a§l#minecraft§f.");
-        player.sendMessage(Main.getChatPrefix() + "§aViel Spaß!");
-    }
-
-    private void setTeamDisplayNames(Player player) {
+    private void applyTeamDisplayNames(Player player) {
         TeamCacheObject team = CacheHandler.getInstance().getPlayerInCache(player).getTeamCacheObject();
+        String display;
         if (team != null) {
-            String displayName = team.getTeamColor() + player.getName();
+            display = team.getTeamColor() + player.getName();
             if (team.getTeamVices().contains(player.getUniqueId().toString())) {
-                displayName = team.getTeamColor() + "§o" + player.getName();
+                display = team.getTeamColor() + "§o" + player.getName();
             } else if (team.getTeamOwner().equals(player.getUniqueId().toString())) {
-                displayName = team.getTeamColor() + "§l" + player.getName();
+                display = team.getTeamColor() + "§l" + player.getName();
             }
-            player.setPlayerListName(displayName);
-            player.setDisplayName(displayName);
         } else {
-            player.setPlayerListName("§a" + player.getName());
-            player.setDisplayName("§a" + player.getName());
+            display = "§a" + player.getName();
         }
+        // Adventure-Setzer statt deprecated String-Setter:
+        Component comp = LEGACY_SEC.deserialize(display);
+        player.playerListName(comp);
+        player.displayName(comp);
+    }
+
+    private void sendWelcome(Player p) {
+        p.sendMessage(LEGACY_SEC.deserialize(Main.getChatPrefix() + "§a§lHerzlich Willkommen auf unserem Minecraft-Server!"));
+        p.sendMessage(LEGACY_SEC.deserialize(Main.getChatPrefix() + "§fMelde dich bei Fragen oder Problemen einfach"));
+        p.sendMessage(LEGACY_SEC.deserialize(Main.getChatPrefix() + "§fim Discord Channel §a§l#minecraft§f."));
+        p.sendMessage(LEGACY_SEC.deserialize(Main.getChatPrefix() + "§aViel Spaß!"));
+        p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f, 2f);
     }
 
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
+
         CacheHandler.getInstance().removePlayerFromCache(player);
+
         if (SpecCommand.getSpecMode(player.getUniqueId())) {
             SpecCommand.changeSpecMode(player.getUniqueId());
-            event.setQuitMessage(null);
+            event.quitMessage(Component.empty());
             return;
         }
-        event.setQuitMessage("§8[§c-§8] §a" + player.getPlayerListName() + " §fhat den Server verlassen.");
+
+        // Paper-API: quitMessage(Component)
+        Component msg = LEGACY_SEC.deserialize(
+                "§8[§c-§8] §a" + player.getPlayerListName() + " §fhat den Server verlassen.");
+        event.quitMessage(msg);
     }
 }

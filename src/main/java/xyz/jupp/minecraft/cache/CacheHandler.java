@@ -3,6 +3,7 @@ package xyz.jupp.minecraft.cache;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.database.TeamCollection;
+import xyz.jupp.minecraft.utils.AreaOptionsEnum;
 
 /**
  * This is the central wrapper class which handles all access for the local cache memory.
@@ -27,9 +28,11 @@ public class CacheHandler {
         return playerCache.getPlayer(player);
     }
 
+
     public void removePlayerFromCache(@NotNull Player player) {
         playerCache.removePlayer(player);
     }
+
 
     public String changeTeamMemberRole(@NotNull PlayerCacheObject playerCacheObject) {
         return playerCacheObject.getTeamCacheObject().changePlayerTeamRole(playerCacheObject.getPlayer());
@@ -56,15 +59,13 @@ public class CacheHandler {
     }
 
 
-    public void upgradeTeamLevel(@NotNull PlayerCacheObject playerCacheObject) {
-        TeamCollection teamCollection = new TeamCollection(playerCacheObject.getTeamID());
-        teamCollection.incTeamLevel();
-        playerCacheObject.getTeamCacheObject().upgradeTeamLevel();
+    public void changeAreaOptions(@NotNull TeamCacheObject teamCacheObject, @NotNull AreaOptionsEnum areaOption) {
+        teamCacheObject.changeAreaSettings(areaOption);
     }
+
 
     public TeamCacheObject getTeamCacheObject(@NotNull String teamID) {
         return TeamCache.getTeam(teamID);
     }
-
 
 }
