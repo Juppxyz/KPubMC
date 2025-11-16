@@ -22,24 +22,42 @@ public class PlayerCollection {
         this.uuid = player.getUniqueId().toString();
     }
 
+    // only usage fpr the prelogin
+    public PlayerCollection(@NotNull String uuid) {
+        this.uuid = uuid;
+    }
+
 
     /* create a new player in the database */
     public void createNewPlayerInDatabase() {
         if (existPlayerInDatabase()) return;
-        Document playerDocument = new Document("uuid", getPlayer().getUniqueId().toString());
+
+        String uuid;
+        if (getPlayer() == null) {
+            uuid = getUuid();
+        }else {
+            uuid = getPlayer().getUniqueId().toString();
+        }
+
+        Document playerDocument = new Document("uuid", uuid);
         playerDocument.append("teamInvites", false);
         playerDocument.append("cheatingKicks", 0);
         playerDocument.append("money", 250);
         playerDocument.append("teamID", null);
         playerDocument.append("loginStreak", 0);
-        playerDocument.append("uuid", getPlayer().getUniqueId().toString());
-        Bukkit.getConsoleSender().sendMessage(Main.getConsolePrefix() + "create new player " + getPlayer().getUniqueId() + " in database.");
+        playerDocument.append("uuid", uuid);
+        Bukkit.getConsoleSender().sendMessage(Main.getConsolePrefix() + "create new player " + uuid + " in database.");
         playerCollection.insertOne(playerDocument);
     }
 
 
     public boolean existPlayerInDatabase() {
-        Bson filter = eq("uuid", getPlayer().getUniqueId().toString());
+        Bson filter;
+        if (getPlayer() == null){
+            filter = eq("uuid", getUuid());
+            return (playerCollection.find(filter).first() != null);
+        }
+        filter = eq("uuid", getPlayer().getUniqueId().toString());
         return (playerCollection.find(filter).first() != null);
     }
 
@@ -72,7 +90,7 @@ public class PlayerCollection {
         Bson filter = eq("uuid", getUuid());
         Document document = playerCollection.find(filter).first();
         int loginStreak = document.getInteger("loginStreak");
-        Bukkit.getConsoleSender().sendMessage(Main.getChatPrefix() + "get loginStreak from" + getPlayer().getUniqueId() + "(" + loginStreak + ")");
+        Bukkit.getConsoleSender().sendMessage(Main.getChatPrefix() + "get loginStreak from " + getPlayer().getUniqueId() + "(" + loginStreak + ")");
         return loginStreak;
     }
 
@@ -94,7 +112,7 @@ public class PlayerCollection {
         Bson filter = eq("uuid", getUuid());
         Document document = playerCollection.find(filter).first();
         int money = document.getInteger("money");
-        Bukkit.getConsoleSender().sendMessage(Main.getChatPrefix() + "get money from" + getPlayer().getUniqueId() + "(" + money + ")");
+        Bukkit.getConsoleSender().sendMessage(Main.getChatPrefix() + "get money from " + getPlayer().getUniqueId() + "(" + money + ")");
         return money;
     }
 

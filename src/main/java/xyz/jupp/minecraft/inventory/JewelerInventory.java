@@ -9,6 +9,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
+import xyz.jupp.minecraft.config.ConfigManager;
 
 import static xyz.jupp.minecraft.utils.ItemStackUtil.createItemStack;
 
@@ -31,17 +32,22 @@ public class JewelerInventory {
     }
 
     private static Inventory createNewJewelerShopInventory(Player player) {
-        Inventory inventory = Bukkit.createInventory(player, 9, "§5Juwelier");
+        Inventory inventory = Bukkit.createInventory(player, 27, "§8Tresen des %s's".formatted(Main.getJewelerVillagerName()));
 
-        inventory.setItem(0, createItemStack("", Material.GRAY_STAINED_GLASS_PANE));
-        inventory.setItem(1, createItemStack("", Material.GRAY_STAINED_GLASS_PANE));
-        inventory.setItem(2, createItemStack("", Material.DIAMOND));
-        inventory.setItem(3, createItemStack("", Material.GRAY_STAINED_GLASS_PANE));
-        inventory.setItem(4, createItemStack("", Material.GRAY_STAINED_GLASS_PANE));
-        inventory.setItem(5, createItemStack("", Material.GRAY_STAINED_GLASS_PANE));
-        inventory.setItem(6, createItemStack("", Material.GRAY_STAINED_GLASS_PANE));
-        inventory.setItem(7, createItemStack("", Material.GRAY_STAINED_GLASS_PANE));
-        inventory.setItem(8, createItemStack("", Material.GRAY_STAINED_GLASS_PANE));
+        String currentTax = String.valueOf(Math.toIntExact(Math.round(ConfigManager.getManager().getTradeTax() * 100)));
+        String [] lores = {"§c+" + currentTax + "% Steuern"};
+
+        for (int i = 0; i < 27; i++) {
+            if (i == 10) {inventory.setItem(i, createItemStack("§aSmaragd §8(%s§8)".formatted(Main.getCurrencyName(50)), Material.EMERALD, lores));continue;}
+            if (i == 11) {inventory.setItem(i, createItemStack("§eGold §8(%s§8)".formatted(Main.getCurrencyName(100)), Material.GOLD_INGOT, lores));continue;}
+            if (i == 12) {inventory.setItem(i, createItemStack("§bDiamant §8(%s§8)".formatted(Main.getCurrencyName(250)), Material.DIAMOND, lores));continue;}
+            if (i == 13) {inventory.setItem(i, createItemStack("§8Netherite §8(%s§8)".formatted(Main.getCurrencyName(1000)), Material.NETHERITE_INGOT, lores));continue;}
+            if (i == 14) {inventory.setItem(i, createItemStack("§5Amethyst §8(%s§8)".formatted(Main.getCurrencyName(200)), Material.AMETHYST_SHARD, lores));continue;}
+            if (i == 15) {inventory.setItem(i, createItemStack("§6Harz §8(%s§8)".formatted(Main.getCurrencyName(300)), Material.RESIN_CLUMP, lores));continue;}
+            if (i == 16) {inventory.setItem(i, createItemStack("§9Lapislazuli §8(%s§8)".formatted(Main.getCurrencyName(50)), Material.LAPIS_LAZULI, lores));continue;}
+            inventory.setItem(i, createItemStack("§7---", Material.GRAY_STAINED_GLASS_PANE));
+        }
+
 
         return inventory;
     }

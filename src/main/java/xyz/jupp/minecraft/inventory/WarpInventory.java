@@ -99,7 +99,8 @@ public class WarpInventory {
         }
 
         // Warp setzen oder updaten
-        String warpAction = hasPlayerWarp ? "§bWarp zu aktueller Position aktualisieren §8(" + Main.getCurrencyName(500) + "§8)": "§bWarp für aktuelle Position setzen §8(" + Main.getCurrencyName(5000) + "§8)";
+        String warpAction = hasPlayerWarp ? "§bWarp zu aktueller Position aktualisieren §8(§c-500 " + Main.getCurrencyName() + "§8)"
+                : "§bWarp für aktuelle Position setzen §8(§c-5000 " + Main.getCurrencyName() + "§8)";
 
         inventory.setItem(53, createItemStack(warpAction, Material.NETHER_STAR));
 

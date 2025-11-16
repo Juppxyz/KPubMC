@@ -24,11 +24,13 @@ public class JoinQuitListener implements Listener {
 
     @EventHandler
     public void onPreLogin(AsyncPlayerPreLoginEvent event) {
-        if (Bukkit.getPlayer(event.getUniqueId()) != null
-                && !Bukkit.getPlayer(event.getUniqueId()).hasPlayedBefore()) {
-            new PlayerCollection(Bukkit.getPlayer(event.getUniqueId())).createNewPlayerInDatabase();
+        UUID uuid = event.getUniqueId();
+        PlayerCollection playerCollection = new PlayerCollection(uuid.toString());
+        if (!playerCollection.existPlayerInDatabase()) {
+            playerCollection.createNewPlayerInDatabase();
         }
     }
+
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {

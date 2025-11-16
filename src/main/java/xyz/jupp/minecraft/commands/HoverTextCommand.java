@@ -1,10 +1,10 @@
 package xyz.jupp.minecraft.commands;
 
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.Sound;
-import org.bukkit.command.Command;
-import org.bukkit.command.CommandExecutor;
-import org.bukkit.command.CommandSender;
+import org.bukkit.command.*;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
@@ -12,41 +12,48 @@ import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.utils.PermissionsUtil;
 
-import java.util.Arrays;
-import java.util.stream.Collectors;
-
 public class HoverTextCommand implements CommandExecutor {
 
     @Override
-    public boolean onCommand(@NotNull CommandSender commandSender, @NotNull Command command, @NotNull String s, @NotNull String[] args) {
-        if (commandSender instanceof Player) {
-            Player player = (Player) commandSender;
-            if (!PermissionsUtil.isPlayerAdmin(player)){
-                PermissionsUtil.sendNoPermMsg(player);
-                return false;
-            }
-            if (args.length == 0) {
-                player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
-                player.sendMessage(Main.getChatPrefix() + "Bitte verwende: §a/hover <Text>");
-                return false;
-            }
-            String stringBuilder = Arrays.stream(args).map(arg -> " " + arg.replaceAll("&", "§")).collect(Collectors.joining());
-            createNewArmorStand(player.getLocation(), stringBuilder);
-            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f,2f);
-            player.sendMessage(Main.getChatPrefix() + "Der HoverText wurde §aerfolgreich §ferstellt.");
+    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command cmd,
+                             @NotNull String label, @NotNull String[] args) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage("Nur ingame nutzbar.");
+            return true;
         }
-        return false;
+        if (!PermissionsUtil.isPlayerAdmin(player)) {
+            PermissionsUtil.sendNoPermMsg(player);
+            return true;
+        }
+        if (args.length == 0) {
+            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
+            player.sendMessage(Main.getChatPrefix() + "Bitte verwende: §a/hover <Text>");
+            return true;
+        }
+
+        // "&" -> §-Farben (Legacy), anschließend in Adventure-Component wandeln
+        String raw = String.join(" ", args);
+        String legacy = ChatColor.translateAlternateColorCodes('&', raw);
+
+        createNewArmorStand(player.getLocation(), legacy);
+        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f, 2f);
+        player.sendMessage(Main.getChatPrefix() + "Der HoverText wurde §aerfolgreich §ferstellt.");
+        return true;
     }
 
+    private ArmorStand createNewArmorStand(Location loc, String legacyTitle) {
+        Location pos = loc.clone().add(0.5, 1.0, 0.5);
 
-    private ArmorStand createNewArmorStand(Location location, String title) {
-        ArmorStand armorStand = (ArmorStand) location.getWorld().spawnEntity(location.add(0.5, 1, 0.5), EntityType.ARMOR_STAND);
-        armorStand.setGravity(false);
-        armorStand.setVisible(false);
-        armorStand.setInvulnerable(true);
-        armorStand.setCustomNameVisible(true);
-        armorStand.setCustomName(title);
-        return armorStand;
+        ArmorStand as = (ArmorStand) pos.getWorld().spawnEntity(pos, EntityType.ARMOR_STAND);
+        as.setGravity(false);
+        as.setVisible(false);
+        as.setInvulnerable(true);
+        as.setMarker(true);
+        as.setSmall(true);
+        as.setBasePlate(false);
+        as.setCustomNameVisible(true);
+
+        as.customName(LegacyComponentSerializer.legacySection().deserialize(legacyTitle));
+        return as;
     }
-
 }

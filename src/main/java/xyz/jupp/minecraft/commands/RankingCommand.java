@@ -32,7 +32,7 @@ public class RankingCommand implements CommandExecutor {
                 while (iterator.hasNext()) {
                     Document document = iterator.next();
                     teamCacheObject = CacheHandler.getInstance().getTeamCacheObject(document.getString("teamID"));
-                    player.sendMessage(String.format("§a%d. §8- %s%s §8(§a%d§8)", position, teamCacheObject.getTeamColor(), teamCacheObject.getTeamName(), document.getInteger("teamPoints")));
+                    player.sendMessage(String.format("§a%d. §8- %s%s §8(§a%d§8) §8| §aLevel %d", position, teamCacheObject.getTeamColor(), teamCacheObject.getTeamName(), document.getInteger("teamPoints"), teamCacheObject.getLevel()));
                     position++;
                 }
                 player.sendMessage(" ");

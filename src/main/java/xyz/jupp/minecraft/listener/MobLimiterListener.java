@@ -25,7 +25,7 @@ import java.util.Set;
 
 public class MobLimiterListener implements Listener {
 
-    private static final Set<EntityType> ALLOWED_ENTITIES = EnumSet.of(EntityType.VILLAGER, EntityType.CHICKEN, EntityType.IRON_GOLEM);
+    private static final Set<EntityType> ALLOWED_ENTITIES = EnumSet.of(EntityType.VILLAGER, EntityType.CHICKEN, EntityType.IRON_GOLEM, EntityType.ARMOR_STAND, EntityType.WANDERING_TRADER, EntityType.VINDICATOR, EntityType.CAMEL);
 
     private static final int NEARBY_ENTITY_RADIUS_XZ = 8;
     private static final int NEARBY_ENTITY_RADIUS_Y = 2;

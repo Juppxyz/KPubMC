@@ -13,18 +13,16 @@ import java.util.Arrays;
 
 public class LightningSword implements Listener {
 
-    private static LightningSword instance; // Singleton instance
+    private static LightningSword instance;
 
     private final ItemStack customItem;
     private final NamespacedKey swordKey;
 
     public LightningSword() {
 
-        // create a NamespacedKey for the custom item
         swordKey = new NamespacedKey(Main.getInstance(), "sword_of_lightning");
         customItem = new ItemStack(Material.DIAMOND_SWORD);
 
-        // metadata
         ItemMeta meta = customItem.getItemMeta();
         if (meta != null) {
             meta.setDisplayName(ChatColor.AQUA + "STURMSCHWERT");
@@ -32,7 +30,6 @@ public class LightningSword implements Listener {
             meta.getPersistentDataContainer().set(swordKey, PersistentDataType.BYTE, (byte) 1);
             customItem.setItemMeta(meta);
         }
-
     }
 
     public ItemStack getSword() {

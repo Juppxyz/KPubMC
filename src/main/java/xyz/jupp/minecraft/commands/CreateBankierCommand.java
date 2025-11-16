@@ -23,17 +23,17 @@ public class CreateBankierCommand implements CommandExecutor {
             }
 
             Villager villager = (Villager) player.getLocation().getWorld().spawnEntity(player.getLocation(), EntityType.VILLAGER);
-            villager.setCustomName("§5§lFinanz-Fred");
+            villager.setCustomName(Main.getFinanceVillagerFredName());
             villager.setCustomNameVisible(true);
             villager.setInvulnerable(true);
             villager.setAI(false);
             villager.setGravity(false);
             villager.setCollidable(false);
-            villager.setProfession(Villager.Profession.LEATHERWORKER);
+            villager.setProfession(Villager.Profession.LIBRARIAN);
             villager.setGlowing(true);
 
             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f,2f);
-            player.sendMessage(Main.getChatPrefix() + "Der §5§lFinanz-Fred §fwurde §aerfolgreich §ferstellt.");
+            player.sendMessage(Main.getChatPrefix() + "Der " + Main.getFinanceVillagerFredName() + " §fwurde §aerfolgreich §ferstellt.");
         }
         return false;
     }

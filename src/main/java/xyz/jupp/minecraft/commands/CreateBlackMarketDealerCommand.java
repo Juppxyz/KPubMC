@@ -6,12 +6,12 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
-import org.bukkit.entity.Villager;
+import org.bukkit.entity.Vindicator;
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.utils.PermissionsUtil;
 
-public class CreateShopCommand implements CommandExecutor {
+public class CreateBlackMarketDealerCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(@NotNull CommandSender commandSender, @NotNull Command command, @NotNull String s, @NotNull String[] args) {
@@ -22,18 +22,16 @@ public class CreateShopCommand implements CommandExecutor {
                 return false;
             }
 
-            Villager villager = (Villager) player.getLocation().getWorld().spawnEntity(player.getLocation(), EntityType.VILLAGER);
-            villager.setCustomName(Main.getShopVillagerName());
-            villager.setCustomNameVisible(true);
-            villager.setInvulnerable(true);
-            villager.setAI(false);
-            villager.setGravity(false);
-            villager.setCollidable(false);
-            villager.setProfession(Villager.Profession.MASON);
-            villager.setGlowing(true);
+            Vindicator vindicator = (Vindicator) player.getLocation().getWorld().spawnEntity(player.getLocation(), EntityType.VINDICATOR);
+            vindicator.setCustomName(Main.getBlackMarketDealerVillagerName());
+            vindicator.setCustomNameVisible(true);
+            vindicator.setInvulnerable(true);
+            vindicator.setAI(false);
+            vindicator.setGravity(false);
+            vindicator.setCollidable(false);
 
             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f,2f);
-            player.sendMessage(Main.getChatPrefix() + "Der Shop wurde §aerfolgreich §ferstellt.");
+            player.sendMessage(Main.getChatPrefix() + "Der " + Main.getBlackMarketDealerVillagerName() + " §fwurde §aerfolgreich §ferstellt.");
         }
         return false;
     }

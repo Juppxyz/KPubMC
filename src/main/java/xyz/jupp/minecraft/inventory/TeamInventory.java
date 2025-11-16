@@ -348,7 +348,7 @@ public class TeamInventory {
             default: material = Material.WHITE_BANNER; break;
         }
 
-        return createItemStack(teamColor + "Aktuellen Chunk beanspruchen §f(§c-500 Team-Punkte§f)", material);
+        return createItemStack(teamColor + "Aktuellen Chunk beanspruchen §f(§c-200 Team-Punkte§f)", material);
     }
 
 

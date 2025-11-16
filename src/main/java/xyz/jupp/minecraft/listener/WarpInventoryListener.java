@@ -58,7 +58,6 @@ public class WarpInventoryListener implements Listener {
                         int previousPage = page - 1;
                         if (previousPage >= 1) {
                             Bukkit.getScheduler().runTask(Main.getInstance(), () -> {
-
                                 WarpInventory.openInventory(player, 1);
                             });
                         } else {
@@ -96,7 +95,7 @@ public class WarpInventoryListener implements Listener {
                     }
 
                     if (displayName.startsWith("§bWarp zu aktueller Position aktualisieren")) {
-                        if (money < 500) {
+                        if (money < 5000) {
                             player.sendMessage(Main.getChatPrefix() + "Das aktualisieren deines Warps kostet " + Main.getCurrencyName(5000) + "§f.");
                             player.sendMessage(Main.getChatPrefix() + "§c-5000 " + Main.getCurrencyName());
                             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
@@ -129,9 +128,7 @@ public class WarpInventoryListener implements Listener {
                             PlayerTeleport playerTeleport = new PlayerTeleport();
                             Location location = new Location(Bukkit.getWorld(ownWarpObject.getWorldName()), ownWarpObject.getX(), ownWarpObject.getY(), ownWarpObject.getZ());
                             playerTeleport.teleportAfter(player, location);
-
-                            player.sendMessage(Main.getChatPrefix() + "§fDu wurdest zu deinem Warp teleportiert.");
-                            player.sendMessage(Main.getChatPrefix() + "§c-100 " + Main.getCurrencyName());
+                            player.sendMessage(Main.getChatPrefix() + "§c-200 " + Main.getCurrencyName());
                             playerCollection.updateMoney(money - 200);
                             player.playSound(player.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 2f,2f);
 

@@ -239,13 +239,13 @@ public class TeamInventoryListener implements Listener {
                         TeamCollection teamCollection = new TeamCollection(playerCacheObject.getTeamID());
                         int teamPoints = teamCollection.getTeamPoints();
 
-                        if (teamPoints < 500) {
+                        if (teamPoints < 200) {
                             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
                             player.sendMessage(Main.getChatPrefix() + "§cDein Team hat leider noch nicht genügend Punkte.");
                             return;
                         }
 
-                        teamCollection.changeTeamPoints(teamPoints - 500);
+                        teamCollection.changeTeamPoints(teamPoints - 200);
                         boolean isChunkClaimed = ChunkCache.getInstance().addChunk(
                                 playerCacheObject.getTeamID(),
                                 currentLocation.getWorld().getName(),
