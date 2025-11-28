@@ -12,11 +12,13 @@ import xyz.jupp.minecraft.utils.JailHandler;
 import xyz.jupp.minecraft.utils.PermissionsUtil;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public class CommandBlockListener implements Listener {
 
-    private static ArrayList<String> allowedCommands = null;
-    public static ArrayList<String> getAllowedCommands() {
+    private static List<String> allowedCommands = null;
+
+    public static List<String> getAllowedCommands() {
         if (allowedCommands == null) {
             allowedCommands = new ArrayList<>();
             allowedCommands.add("/money");
@@ -46,26 +48,52 @@ public class CommandBlockListener implements Listener {
         return allowedCommands;
     }
 
+    private boolean isAllowedForNormalPlayer(String msg) {
+        // exakte Matches aus der Liste
+        if (getAllowedCommands().contains(msg)) return true;
+
+        // Prefix-Whitelists (mit Argumenten etc.)
+        if (msg.startsWith("/team")) return true;
+        if (msg.startsWith("/msg")) return true;
+        if (msg.startsWith("/head")) return true;
+        if (msg.startsWith("/kopf")) return true;
+
+        return false;
+    }
+
     @EventHandler
-    public void onCommandExecute(PlayerCommandPreprocessEvent event){
+    public void onCommandExecute(PlayerCommandPreprocessEvent event) {
         Player player = event.getPlayer();
         String msg = event.getMessage();
-        if (!PermissionsUtil.isPlayerAdmin(player)) return; {
+        boolean isAdmin = PermissionsUtil.isPlayerAdmin(player);
+        
+        if (!isAdmin) {
             if (JailHandler.isPlayerInJail(player)) {
                 event.setCancelled(true);
                 player.sendMessage(Main.getChatPrefix() + "§fIm Gefängnis kannst du keine Befehle ausführen.");
                 player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 1f);
+                Bukkit.getScheduler().runTaskAsynchronously(
+                        Main.getInstance(),
+                        () -> new CommandLogCollection(player, msg).addNewEntry()
+                );
                 return;
             }
-            if (!getAllowedCommands().contains(msg) && !msg.startsWith("/team") && !msg.startsWith("/msg") && !msg.startsWith("/head") && !msg.startsWith("/kopf")) {
+
+            if (!isAllowedForNormalPlayer(msg)) {
                 event.setCancelled(true);
                 PermissionsUtil.sendNoPermMsg(player);
+                Bukkit.getScheduler().runTaskAsynchronously(
+                        Main.getInstance(),
+                        () -> new CommandLogCollection(player, msg).addNewEntry()
+                );
                 return;
             }
         }
 
-        // Danny, sei leise. Sicher ist sicher.
-        Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> new CommandLogCollection(player, msg).addNewEntry());
+        Bukkit.getScheduler().runTaskAsynchronously(
+                Main.getInstance(),
+                () -> new CommandLogCollection(player, msg).addNewEntry()
+        );
     }
 
 }
