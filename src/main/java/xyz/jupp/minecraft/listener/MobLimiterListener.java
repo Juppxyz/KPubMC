@@ -1,31 +1,46 @@
 package xyz.jupp.minecraft.listener;
 
 import org.bukkit.Bukkit;
+import org.bukkit.Chunk;
 import org.bukkit.Location;
-import org.bukkit.entity.Entity;
-import org.bukkit.entity.EntityType;
-import org.bukkit.entity.WitherSkeleton;
+import org.bukkit.entity.*;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.entity.CreatureSpawnEvent;
+import org.bukkit.event.entity.EntityBreakDoorEvent;
+import org.bukkit.event.entity.EntityChangeBlockEvent;
+import org.bukkit.event.entity.EntityExplodeEvent;
+import org.bukkit.event.hanging.HangingBreakByEntityEvent;
 import xyz.jupp.minecraft.Main;
+import xyz.jupp.minecraft.cache.CacheHandler;
+import xyz.jupp.minecraft.cache.ChunkCache;
+import xyz.jupp.minecraft.cache.ChunkCacheObject;
+import xyz.jupp.minecraft.cache.TeamCacheObject;
+import xyz.jupp.minecraft.utils.Locations;
 
 import java.util.EnumSet;
 import java.util.Set;
 
+
 public class MobLimiterListener implements Listener {
 
-    private static final Set<EntityType> ALLOWED_ENTITIES = EnumSet.of(EntityType.VILLAGER, EntityType.CHICKEN, EntityType.IRON_GOLEM, EntityType.SKELETON, EntityType.BREEZE);
-    private static final double SPAWN_MIN_X = 92508.0D;
-    private static final double SPAWN_MAX_X = 92810.0D;
-    private static final double SPAWN_MIN_Z = 114375.0D;
-    private static final double SPAWN_MAX_Z = 114626.0D;
-    private static final double SPAWN_Y = 0.0D;
+    private static final Set<EntityType> ALLOWED_ENTITIES = EnumSet.of(EntityType.VILLAGER, EntityType.CHICKEN, EntityType.IRON_GOLEM, EntityType.ARMOR_STAND, EntityType.WANDERING_TRADER, EntityType.VINDICATOR, EntityType.CAMEL, EntityType.HORSE);
 
     private static final int NEARBY_ENTITY_RADIUS_XZ = 8;
     private static final int NEARBY_ENTITY_RADIUS_Y = 2;
     private static final int NEARBY_ENTITY_LIMIT = 50;
     private static final long WITHER_SKELETON_LIFESPAN_TICKS = 600L;
+
+    private boolean isProtected(Location location) {
+        ChunkCacheObject chunkCacheObject = ChunkCache.getInstance().getChunkObject(location.getWorld().getName(), location.getChunk().getX(), location.getChunk().getZ());
+        if (chunkCacheObject == null) return false;
+
+        TeamCacheObject teamCacheObject = CacheHandler.getInstance().getTeamCacheObject(chunkCacheObject.getTeamID());
+        if (teamCacheObject == null) return false;
+        boolean checkTeamLevel = teamCacheObject.getLevel() >= 2 ;
+        return checkTeamLevel && !teamCacheObject.isZoneOptionMobDamage();
+    }
 
     @EventHandler
     public void onSpawnCreature(CreatureSpawnEvent event) {
@@ -33,7 +48,7 @@ public class MobLimiterListener implements Listener {
         EntityType entityType = event.getEntityType();
         Location location = entity.getLocation();
 
-        if (isLocationSpawnArea(location) && !ALLOWED_ENTITIES.contains(entityType)) {
+        if (Locations.isLocationASpawn(location) && !ALLOWED_ENTITIES.contains(entityType)) {
             entity.remove();
             return;
         }
@@ -49,6 +64,50 @@ public class MobLimiterListener implements Listener {
         }
     }
 
+
+    @EventHandler(ignoreCancelled = true)
+    public void onEntityExplode(EntityExplodeEvent e) {
+        e.blockList().removeIf(b -> isProtected(b.getLocation()));
+        if (isProtected(e.getLocation())) {
+            e.setYield(0f);
+        }
+    }
+
+
+    @EventHandler(ignoreCancelled = true)
+    public void onBlockExplode(BlockExplodeEvent e) {
+        e.blockList().removeIf(b -> isProtected(b.getLocation()));
+        if (isProtected(e.getBlock().getLocation())) {
+            e.setYield(0f);
+        }
+    }
+
+
+    @EventHandler(ignoreCancelled = true)
+    public void onEntityChangeBlock(EntityChangeBlockEvent e) {
+        Entity ent = e.getEntity();
+        boolean isMobOrDragon = (ent instanceof Mob) || (ent instanceof EnderDragon);
+        if (isMobOrDragon && isProtected(e.getBlock().getLocation())) {
+            e.setCancelled(true);
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onEntityBreakDoor(EntityBreakDoorEvent e) {
+        if (isProtected(e.getBlock().getLocation())) {
+            e.setCancelled(true);
+        }
+    }
+
+
+    @EventHandler(ignoreCancelled = true)
+    public void onHangingBreak(HangingBreakByEntityEvent e) {
+        Entity remover = e.getRemover();
+        if (!(remover instanceof Player) && isProtected(e.getEntity().getLocation())) {
+            e.setCancelled(true);
+        }
+    }
+
     private void expandWitherSkeletonTime(WitherSkeleton witherSkeleton) {
         witherSkeleton.setRemoveWhenFarAway(false);
         witherSkeleton.setTicksLived(1);
@@ -60,19 +119,4 @@ public class MobLimiterListener implements Listener {
         }, WITHER_SKELETON_LIFESPAN_TICKS);
     }
 
-    private static boolean isLocationSpawnArea(Location location) {
-        if (location.getWorld() == null || !location.getWorld().getName().equals("world_MCWinter")) {
-            return false;
-        }
-
-        double x = location.getX();
-        double y = location.getY();
-        double z = location.getZ();
-
-        boolean checkX = x >= SPAWN_MIN_X && x <= SPAWN_MAX_X;
-        boolean checkY = y >= SPAWN_Y;
-        boolean checkZ = z >= SPAWN_MIN_Z && z <= SPAWN_MAX_Z;
-
-        return checkX && checkY && checkZ;
-    }
 }

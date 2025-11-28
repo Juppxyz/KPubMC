@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.Map;
 import java.util.Random;
 
+@Deprecated
 public class TeamBlockListener implements Listener {
 
     // NOT IN USE

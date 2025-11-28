@@ -7,6 +7,7 @@ import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.exceptions.TeamNotExistException;
 import xyz.jupp.minecraft.database.TeamCollection;
+import xyz.jupp.minecraft.utils.AreaOptionsEnum;
 import xyz.jupp.minecraft.utils.MemberListDoc;
 
 import java.util.ArrayList;
@@ -85,11 +86,26 @@ public class TeamCacheObject {
         return getTeamCollection().changeRoleFromMember(player);
     }
 
-
-    public void upgradeTeamLevel() {
+    public void upgradeTeamLevel(int cost) {
         this.level++;
         getTeamCollection().incTeamLevel();
+        getTeamCollection().changeTeamPoints(cost);
     }
+
+    public boolean changeAreaSettings(@NotNull AreaOptionsEnum areaOption) {
+        boolean dbResult = getTeamCollection().changeAreaSettings(areaOption);
+        if (dbResult) {
+            if (areaOption == AreaOptionsEnum.PVP) {
+                this.zoneOptionPvP = !isZoneOptionPvP();
+            }else if (areaOption == AreaOptionsEnum.INTERACTION) {
+                this.zoneOptionInteract = !isZoneOptionInteract();
+            }else if (areaOption == AreaOptionsEnum.MOB_GRIEFING) {
+                this.zoneOptionMobDamage = !isZoneOptionMobDamage();
+            }
+        }
+        return dbResult;
+    }
+
 
     // Getter
     public TeamCollection getTeamCollection() {

@@ -16,6 +16,7 @@ import xyz.jupp.minecraft.items.LightningSword;
 import java.util.HashMap;
 import java.util.UUID;
 
+@Deprecated
 public class SwordListener implements Listener {
 
     private final HashMap<UUID, Long> cooldowns;

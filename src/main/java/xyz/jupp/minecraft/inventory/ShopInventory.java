@@ -15,7 +15,7 @@ import xyz.jupp.minecraft.config.ShopItem;
 import java.util.ArrayList;
 import java.util.List;
 
-import static xyz.jupp.minecraft.inventory.MoneyInventory.createItemStack;
+import static xyz.jupp.minecraft.utils.ItemStackUtil.createItemStack;
 
 public class ShopInventory {
 
@@ -43,15 +43,13 @@ public class ShopInventory {
         //    isReducedPrice = (teamCollection.getTeamPoints() > 49) && teamBlockCacheObject.isActive();
         //}
 
-        Inventory inventory = Bukkit.createInventory(player, 36, isReducedPrice ? "§aHändler §8(§aRabatte!§8)" : "§aHändler");
+        Inventory inventory = Bukkit.createInventory(player, 36, isReducedPrice ? Main.getShopVillagerName()+ " §8(§aRabatte!§8)" : Main.getShopVillagerName());
         List<ShopItem> shopItems = ConfigManager.getShopItems();
         int allPrices = 0;
         for (int i = 0; i < 36; i++) {
             if ((i == 17) || (i == 26) || (i == 18) || (i==0)) inventory.setItem(i, createItemStack("§7---", Material.GRAY_STAINED_GLASS_PANE));
             if (i >26 || (i>0 && i <10)) inventory.setItem(i, createItemStack("§7---", Material.GRAY_STAINED_GLASS_PANE));
         }
-
-
 
         int tmpInvIndex = 11;
         for (int i = 0; i < shopItems.size(); i++) {

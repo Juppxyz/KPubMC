@@ -1,9 +1,8 @@
 name: KPubMC
-version: 'v0.0.1'
+version: 'v2.0.0'
 main: xyz.jupp.minecraft.Main
 api-version: '1.21'
-description: "Offizielles Plugin für den KlotzscherPub Minecraft Server."
-
+description: "Offizielles Plugin für den KlotzscherPub Minecraft Server. (2025)"
 
 commands:
   money:
@@ -31,3 +30,12 @@ commands:
   regeln:
   createbankier:
   spec:
+  createjuweler:
+  createdealer:
+  enderchest:
+  ec:
+  debug:
+  createtpdealer:
+  dummy:
+  bestrafung:
+  wanted:

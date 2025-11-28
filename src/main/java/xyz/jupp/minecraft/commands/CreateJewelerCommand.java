@@ -11,39 +11,32 @@ import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.utils.PermissionsUtil;
 
-
-public class JewelerCommand implements CommandExecutor {
-
-    // NOT IN USE
+public class CreateJewelerCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(@NotNull CommandSender commandSender, @NotNull Command command, @NotNull String s, @NotNull String[] args) {
         if (commandSender instanceof Player) {
             Player player = (Player) commandSender;
-
             if (!PermissionsUtil.isPlayerAdmin(player)){
                 PermissionsUtil.sendNoPermMsg(player);
                 return false;
             }
 
-            if (args.length != 1) {
-                player.sendMessage(Main.getChatPrefix() + "Bitte nutze: §a/jeweler <Name>");
-                player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f,1f);
-                return false;
-            }
-
             Villager villager = (Villager) player.getLocation().getWorld().spawnEntity(player.getLocation(), EntityType.VILLAGER);
-            villager.setCustomName("§5§lJuwelier §5" + args[0]);
+            villager.setCustomName(Main.getJewelerVillagerName());
             villager.setCustomNameVisible(true);
             villager.setInvulnerable(true);
             villager.setAI(false);
             villager.setGravity(false);
             villager.setCollidable(false);
-            villager.setProfession(Villager.Profession.LIBRARIAN);
+            villager.setProfession(Villager.Profession.ARMORER);
+            villager.setGlowing(true);
 
-            player.sendMessage(Main.getChatPrefix() + "Der Juwelier §a" + args[0] + " §fwurde erstellt.");
-            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1f,1f);
+            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f,2f);
+            player.sendMessage(Main.getChatPrefix() + "Der " + Main.getJewelerVillagerName() + " §fwurde §aerfolgreich §ferstellt.");
         }
         return false;
     }
+
+
 }

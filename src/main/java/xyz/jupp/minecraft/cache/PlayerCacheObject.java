@@ -16,6 +16,11 @@ public class PlayerCacheObject {
     private PlayerCollection playerCollection;
     private TeamCacheObject teamCacheObject = null;
 
+    private boolean jail = false;
+    private long jailEnd = 0;
+    private boolean isWanted = false;
+
+
     PlayerCacheObject(@NotNull Player player){
         this.playerCollection = new PlayerCollection(player);
         this.player = player;
@@ -30,6 +35,9 @@ public class PlayerCacheObject {
             this.teamCacheObject = TeamCache.getTeam(teamID);
         }
         this.teamInvites = document.getBoolean("teamInvites");
+        this.jail = document.getBoolean("jail");
+        this.jailEnd = document.getLong("jailEnd");
+        this.isWanted = document.getBoolean("isWanted");
     }
 
 
@@ -93,6 +101,44 @@ public class PlayerCacheObject {
 
         });
     }
+
+
+
+
+    // new added in 2025 (jail)
+    public void setJail(boolean jail, int hours) {
+        this.jail = jail;
+        long now = System.currentTimeMillis();
+        long futureMillis = now + (hours * 60L * 60L * 1000L);
+        this.jailEnd = futureMillis;
+        playerCollection.setJail(jail, futureMillis);
+    }
+    public void unsetJail(boolean isEscaped) {
+        this.jail = false;
+        if (isEscaped) {
+            long now = System.currentTimeMillis();
+            long futureMillis = now + (72L * 60L * 60L * 1000L);
+            this.jailEnd = futureMillis;
+        }else {
+            this.jailEnd = 0L;
+        }
+        this.isWanted = isEscaped;
+        playerCollection.unsetJail(this.jailEnd);
+    }
+    public boolean isJail() {
+        return jail;
+    }
+    public long getJailEnd() {
+        return jailEnd;
+    }
+    public boolean isWanted() {
+        return isWanted;
+    }
+    public void setWanted(boolean wanted) {
+        isWanted = wanted;
+        playerCollection.setIsWanted(wanted);
+    }
+
 
 
     // Getter

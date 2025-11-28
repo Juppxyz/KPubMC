@@ -8,6 +8,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
+import xyz.jupp.minecraft.utils.PermissionsUtil;
 
 import java.util.ArrayList;
 import java.util.UUID;
@@ -20,7 +21,7 @@ public class SpecCommand implements CommandExecutor {
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
         if (sender instanceof Player) {
             Player player = (Player) sender;
-            if (player.isOp()) {
+            if (PermissionsUtil.isPlayerAdmin(player)) {
                 if (!specMode.contains(player.getUniqueId())){
                     for (Player online: Bukkit.getOnlinePlayers()){
                         online.hidePlayer(player);

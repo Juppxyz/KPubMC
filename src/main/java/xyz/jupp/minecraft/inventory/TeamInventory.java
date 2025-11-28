@@ -20,13 +20,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-import static xyz.jupp.minecraft.inventory.MoneyInventory.createItemStack;
+import static xyz.jupp.minecraft.utils.ItemStackUtil.createItemStack;
 
 public class TeamInventory {
 
     public enum TeamInventoryTypes { CREATE, MAIN, SETTINGS, INVITE }
 
-    // wrapper
+
     public static void openInventory(@NotNull Player player, @NotNull TeamInventoryTypes teamInventoryTypes) {
         Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () ->{
 
@@ -43,6 +43,7 @@ public class TeamInventory {
         });
     }
 
+
     public static void openInventory(@NotNull Player player, @NotNull TeamInventoryTypes teamInventoryTypes, @NotNull String addition) {
         Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () ->{
             Bukkit.getScheduler().runTask(Main.getInstance(), () -> {
@@ -55,6 +56,7 @@ public class TeamInventory {
         });
     }
 
+
     public static void openInventory(@NotNull TeamInventoryTypes teamInventoryTypes, @NotNull PlayerCacheObject playerCacheObject) {
         Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () ->{
             Bukkit.getScheduler().runTask(Main.getInstance(), () -> {
@@ -65,6 +67,17 @@ public class TeamInventory {
                 }else if (teamInventoryTypes.equals(TeamInventoryTypes.INVITE)){
                     playerCacheObject.getPlayer().openInventory(createTeamInvitesInventory(playerCacheObject));
                 }
+            });
+        });
+    }
+
+
+    public static void openSettingsInventory(@NotNull Player player, @NotNull PlayerCacheObject playerCacheObject) {
+        Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
+            Bukkit.getScheduler().runTask(Main.getInstance(), () -> {
+                playerCacheObject.getPlayer().closeInventory();
+                playerCacheObject.getPlayer().playSound(playerCacheObject.getPlayer().getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f, 2f);
+                player.openInventory(createAreaSettingsInventory(player, playerCacheObject));
             });
         });
     }
@@ -158,22 +171,20 @@ public class TeamInventory {
             //    continue;
             //}
 
-            // stadt mitte setzen
             if (i == 4 && (isOwner || isVice)) {
                 inventory.setItem(i, getColoredBanner(playerCacheObject.getTeamColor()));
                 continue;
             }
-            
 
             if(i==5 && isOwner) {
-                if (playerCacheObject.getTeamCacheObject().getMembersList().size() > 1) {
-                    inventory.setItem(i, createItemStack( playerCacheObject.getTeamColor() + "Rollen", Material.GOLDEN_HELMET));
-                }
+                ItemStack itemStack = createItemStack( playerCacheObject.getTeamColor() + "Gebiets-Manager", Material.COMPARATOR);
+                inventory.setItem(i, itemStack);
                 continue;
             }
             if(i==6) {
-                ItemStack itemStack = getTeamPointsTradeItem(playerCacheObject);
-                inventory.setItem(i, itemStack);
+                if (playerCacheObject.getTeamCacheObject().getMembersList().size() > 1) {
+                    inventory.setItem(i, createItemStack( playerCacheObject.getTeamColor() + "Rollen", Material.GOLDEN_HELMET));
+                }
                 continue;
             }
             if (i==7 && !isOwner) inventory.setItem(i, createItemStack( playerCacheObject.getTeamColor() + "§4Team verlassen", Material.DARK_OAK_DOOR));
@@ -183,20 +194,46 @@ public class TeamInventory {
         return inventory;
     }
 
-    private final static int levelMultiple = 10000;
+
+    private static Inventory createAreaSettingsInventory(Player player, PlayerCacheObject playerCacheObject) {
+        Inventory inventory = Bukkit.createInventory(player, 9, playerCacheObject.getTeamColor() +"§nGebiets-Manager");
+        String on = "§a§lAN";
+        String off = "§c§lAUS";
+        TeamCacheObject teamCacheObject = playerCacheObject.getTeamCacheObject();
+        String pvp = teamCacheObject.isZoneOptionPvP() ? on : off;
+        String mobGriefing = teamCacheObject.isZoneOptionMobDamage() ? on : off;
+        String interaction = teamCacheObject.isZoneOptionInteract() ? on : off;
+
+        int teamLevel = playerCacheObject.getTeamCacheObject().getLevel();
+
+        for (int i = 0; i < 9; i++) {
+            inventory.setItem(i, createItemStack("§8---", Material.GRAY_STAINED_GLASS_PANE));
+            if (i == 2) inventory.setItem(i, createItemStack("§fMobGriefing §8- " + mobGriefing, teamLevel>=2 ? Material.CREEPER_HEAD : Material.BARRIER));
+            if (i == 4) inventory.setItem(i, createItemStack("§fPVP §8- " + pvp, teamLevel>=3 ? Material.GOLDEN_SWORD : Material.BARRIER));
+            if (i == 6) inventory.setItem(i, createItemStack("§fInteraktionen §8- " + interaction, teamLevel>=5 ? Material.LEVER : Material.BARRIER));
+            if (i == 8) inventory.setItem(i, createItemStack("§cZurück", Material.OAK_DOOR));
+        }
+        return inventory;
+    }
+
     private static @NotNull ItemStack getTeamUpgradeItem(PlayerCacheObject playerCacheObject) {
         TeamCacheObject team = playerCacheObject.getTeamCacheObject();
         ItemStack itemStack = new ItemStack(Material.NETHER_STAR, 1);
         ItemMeta itemMeta = itemStack.getItemMeta();
-        itemMeta.setDisplayName(playerCacheObject.getTeamColor() + "§lTeam-Upgrade");
 
         int currentLevel = team.getLevel();
-        int upgradeCost = currentLevel==0 ? 5000 : (currentLevel * levelMultiple);
-
+        int upgradeCost = currentLevel==1 ? 5000 : (currentLevel * Main.getTeamLevelMultiple());
         List<String> lore = new ArrayList<>();
         lore.add("§fAktuelles Level: " + playerCacheObject.getTeamColor() + currentLevel);
-        lore.add("");
-        lore.add("§fUpgrade für " + Main.getCurrencyName(upgradeCost));
+
+        if (currentLevel >= 5) {
+            itemMeta.setDisplayName(playerCacheObject.getTeamColor() + "§lMax-Level Team");
+        }else {
+            itemMeta.setDisplayName(playerCacheObject.getTeamColor() + "§lTeam-Upgrade");
+            lore.add("");
+            lore.add("§fUpgrade für " + playerCacheObject.getTeamColor() + upgradeCost + " §fTeam-Punkte");
+        }
+
         itemMeta.setLore(lore);
         itemStack.setItemMeta(itemMeta);
         return itemStack;
@@ -209,8 +246,8 @@ public class TeamInventory {
         itemMeta.setDisplayName(playerCacheObject.getTeamColor() + "Team-Punkte kaufen");
         List<String> lore = new ArrayList<>();
 
-        lore.add("§9Linksklick§8: §f" + Main.getCurrencyName(100) + " §ffür 100 TeamPunkte eintauschen");
-        lore.add("§2Rechtsklick§8: §f" + Main.getCurrencyName(1000) + " §ffür 1000 TeamPunkte eintauschen");
+        lore.add("§9Linksklick§8: §f" + Main.getCurrencyName(100) + " §ffür 1000 TeamPunkte eintauschen");
+        lore.add("§2Rechtsklick§8: §f" + Main.getCurrencyName(1000) + " §ffür 10000 TeamPunkte eintauschen");
         lore.add(" ");
         lore.add("§c-" + (ConfigManager.getManager().getTradeTax()*100) + "% Steuer");
         itemMeta.setLore(lore);
@@ -311,7 +348,7 @@ public class TeamInventory {
             default: material = Material.WHITE_BANNER; break;
         }
 
-        return createItemStack(teamColor + "Aktuellen Chunk beanspruchen §f(§c-500 " + Main.getCurrencyName() + "§f)", material);
+        return createItemStack(teamColor + "Aktuellen Chunk beanspruchen §f(§c-200 Team-Punkte§f)", material);
     }
 
 

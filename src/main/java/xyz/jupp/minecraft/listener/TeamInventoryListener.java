@@ -1,9 +1,6 @@
 package xyz.jupp.minecraft.listener;
 
-import org.bukkit.Bukkit;
-import org.bukkit.Location;
-import org.bukkit.Material;
-import org.bukkit.Sound;
+import org.bukkit.*;
 import org.bukkit.entity.HumanEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -20,6 +17,8 @@ import xyz.jupp.minecraft.database.PlayerCollection;
 import xyz.jupp.minecraft.database.TeamBlockCollection;
 import xyz.jupp.minecraft.database.TeamCollection;
 import xyz.jupp.minecraft.inventory.TeamInventory;
+import xyz.jupp.minecraft.utils.AreaOptionsEnum;
+import xyz.jupp.minecraft.utils.Locations;
 import xyz.jupp.minecraft.utils.Logger;
 import xyz.jupp.minecraft.utils.TeamBlock;
 
@@ -79,9 +78,66 @@ public class TeamInventoryListener implements Listener {
                 String displayName = clickedItem.getItemMeta().getDisplayName();
 
                 if (displayName.contains("Mitglied hinzufügen")) {
+                    if (Bukkit.getServer().getOnlinePlayers().size() < 2) {
+                        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
+                        return;
+                    }
+
                     PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
                     TeamInventory.openInventory(TeamInventory.TeamInventoryTypes.INVITE, playerCacheObject);;
                     return;
+                }
+
+                if (displayName.contains("Team-Upgrade")) {
+                    Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
+
+                        PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
+                        TeamCacheObject teamCacheObject = playerCacheObject.getTeamCacheObject();
+                        if (teamCacheObject == null) return;
+                        if (!teamCacheObject.getTeamOwner().contains(player.getUniqueId().toString())) {
+                            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
+                            player.sendMessage(
+                                    "%s§fNur %sBesitzer und %sVize §fkönnen das Team-Level §fupgraden."
+                                    .formatted(Main.getChatPrefix(), teamCacheObject.getTeamColor(), teamCacheObject.getTeamColor())
+                            );
+                            return;
+                        }
+
+                        int teamLevel = teamCacheObject.getLevel();
+                        int teamPoints = teamCacheObject.getTeamCollection().getTeamPoints();
+                        int cost = teamLevel == 1 ? 5000 : (teamLevel * Main.getTeamLevelMultiple());
+
+                        if (teamPoints < cost) {
+                            player.sendMessage("%s§fDein %sTeam §fhat §cnicht §fgenügend Punkte um das Level zu upgraden.".formatted(Main.getChatPrefix(), teamCacheObject.getTeamColor()));
+                            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
+                            Bukkit.getScheduler().runTask(Main.getInstance(), () -> {player.closeInventory();});
+                            return;
+                        }
+
+                        teamCacheObject.upgradeTeamLevel(teamPoints - cost);
+                        player.sendMessage(Main.getChatPrefix() + "§aDu hast das Level deines Teams erfolgreich hochgestuft!");
+                        player.sendMessage(Main.getChatPrefix() + "§fVorteile und Upgrades kannst du am aktuellen Spawn nachlesen.");
+                        player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f,2f);
+                        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f,2f);
+                        player.playSound(player.getLocation(), Sound.ENTITY_FIREWORK_ROCKET_BLAST_FAR, 2f,2f);
+
+                        for (Player online : Bukkit.getOnlinePlayers()) {
+                            if (online.getUniqueId().toString().equals(player.getUniqueId().toString())) continue;
+                            PlayerCacheObject onlinePlayerCacheObject = CacheHandler.getInstance().getPlayerInCache(online);
+                            if (onlinePlayerCacheObject.getTeamID() == null) continue;
+
+                            if ( onlinePlayerCacheObject.getTeamID().equals(playerCacheObject.getTeamID()) ) {
+                                online.sendMessage(Main.getChatPrefix() + "§aDein Team hat nun ein höheres Level!");
+                                online.sendMessage(Main.getChatPrefix() + "§fVorteile und Upgrades kannst du am aktuellen Spawn nachlesen.");
+                                online.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f,2f);
+                            }
+                        }
+
+                        Bukkit.getScheduler().runTask(Main.getInstance(), () -> {
+                           player.closeInventory();
+                        });
+
+                    });
                 }
 
                 /** @Deprecated
@@ -140,7 +196,7 @@ public class TeamInventoryListener implements Listener {
                         PlayerCollection playerCollection = playerCacheObject.getPlayerCollection();
                         int playerMoney = playerCollection.getMoney();
                         // Klickt der User mit Links -> 100, Rechts -> 1000
-                        int tradeType = event.getClick().isLeftClick() ? 100 : 1000;
+                        int tradeType = event.getClick().isLeftClick() ? 1000 : 10000;
 
                         if (playerMoney < tradeType) {
                             player.sendMessage(Main.getChatPrefix() + "§fDu musst mindestens §c" + tradeType + " " + Main.getCurrencyName() + " §fbesitzen um diese §fzu tauschen." );
@@ -171,17 +227,25 @@ public class TeamInventoryListener implements Listener {
 
                 if (displayName.contains("Aktuellen Chunk beanspruchen")) {
                     Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
+                        Location currentLocation = player.getLocation();
+
+                        if (Locations.isLocationASpawn(currentLocation)) {
+                            player.sendMessage(Main.getChatPrefix() + "§fDu kannst keinen Spawn-Bereich beanspruchen.");
+                            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
+                            return;
+                        }
+
                         PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
                         TeamCollection teamCollection = new TeamCollection(playerCacheObject.getTeamID());
                         int teamPoints = teamCollection.getTeamPoints();
-                        if (teamPoints < 500) {
+
+                        if (teamPoints < 200) {
                             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
                             player.sendMessage(Main.getChatPrefix() + "§cDein Team hat leider noch nicht genügend Punkte.");
                             return;
                         }
 
-                        Location currentLocation = player.getLocation();
-                        teamCollection.changeTeamPoints(teamPoints - 500);
+                        teamCollection.changeTeamPoints(teamPoints - 200);
                         boolean isChunkClaimed = ChunkCache.getInstance().addChunk(
                                 playerCacheObject.getTeamID(),
                                 currentLocation.getWorld().getName(),
@@ -189,7 +253,7 @@ public class TeamInventoryListener implements Listener {
                                 currentLocation.getChunk().getZ()
                         );
                         if (!isChunkClaimed){
-                            player.sendMessage(Main.getChatPrefix() + "§cDu kannst keinen bereits beanspruchten Chunk mehr beanspruchen. (Komischer Satz oder?)");
+                            player.sendMessage(Main.getChatPrefix() + "§cDieser Chunk wurde bereits beansprucht.");
                             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
                             return;
                         }
@@ -207,6 +271,12 @@ public class TeamInventoryListener implements Listener {
                         }
 
                     });
+                }
+
+                if (displayName.contains("Gebiets-Manager")) {
+                    PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
+                    TeamInventory.openSettingsInventory(player, playerCacheObject);;
+                    return;
                 }
 
                 if (displayName.equals("§4Team verlassen")) {
@@ -374,6 +444,60 @@ public class TeamInventoryListener implements Listener {
 
             }
 
+
+            if (title.contains("§nGebiets-Manager")) {
+                event.setCancelled(true);
+
+                ItemStack clickedItem = event.getCurrentItem();
+                if (clickedItem == null) return;
+                String displayName = clickedItem.getItemMeta().getDisplayName();
+
+                Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
+                    PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
+                    TeamCacheObject teamCacheObject = playerCacheObject.getTeamCacheObject();
+
+                    if (displayName.equals("§cZurück")) {
+                        player.playSound(player.getLocation(), Sound.BLOCK_LAVA_POP, 2f,2f);
+                        TeamInventory.openInventory(player, TeamInventory.TeamInventoryTypes.MAIN);
+                        return;
+                    }
+
+                    if (displayName.startsWith("§fMobGriefing §8- ")) {
+                        if (teamCacheObject.getLevel() >= 2) {
+                            CacheHandler.getInstance().changeAreaOptions(teamCacheObject, AreaOptionsEnum.MOB_GRIEFING);
+                            player.playSound(player.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 2f, 2f);
+                        }else {
+                            player.sendMessage(Main.getChatPrefix() + "§fDein " + teamCacheObject.getTeamColor() + "Team §fmuss Level §a2 §fsein, um diese Einstellung nutzen zu können.");
+                            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
+                        }
+                        Bukkit.getScheduler().runTask(Main.getInstance(), () -> {player.closeInventory();});
+                    }
+
+                    if (displayName.startsWith("§fPVP §8- ")) {
+                        if (teamCacheObject.getLevel() >= 3) {
+                            CacheHandler.getInstance().changeAreaOptions(teamCacheObject, AreaOptionsEnum.PVP);
+                            player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_ATTACK_STRONG, 2f, 2f);
+                        }else {
+                            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
+                            player.sendMessage(Main.getChatPrefix() + "§fDein " + teamCacheObject.getTeamColor() + "Team §fmuss Level §a3 §fsein, um diese Einstellung nutzen zu können.");
+                        }
+                        Bukkit.getScheduler().runTask(Main.getInstance(), () -> {player.closeInventory();});
+                    }
+
+                    if (displayName.startsWith("§fInteraktionen §8- ")) {
+                        if (teamCacheObject.getLevel() >= 5) {
+                            CacheHandler.getInstance().changeAreaOptions(teamCacheObject, AreaOptionsEnum.INTERACTION);
+                            player.playSound(player.getLocation(), Sound.BLOCK_CHERRY_WOOD_TRAPDOOR_OPEN, 2f, 2f);
+                            Bukkit.getScheduler().runTask(Main.getInstance(), () -> {player.closeInventory();});
+                        }else {
+                            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
+                            player.sendMessage(Main.getChatPrefix() + "§fDein " + teamCacheObject.getTeamColor() + "Team §fmuss Level §a5 §fsein, um diese Einstellung nutzen zu können.");
+                        }
+                        Bukkit.getScheduler().runTask(Main.getInstance(), () -> {player.closeInventory();});
+                    }
+
+                });
+            }
         }
     }
 
