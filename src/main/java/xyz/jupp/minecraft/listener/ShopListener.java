@@ -61,7 +61,7 @@ public class ShopListener implements Listener {
                 return;
             }
 
-            if (interactedEntity.isCustomNameVisible() && interactedEntity.getCustomName().equals(Main. getFinanceVillagerFredName())) {
+            if (interactedEntity.isCustomNameVisible() && interactedEntity.getCustomName().equals(Main.getFinanceVillagerFredName())) {
                 event.setCancelled(true);
                 Player player = event.getPlayer();
                 ItemStack itemStack = player.getInventory().getItemInMainHand();
@@ -109,7 +109,7 @@ public class ShopListener implements Listener {
         }
 
         if (interactedEntity.getType().equals(EntityType.VINDICATOR)) {
-            if (interactedEntity.isCustomNameVisible() && interactedEntity.getCustomName().equals(Main.getBlackMarketDealerVillagerName())) {
+            if (interactedEntity.getCustomName().equals(Main.getBlackMarketDealerVillagerName())) {
                 event.setCancelled(true);
                 Player player = event.getPlayer();
                 boolean isMarketOpen = BlackMarketHandler.isOpen();
@@ -198,7 +198,7 @@ public class ShopListener implements Listener {
         }
         if (event.getEntity().getType().equals(EntityType.VINDICATOR)) {
             Vindicator vindicator = (Vindicator) event.getEntity();
-            if (vindicator.isCustomNameVisible() && vindicator.getCustomName().equals(Main.getBlackMarketDealerVillagerName())) event.setCancelled(true);
+            if (vindicator.getCustomName().equals(Main.getBlackMarketDealerVillagerName())) event.setCancelled(true);
             return;
         }
         if (event.getEntity().getType().equals(EntityType.WANDERING_TRADER)) {

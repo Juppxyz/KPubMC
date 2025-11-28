@@ -24,7 +24,7 @@ public class CreateBlackMarketDealerCommand implements CommandExecutor {
 
             Vindicator vindicator = (Vindicator) player.getLocation().getWorld().spawnEntity(player.getLocation(), EntityType.VINDICATOR);
             vindicator.setCustomName(Main.getBlackMarketDealerVillagerName());
-            vindicator.setCustomNameVisible(true);
+            vindicator.setCustomNameVisible(false);
             vindicator.setInvulnerable(true);
             vindicator.setAI(false);
             vindicator.setGravity(false);

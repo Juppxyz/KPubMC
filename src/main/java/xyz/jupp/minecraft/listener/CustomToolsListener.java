@@ -22,6 +22,7 @@ import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.items.BedrockBreakerPickaxe;
 
 import xyz.jupp.minecraft.items.PoisonBow;
+import xyz.jupp.minecraft.utils.Locations;
 
 import java.util.Objects;
 
@@ -63,9 +64,10 @@ public class CustomToolsListener implements Listener {
 
         Action action = event.getAction();
         if (action != Action.RIGHT_CLICK_BLOCK && action != Action.LEFT_CLICK_BLOCK) return;
-
         Block clicked = event.getClickedBlock();
         if (clicked == null) return;
+
+        if (Locations.isLocationASpawn(clicked.getLocation())) return;
 
         Player player = event.getPlayer();
         ItemStack hand = player.getInventory().getItemInMainHand();

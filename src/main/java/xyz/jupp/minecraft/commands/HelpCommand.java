@@ -28,6 +28,7 @@ public class HelpCommand implements CommandExecutor {
                 player.sendMessage("§8§l» §a/slimechunk §8- §fÜberprüft ob du in einem SlimeChunk bist.");
                 player.sendMessage("§8§l» §a/money §8- §fRuft dein Konto auf.");
                 player.sendMessage("§8§l» §a/ranking §8- §fZeigt das Team Ranking an.");
+                player.sendMessage("§8§l» §a/wanted §8- §fZeigt aktuell gesuchte Spieler an.");
                 player.sendMessage("§8§l» §a/head <Spielername> §8- §fKauft den Kopf des Spielers. (100 Schilling)");
                 player.sendMessage("§8§l» §a/donate §8- §fZeigt dir den Link zum freiwilligen Spenden an.");
                 player.sendMessage("§8§l» §a/spawn §8- §fTeleportiert dich zum Spawn.");
@@ -41,11 +42,8 @@ public class HelpCommand implements CommandExecutor {
                     player.sendMessage("§8§l» §a/hover <Text ..> §8- §fErstellt einen neuen HoverText");
                     player.sendMessage("§8§l» §a/createshop §8- §fErstellt einen neuen Villager Händler.");
                     player.sendMessage("§8§l» §a/createbankier §8- §fErstellt einen neuen Finanz Händler.");
-                    //player.sendMessage("§8§l» §a/acnotify §8- §fSteuert die AntiCheat Meldungen.");
-                    return;
-                }
-                if (PermissionsUtil.isPlayerMod(player)){
-                    player.sendMessage("§8§l» §a/acnotify §8- §fSteuert die AntiCheat Meldungen.");
+                    player.sendMessage("§8§l» §a/createdealer §8- §fErstellt einen neuen Schwarzmarkt Händler.");
+                    player.sendMessage("§8§l» §a/bestrafung §8- §fStellt ein ob ein Spieler im Gefängnis ist");
                     return;
                 }
 

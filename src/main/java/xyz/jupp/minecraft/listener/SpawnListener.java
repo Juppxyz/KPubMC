@@ -12,6 +12,7 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.weather.LightningStrikeEvent;
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.utils.Locations;
+import xyz.jupp.minecraft.utils.PermissionsUtil;
 
 public class SpawnListener implements Listener {
 
@@ -26,7 +27,7 @@ public class SpawnListener implements Listener {
     @EventHandler
     public void onInteractAtSpawn(@NotNull PlayerInteractEvent event) {
         Player player = event.getPlayer();
-        if (player.isOp()) return;
+        if (PermissionsUtil.isPlayerAdmin(player)) return;
         if (!Locations.isLocationASpawn(player.getLocation())) return;
 
         Block block = event.getClickedBlock();
@@ -38,6 +39,7 @@ public class SpawnListener implements Listener {
 
         if (event.getAction().isRightClick()) {
             if (block.getType() == Material.BIRCH_WALL_SIGN) return;
+            if (block.getType() == Material.STONE_BUTTON) return;
             if (block.getType() == Material.ENDER_CHEST) return;
             if (block.getType().name().contains("DOOR") && !block.getType().name().contains("TRAPDOOR")) return;
         }

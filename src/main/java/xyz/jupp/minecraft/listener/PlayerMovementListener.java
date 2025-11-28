@@ -8,6 +8,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerMoveEvent;
 import xyz.jupp.minecraft.cache.*;
 import xyz.jupp.minecraft.utils.ClaimedAreaHelper;
+import xyz.jupp.minecraft.utils.JailHandler;
 
 
 public class PlayerMovementListener implements Listener {
@@ -23,9 +24,20 @@ public class PlayerMovementListener implements Listener {
 
     @EventHandler
     public void onMove(PlayerMoveEvent e) {
+        Player player = e.getPlayer();
+
+        if (e.getFrom().getBlockX() != e.getTo().getBlockX()
+                || e.getFrom().getBlockY() != e.getTo().getBlockY()
+                || e.getFrom().getBlockZ() != e.getTo().getBlockZ()) {
+            boolean blocked = JailHandler.handlePossibleEscape(player);
+            if (blocked && player.isOnGround()) {
+                e.setTo(e.getTo());
+                e.setCancelled(true);
+            }
+        }
+
         if (e.getFrom().getChunk().equals(e.getTo().getChunk())) return;
 
-        Player player = e.getPlayer();
         Chunk newChunk = e.getTo().getChunk();
         Location currentLocation = player.getLocation();
         String playerUUID = player.getUniqueId().toString();
@@ -57,6 +69,13 @@ public class PlayerMovementListener implements Listener {
         } else {
             handleForeignClaim(player, playerUUID, chunkCacheObject);
         }
+
+        if (e.getFrom().getBlockX() == e.getTo().getBlockX()
+                && e.getFrom().getBlockY() == e.getTo().getBlockY()
+                && e.getFrom().getBlockZ() == e.getTo().getBlockZ()) {
+            return;
+        }
+        JailHandler.handlePossibleEscape(player);
     }
 
     // Helper-Methoden für Übersicht

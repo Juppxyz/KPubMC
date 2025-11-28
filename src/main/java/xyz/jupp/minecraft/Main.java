@@ -1,12 +1,16 @@
 package xyz.jupp.minecraft;
 
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.plugin.java.JavaPlugin;
 import xyz.jupp.minecraft.cache.WarpCache;
 import xyz.jupp.minecraft.commands.*;
 import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.database.MongoDB;
 import xyz.jupp.minecraft.listener.*;
+import xyz.jupp.minecraft.utils.JailHandler;
+import xyz.jupp.minecraft.utils.Locations;
 import xyz.jupp.minecraft.utils.Logger;
 import xyz.jupp.minecraft.utils.PlayerUpdaterTask;
 
@@ -23,6 +27,9 @@ public final class Main extends JavaPlugin {
     private final static String version = "v2.0.0";
     private final static String currencyName = "Schilling";
     private final static String teamName = "§aTeam";
+
+    private final static String inJailPrefix = "§c§lJ §8| ";
+    private final static String isWantedPrefix = "§c§lW §8| ";
 
     private final static int teamLevelMultiple = 5000;
 
@@ -62,6 +69,8 @@ public final class Main extends JavaPlugin {
         this.getCommand("createdealer").setExecutor(new CreateBlackMarketDealerCommand());
         this.getCommand("createtpdealer").setExecutor(new CreateTPDealerCommand());
         this.getCommand("dummy").setExecutor(new CreateDummyEntityCommand());
+        this.getCommand("bestrafung").setExecutor(new JailCommand());
+        this.getCommand("wanted").setExecutor(new WantedCommand());
         this.getCommand("debug").setExecutor(new MonsterEventCommand());
 
     }
@@ -110,6 +119,10 @@ public final class Main extends JavaPlugin {
         registerCommands();
         registerListener();
         registerTasks();
+
+        JailHandler.initJails(Locations.getJailCorner1(), Locations.getJailCorner2());
+        JailHandler.startJailWatcherTask();
+
     }
 
     @Override
@@ -133,6 +146,13 @@ public final class Main extends JavaPlugin {
     public static String getFinanceVillagerFredName() {return financeVillagerFredName;}
     public static String getTeamPointsDealerVillagerName() {return teamPointsDealerVillagerName;}
     public static String getBlackMarketDealerVillagerName() {return blackMarketDealerVillagerName;}
-
     public static String getCurrencyName(int amount)  {return String.format("§a%d %s", amount, currencyName);}
+
+    // Getter for jail
+    public static String getInJailPrefix() {
+        return inJailPrefix;
+    }
+    public static String getIsWantedPrefix() {
+        return isWantedPrefix;
+    }
 }

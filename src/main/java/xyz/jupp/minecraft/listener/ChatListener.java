@@ -42,11 +42,10 @@ public class ChatListener implements Listener {
                 return;
             }
 
-            TeamCollection teamCollection = new TeamCollection(pco.getTeamID());
-            if (teamCollection.getTeamPoints() < 15) {
+            if (pco.getTeamCacheObject().getLevel() < 4) {
                 event.setCancelled(true);
                 Bukkit.getScheduler().runTask(Main.getInstance(), () -> {
-                    player.sendMessage(Main.getChatPrefix() + "§cDein Team hat noch nicht genügend Punkte für den TeamChat.");
+                    player.sendMessage(Main.getChatPrefix() + "§fFür den TeamChat muss dein Team mindestens Level §a4 §fsein.");
                     player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
                 });
                 return;

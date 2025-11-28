@@ -11,9 +11,12 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
+import xyz.jupp.minecraft.cache.PlayerCacheObject;
 import xyz.jupp.minecraft.cache.TeamCacheObject;
 import xyz.jupp.minecraft.commands.SpecCommand;
 import xyz.jupp.minecraft.database.PlayerCollection;
+import xyz.jupp.minecraft.utils.JailHandler;
+import xyz.jupp.minecraft.utils.Locations;
 
 import java.util.Objects;
 import java.util.UUID;
@@ -35,7 +38,6 @@ public class JoinQuitListener implements Listener {
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
-
         event.joinMessage(Component.empty());
 
         if (!player.hasPlayedBefore()) {
@@ -43,26 +45,51 @@ public class JoinQuitListener implements Listener {
                     92624.5, 72.5, 114430.5));
         }
 
-        for (UUID uuid : SpecCommand.getSpecMode()) {
-            Player target = Bukkit.getPlayer(uuid);
-            if (target != null && target.isOnline()) {
-                player.hidePlayer(Main.getInstance(), target);
+        if (!SpecCommand.getSpecMode().isEmpty()) {
+            for (UUID uuid : SpecCommand.getSpecMode()) {
+                Player target = Bukkit.getPlayer(uuid);
+                if (target != null && target.isOnline()) {
+                    player.hidePlayer(Main.getInstance(), target);
+                }
             }
         }
 
         applyTeamDisplayNames(player);
-
         Component joinMsg = LEGACY_SEC.deserialize(
                 String.format("§8[§a+§8] %s §fhat den Server betreten.", player.getPlayerListName())
         );
         Bukkit.broadcast(joinMsg);
-
         if (!player.hasPlayedBefore()) {
             Bukkit.broadcast(LEGACY_SEC.deserialize(
                     "§8§l[§a§l+§8§l] §a§l" + player.getName() + " §f§lhat den Server zum ersten Mal betreten."));
             sendWelcome(player);
         }
+
+        // jail handling
+        Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
+            JailHandler.handleJoin(event.getPlayer());
+        });
+
     }
+
+
+    @EventHandler
+    public void onQuit(PlayerQuitEvent event) {
+        Player player = event.getPlayer();
+
+        CacheHandler.getInstance().removePlayerFromCache(player);
+
+        if (SpecCommand.getSpecMode(player.getUniqueId())) {
+            SpecCommand.changeSpecMode(player.getUniqueId());
+            event.quitMessage(Component.empty());
+            return;
+        }
+
+        Component msg = LEGACY_SEC.deserialize(
+                "§8[§c-§8] §a" + player.getPlayerListName() + " §fhat den Server verlassen.");
+        event.quitMessage(msg);
+    }
+
 
     private void applyTeamDisplayNames(Player player) {
         TeamCacheObject team = CacheHandler.getInstance().getPlayerInCache(player).getTeamCacheObject();
@@ -83,29 +110,12 @@ public class JoinQuitListener implements Listener {
         player.displayName(comp);
     }
 
+
     private void sendWelcome(Player p) {
         p.sendMessage(LEGACY_SEC.deserialize(Main.getChatPrefix() + "§a§lHerzlich Willkommen auf unserem Minecraft-Server!"));
         p.sendMessage(LEGACY_SEC.deserialize(Main.getChatPrefix() + "§fMelde dich bei Fragen oder Problemen einfach"));
         p.sendMessage(LEGACY_SEC.deserialize(Main.getChatPrefix() + "§fim Discord Channel §a§l#minecraft§f."));
         p.sendMessage(LEGACY_SEC.deserialize(Main.getChatPrefix() + "§aViel Spaß!"));
         p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f, 2f);
-    }
-
-    @EventHandler
-    public void onQuit(PlayerQuitEvent event) {
-        Player player = event.getPlayer();
-
-        CacheHandler.getInstance().removePlayerFromCache(player);
-
-        if (SpecCommand.getSpecMode(player.getUniqueId())) {
-            SpecCommand.changeSpecMode(player.getUniqueId());
-            event.quitMessage(Component.empty());
-            return;
-        }
-
-        // Paper-API: quitMessage(Component)
-        Component msg = LEGACY_SEC.deserialize(
-                "§8[§c-§8] §a" + player.getPlayerListName() + " §fhat den Server verlassen.");
-        event.quitMessage(msg);
     }
 }
