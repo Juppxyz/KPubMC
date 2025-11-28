@@ -10,7 +10,6 @@ from openai import OpenAI, OpenAIError
 
 CONFIG_PATH = "/mnt/HC_Volume_101895195/KlotzscherPub/plugins/kpub/config.json"
 
-# Schema nur für shopItems
 SHOP_ITEMS_SCHEMA: Dict[str, Any] = {
     "type": "array",
     "items": {
@@ -37,7 +36,6 @@ SHOP_ITEMS_SCHEMA: Dict[str, Any] = {
     "maxItems": 10,
 }
 
-# Schema für die Modell-Antwort: { "shopItems": [...] }
 MODEL_RESPONSE_SCHEMA: Dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -49,14 +47,12 @@ MODEL_RESPONSE_SCHEMA: Dict[str, Any] = {
 
 
 def get_config_path() -> str:
-    """Ermittelt den Pfad zur Config (optional per CLI-Argument überschreibbar)."""
     if len(sys.argv) > 1:
         return sys.argv[1]
     return CONFIG_PATH
 
 
 def load_config(path: str) -> Dict[str, Any]:
-    """Lädt die JSON-Config von der Platte."""
     try:
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
@@ -69,7 +65,6 @@ def load_config(path: str) -> Dict[str, Any]:
 
 
 def write_config(path: str, config_data: Dict[str, Any]) -> None:
-    """Schreibt die komplette Config zurück auf die Platte (mit Einrückung)."""
     try:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(config_data, f, indent=2, ensure_ascii=False)
@@ -80,10 +75,6 @@ def write_config(path: str, config_data: Dict[str, Any]) -> None:
 
 
 def build_prompt(current_config: Dict[str, Any]) -> str:
-    """
-    Baut den User-Prompt für das Modell.
-    current_config ist die aktuelle Config, die als Vorlage dient.
-    """
     return (
         "Du wirkst als Konfigurations-Generator für einen kleinen Minecraft-Ingame-Shop. "
         "Du bekommst eine bestehende Shop-Konfiguration als JSON und sollst NUR das Feld 'shopItems' aktualisieren.\n\n"
@@ -115,7 +106,7 @@ def build_prompt(current_config: Dict[str, Any]) -> str:
 
 
 def create_client() -> OpenAI:
-    """Erzeugt einen OpenAI-Client aus der Umgebungsvariable OPENAI_API_KEY."""
+    #No, that's not the real key, you little...
     api_key = "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"
     if not api_key:
         print("[!] Umgebungsvariable OPENAI_API_KEY ist nicht gesetzt.")
@@ -127,10 +118,6 @@ def create_client() -> OpenAI:
 def call_openai_for_shop_items(
     client: OpenAI, prompt: str, max_retries: int = 2
 ) -> Dict[str, Any]:
-    """
-    Ruft das Modell auf und versucht bei JSON/Schema-Fehlern bis zu max_retries erneut.
-    Rückgabe: ein Dict mit dem Feld 'shopItems'.
-    """
     last_error: str | None = None
 
     for attempt in range(1, max_retries + 1):
@@ -138,8 +125,8 @@ def call_openai_for_shop_items(
 
         try:
             response = client.chat.completions.create(
-                model="gpt-5-mini",  # oder was du gerade nutzt
-                response_format={"type": "json_object"},  # zwingt das Modell zu JSON
+                model="gpt-5-mini",
+                response_format={"type": "json_object"},
                 messages=[
                     {
                         "role": "system",
@@ -151,7 +138,6 @@ def call_openai_for_shop_items(
                     },
                     {"role": "user", "content": prompt},
                 ],
-                # temperature NICHT setzen, dieses Modell erlaubt nur den Default
             )
         except OpenAIError as e:
             last_error = f"OpenAI API Fehler: {e}"
