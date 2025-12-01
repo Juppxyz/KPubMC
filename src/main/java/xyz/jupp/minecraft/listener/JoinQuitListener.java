@@ -16,6 +16,7 @@ import xyz.jupp.minecraft.cache.TeamCacheObject;
 import xyz.jupp.minecraft.commands.SpecCommand;
 import xyz.jupp.minecraft.database.PlayerCollection;
 import xyz.jupp.minecraft.utils.JailHandler;
+import xyz.jupp.minecraft.utils.LastSeen;
 import xyz.jupp.minecraft.utils.Locations;
 
 import java.util.Objects;
@@ -40,10 +41,11 @@ public class JoinQuitListener implements Listener {
         Player player = event.getPlayer();
         event.joinMessage(Component.empty());
 
-        if (!player.hasPlayedBefore()) {
-            player.teleport(new Location(Objects.requireNonNull(Bukkit.getWorld("world_MCWinter")),
-                    92624.5, 72.5, 114430.5));
+        boolean wasInactive = LastSeen.isInactiveAtLeast3MonthsOrNever(player.getName());
+        if (wasInactive) {
+            player.teleport(Locations.getCurrentSpawn());
         }
+
 
         if (!SpecCommand.getSpecMode().isEmpty()) {
             for (UUID uuid : SpecCommand.getSpecMode()) {
