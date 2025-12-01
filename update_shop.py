@@ -75,6 +75,9 @@ def write_config(path: str, config_data: Dict[str, Any]) -> None:
 
 
 def build_prompt(current_config: Dict[str, Any]) -> str:
+    old_items = current_config.get("shopItems", [])
+    old_materials = [item.get("material") for item in old_items if isinstance(item, dict)]
+
     return (
         "Du wirkst als Konfigurations-Generator für einen kleinen Minecraft-Ingame-Shop. "
         "Du bekommst eine bestehende Shop-Konfiguration als JSON und sollst NUR das Feld 'shopItems' aktualisieren.\n\n"
@@ -83,19 +86,27 @@ def build_prompt(current_config: Dict[str, Any]) -> str:
         "- Du darfst KEINE anderen Felder zurückgeben.\n\n"
         "Regeln für den Shop:\n"
         "- Aktualisiere einige und/oder alle Items inklusive Preis und Menge, um den Shop dynamisch zu halten.\n"
+        "- Mindestens 5 der 10 Items müssen komplett NEU sein:\n"
+        "  - anderes 'material' als in der bisherigen Konfiguration UND\n"
+        "  - anderer 'name' (falls gesetzt) UND\n"
+        "  - anderer 'price'.\n"
+        "- Du darfst maximal 3 Items aus der bisherigen Konfiguration inhaltlich sehr ähnlich lassen.\n"
         "- Wenn ein Item verkauft werden kann (sell = true), ist der Verkaufspreis immer die Hälfte des Kaufpreises, "
         "auf ganze Zahlen gerundet.\n"
         "- Verboten im Shop: Bedrock, Drachen-Ei, Command-Blöcke, Barrieren.\n"
         "- Es muss mindestens 1 klar wertvolles Item geben (z.B. Elytra, Nether Star, sehr seltene Items).\n"
-        "- Es müssen mindestens 2 leicht farmbare Items verkauft werden (z.B. Holz, Stein, Weizen, etc.).\n"
+        "- Es müssen mindestens 2 leicht farmbare Items verkauft werden (z.B. Holz, Stein, Weizen, Karotten, etc.).\n"
         "- Es muss mindestens 1 Nahrungs-Item geben.\n"
         "- Es müssen exakt 10 Items im Shop existieren.\n"
         "- Achte darauf, dass nicht zu viel Geld durch einfache, massenhaft farmbare Items in Umlauf kommt. "
         "Teuer sollen nur wirklich wertvolle Items sein.\n"
         "- Beispiel: Smaragdblöcke sind relativ leicht zu bekommen, eine Elytra ist dagegen deutlich wertvoller.\n"
-        "- Nur wertvolle Items bekommen einen eigenen, kreativen Namen unter 'name', muss aber nicht sein. "
-        "Dieser Name soll stilvoll und nerdig/geekig sein, aber nicht cringy.\n"
-        "- 'Viel Geld' ist in diesem Kontext alles bei etwa 10000.\n\n"
+        "- Nur wertvolle Items bekommen einen eigenen, kreativen Namen unter 'name'. "
+        "- Hinweis, diese Items müssen mindestens den markierten Preis haben: 1 Diamant = 200, 1 Emeralds = 50 , Hartz = 500, Gold = 100, Amethyst = 200, Netherite = 1000, Lapislazuli = 50"
+        "Dieser Name soll stilvoll und nerdig/geekig sein, aber nicht cringy oder zwanghaft gesetzt sein.\n"
+        "- 'Viel Geld' ist in diesem Kontext alles bei etwa 20000.\n\n"
+        "Zusätzliche Rotations-Info:\n"
+        f"- Bisherige Materialien im Shop (nur Kontext, NICHT direkt kopieren): {old_materials}\n\n"
         "Technische Regeln:\n"
         "- Gib ausschließlich ein JSON-Objekt mit dem Feld 'shopItems' zurück.\n"
         "- 'shopItems' muss ein Array mit exakt 10 Elementen sein.\n"
@@ -103,6 +114,7 @@ def build_prompt(current_config: Dict[str, Any]) -> str:
         f"Hier ist die aktuelle Konfiguration als Kontext (NICHT direkt zurückgeben, nur zur Orientierung):\n"
         f"{json.dumps(current_config, ensure_ascii=False)}"
     )
+
 
 
 def create_client() -> OpenAI:
