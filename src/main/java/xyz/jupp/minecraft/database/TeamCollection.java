@@ -2,6 +2,7 @@ package xyz.jupp.minecraft.database;
 
 import com.mongodb.client.FindIterable;
 import com.mongodb.client.MongoCollection;
+import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.Updates;
 import com.mongodb.client.result.UpdateResult;
 import org.bson.Document;
@@ -115,6 +116,13 @@ public class TeamCollection {
     public void incTeamLevel() {
         Bson filter = eq("teamID", getTeamID());
         teamsCollection.updateOne(filter, Updates.inc("level", 1));
+        Logger.console("update team-level for " + getTeamID());
+    }
+
+    public void decTeamLevel() {
+        Bson filter = eq("teamID", getTeamID());
+        Bson filter2 = Filters.and(filter, Filters.gt("level", 0));
+        teamsCollection.updateOne(filter2, Updates.inc("level", -1));
         Logger.console("update team-level for " + getTeamID());
     }
 

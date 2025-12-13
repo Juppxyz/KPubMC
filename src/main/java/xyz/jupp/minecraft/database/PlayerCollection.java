@@ -50,7 +50,7 @@ public class PlayerCollection {
         playerDocument.append("cheatingKicks", 0);
         playerDocument.append("loginStreak", 0);
         playerDocument.append("jail", false);
-        playerDocument.append("jailEnd", 0);
+        playerDocument.append("jailEnd", 0L);
         playerDocument.append("isWanted", false);
         playerDocument.append("teamID", null);
         playerDocument.append("money", 250);

@@ -29,6 +29,7 @@ public class HelpCommand implements CommandExecutor {
                 player.sendMessage("§8§l» §a/money §8- §fRuft dein Konto auf.");
                 player.sendMessage("§8§l» §a/ranking §8- §fZeigt das Team Ranking an.");
                 player.sendMessage("§8§l» §a/wanted §8- §fZeigt aktuell gesuchte Spieler an.");
+                player.sendMessage("§8§l» §a/sit §8- §fErmöglicht es dir sich zu setzen.");
                 player.sendMessage("§8§l» §a/head <Spielername> §8- §fKauft den Kopf des Spielers. (100 Schilling)");
                 player.sendMessage("§8§l» §a/donate §8- §fZeigt dir den Link zum freiwilligen Spenden an.");
                 player.sendMessage("§8§l» §a/spawn §8- §fTeleportiert dich zum Spawn.");

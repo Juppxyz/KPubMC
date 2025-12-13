@@ -28,6 +28,7 @@ public class PlayerUpdaterTask implements TaskHandler.Tasks {
             boolean isMonsterEvent = random.nextInt(200) == 0;
 
             Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
+                TabListUtil.updateTabForAll();
                 for (Player player : Bukkit.getOnlinePlayers()) {
                     PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
                     playerCacheObject.updatePlayer();

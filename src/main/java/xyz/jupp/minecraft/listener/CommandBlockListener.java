@@ -44,6 +44,10 @@ public class CommandBlockListener implements Listener {
             allowedCommands.add("/ec");
             allowedCommands.add("/enderchest");
             allowedCommands.add("/wanted");
+            allowedCommands.add("/sit");
+            allowedCommands.add("/ursprung");
+            allowedCommands.add("/origin");
+            allowedCommands.add("/removechunk");
         }
         return allowedCommands;
     }

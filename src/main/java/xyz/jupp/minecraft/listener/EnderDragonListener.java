@@ -13,15 +13,15 @@ public class EnderDragonListener implements Listener {
     public void onDragonSpawn(EntitySpawnEvent event) {
         if (event.getEntity() instanceof EnderDragon) {
             EnderDragon dragon = (EnderDragon) event.getEntity();
-            dragon.getAttribute(Attribute.MAX_HEALTH).setBaseValue(1000.0);
-            dragon.setHealth(1000.0);
+            dragon.getAttribute(Attribute.MAX_HEALTH).setBaseValue(2500.0);
+            dragon.setHealth(2500.0);
         }
     }
 
     @EventHandler
     public void onDragonAttack(EntityDamageByEntityEvent event) {
         if (event.getDamager() instanceof EnderDragon) {
-            event.setDamage(event.getDamage() * 3);
+            event.setDamage(event.getDamage() * 6);
         }
     }
 }

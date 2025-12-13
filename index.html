@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8" />
+    <title>Solarwatt Startseite</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+        :root {
+            --bg: #0f172a;
+            --bg-elevated: #111827;
+            --accent: #f97316;      /* Akzentfarbe (z.B. Solar / Orange) */
+            --accent-soft: rgba(249, 115, 22, 0.08);
+            --text-main: #f9fafb;
+            --text-muted: #9ca3af;
+            --border-subtle: #1f2937;
+            --card-radius: 18px;
+            --shadow-soft: 0 18px 35px rgba(0, 0, 0, 0.35);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: radial-gradient(circle at top, #111827 0%, #020617 55%, #000 100%);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            align-items: stretch;
+            justify-content: center;
+        }
+
+        .page {
+            width: 100%;
+            max-width: 1200px;
+            margin: 24px;
+            padding: 24px 26px 26px;
+            border-radius: 24px;
+            background: linear-gradient(145deg, rgba(15, 23, 42, 0.98), rgba(3, 7, 18, 0.98));
+            box-shadow: var(--shadow-soft);
+            border: 1px solid rgba(148, 163, 184, 0.12);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* Header */
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        .logo-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo-circle {
+            width: 32px;
+            height: 32px;
+            border-radius: 999px;
+            background: radial-gradient(circle at 30% 20%, #fed7aa, #f97316 40%, #7c2d12 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            color: #111827;
+            font-size: 16px;
+        }
+
+        .logo-text-main {
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .logo-text-sub {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.18em;
+            color: var(--text-muted);
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .time-chip {
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.9);
+            border: 1px solid var(--border-subtle);
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--text-muted);
+        }
+
+        .time-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 999px;
+            background: #22c55e;
+            box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.2);
+        }
+
+        .search {
+            position: relative;
+            flex: 1 1 220px;
+            max-width: 320px;
+        }
+
+        .search input {
+            width: 100%;
+            padding: 9px 32px 9px 11px;
+            border-radius: 999px;
+            border: 1px solid var(--border-subtle);
+            background: rgba(15, 23, 42, 0.9);
+            color: var(--text-main);
+            font-size: 13px;
+            outline: none;
+        }
+
+        .search input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .search button {
+            position: absolute;
+            right: 4px;
+            top: 50%;
+            transform: translateY(-50%);
+            border: none;
+            border-radius: 999px;
+            padding: 6px 12px;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            cursor: pointer;
+            background: var(--accent);
+            color: #111827;
+            font-weight: 600;
+        }
+
+        /* Main layout */
+
+        .main {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        .intro-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+            gap: 16px;
+            align-items: stretch;
+        }
+
+        .welcome-card {
+            border-radius: var(--card-radius);
+            background: radial-gradient(circle at top left, rgba(249, 115, 22, 0.14), rgba(15, 23, 42, 0.95));
+            padding: 16px 18px 18px;
+            border: 1px solid rgba(249, 115, 22, 0.35);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .welcome-card::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at right, rgba(8, 47, 73, 0.5), transparent 60%);
+            opacity: 0.7;
+            pointer-events: none;
+        }
+
+        .welcome-card-inner {
+            position: relative;
+            z-index: 1;
+        }
+
+        .welcome-eyebrow {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.16em;
+            color: rgba(248, 250, 252, 0.7);
+            margin-bottom: 6px;
+        }
+
+        .welcome-title {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .welcome-subtitle {
+            font-size: 13px;
+            color: var(--text-muted);
+            max-width: 420px;
+        }
+
+        .welcome-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+            font-size: 11px;
+        }
+
+        .tag {
+            padding: 4px 9px;
+            border-radius: 999px;
+            border: 1px solid rgba(15, 23, 42, 0.7);
+            background: rgba(15, 23, 42, 0.85);
+            color: var(--text-muted);
+        }
+
+        .br-card {
+            border-radius: var(--card-radius);
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid var(--border-subtle);
+            padding: 14px 15px 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .br-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+            margin-bottom: 2px;
+        }
+
+        .br-title {
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.16em;
+            color: var(--text-muted);
+        }
+
+        .br-pill {
+            font-size: 11px;
+            padding: 3px 9px;
+            border-radius: 999px;
+            background: var(--accent-soft);
+            color: #fed7aa;
+            border: 1px solid rgba(248, 250, 252, 0.07);
+        }
+
+        .br-message {
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .br-meta {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        /* Link grid */
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .card {
+            border-radius: var(--card-radius);
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            padding: 14px 14px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+        }
+
+        .card-title {
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.16em;
+            color: var(--text-muted);
+        }
+
+        .card-badge {
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.9);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-muted);
+        }
+
+        .link-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-top: 4px;
+        }
+
+        .link-list li a {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 7px 9px;
+            border-radius: 11px;
+            text-decoration: none;
+            color: var(--text-main);
+            font-size: 13px;
+            background: rgba(15, 23, 42, 0.9);
+            border: 1px solid rgba(31, 41, 55, 0.9);
+            transition: background 0.12s ease, transform 0.1s ease, border-color 0.12s ease;
+        }
+
+        .link-list li a span {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .link-list li a small {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .link-list li a::after {
+            content: "↗";
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .link-list li a:hover {
+            background: rgba(15, 23, 42, 1);
+            border-color: rgba(249, 115, 22, 0.45);
+            transform: translateY(-1px);
+        }
+
+        .link-list li a:active {
+            transform: translateY(0);
+        }
+
+        /* Footer */
+
+        .footer {
+            margin-top: 8px;
+            font-size: 11px;
+            color: var(--text-muted);
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            flex-wrap: wrap;
+            border-top: 1px solid rgba(15, 23, 42, 0.9);
+            padding-top: 8px;
+        }
+
+        @media (max-width: 900px) {
+            .page {
+                margin: 12px;
+                padding: 16px;
+            }
+
+            .intro-row {
+                grid-template-columns: minmax(0, 1fr);
+            }
+
+            .grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 640px) {
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .header-right {
+                width: 100%;
+                justify-content: space-between;
+            }
+
+            .grid {
+                grid-template-columns: minmax(0, 1fr);
+            }
+
+            .welcome-title {
+                font-size: 18px;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="page">
+    <header class="header">
+        <div class="logo-group">
+            <div class="logo-circle">S</div>
+            <div>
+                <div class="logo-text-main">SOLARWATT</div>
+                <div class="logo-text-sub">Internal start · browser home</div>
+            </div>
+        </div>
+
+        <div class="header-right">
+            <div class="time-chip" id="time-chip">
+                <div class="time-dot"></div>
+                <span id="time-text">--:--</span>
+            </div>
+
+            <form class="search" action="https://www.google.com/search" method="GET">
+                <input
+                        type="text"
+                        name="q"
+                        placeholder="Schnell suchen (z.B. Jira Ticket, Begriff)…"
+                        autocomplete="off"
+                />
+                <button type="submit">Search</button>
+            </form>
+        </div>
+    </header>
+
+    <main class="main">
+        <section class="intro-row">
+            <article class="welcome-card">
+                <div class="welcome-card-inner">
+                    <div class="welcome-eyebrow">Willkommen</div>
+                    <h1 class="welcome-title">Guter Start in den Tag bei Solarwatt.</h1>
+                    <p class="welcome-subtitle">
+                        Dein kompakter Einstieg in den Arbeitstag – zentrale Links, kurze Infos vom Betriebsrat
+                        und alles, was du im Browser zuerst brauchst.
+                    </p>
+                    <div class="welcome-tags">
+                        <span class="tag">Atlassian &amp; Tools</span>
+                        <span class="tag">Betriebsrat-Info</span>
+                        <span class="tag">Interne Dienste</span>
+                    </div>
+                </div>
+            </article>
+
+            <aside class="br-card">
+                <div class="br-header">
+                    <div class="br-title">Betriebsrat · Aktuell</div>
+                    <div class="br-pill" id="br-pill">Stand: <span id="br-date">–</span></div>
+                </div>
+                <p class="br-message" id="br-message">
+                    Heute keine besondere Meldung. Einen guten und sicheren Arbeitstag euch allen!
+                </p>
+                <div class="br-meta">
+                    Für ausführliche Infos nutzt bitte das BR-Portal im Intranet.
+                </div>
+            </aside>
+        </section>
+
+        <section class="grid">
+            <!-- Atlassian -->
+            <section class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Atlassian</h2>
+                    <div class="card-badge">Projekt &amp; Doku</div>
+                </div>
+                <ul class="link-list">
+                    <li>
+                        <a href="https://jira.example.internal" target="_blank" rel="noopener noreferrer">
+                <span>
+                  Jira
+                  <small>Tickets &amp; Aufgaben</small>
+                </span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="https://confluence.example.internal" target="_blank" rel="noopener noreferrer">
+                <span>
+                  Confluence
+                  <small>Wissen &amp; Dokumentation</small>
+                </span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="https://bitbucket.example.internal" target="_blank" rel="noopener noreferrer">
+                <span>
+                  Bitbucket
+                  <small>Code-Repos</small>
+                </span>
+                        </a>
+                    </li>
+                </ul>
+            </section>
+
+            <!-- Kommunikation -->
+            <section class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Kommunikation</h2>
+                    <div class="card-badge">Mails &amp; Chat</div>
+                </div>
+                <ul class="link-list">
+                    <li>
+                        <a href="https://outlook.office.com/" target="_blank" rel="noopener noreferrer">
+                <span>
+                  Outlook
+                  <small>E-Mails &amp; Kalender</small>
+                </span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="https://teams.microsoft.com/" target="_blank" rel="noopener noreferrer">
+                <span>
+                  Microsoft Teams
+                  <small>Chat &amp; Meetings</small>
+                </span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="https://intranet.example.internal" target="_blank" rel="noopener noreferrer">
+                <span>
+                  Intranet
+                  <small>News &amp; interne Infos</small>
+                </span>
+                        </a>
+                    </li>
+                </ul>
+            </section>
+
+            <!-- IT / Tools -->
+            <section class="card">
+                <div class="card-header">
+                    <h2 class="card-title">IT &amp; Tools</h2>
+                    <div class="card-badge">Support</div>
+                </div>
+                <ul class="link-list">
+                    <li>
+                        <a href="https://helpdesk.example.internal" target="_blank" rel="noopener noreferrer">
+                <span>
+                  Helpdesk
+                  <small>IT-Ticket erstellen</small>
+                </span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="https://password.example.internal" target="_blank" rel="noopener noreferrer">
+                <span>
+                  Passwort-Portal
+                  <small>Passwort zurücksetzen</small>
+                </span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="https://monitoring.example.internal" target="_blank" rel="noopener noreferrer">
+                <span>
+                  System-Status
+                  <small>Dienste &amp; Verfügbarkeit</small>
+                </span>
+                        </a>
+                    </li>
+                </ul>
+            </section>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div>© <span id="year"></span> Solarwatt · Interne Startseite</div>
+        <div>IT-Service: <span>it-support@solarwatt.example</span></div>
+    </footer>
+</div>
+
+<script>
+    // --- Konfiguration: hier kann man fix BR-Text & Datum anpassen ---
+    const BR_CONFIG = {
+        message:
+            "Der Betriebsrat ist diese Woche ab Mittwoch wieder regulär erreichbar. Bitte beachtet die Hinweise zur aktuellen Homeoffice-Regelung im Intranet.",
+        date: "09.12.2025" // einfach überschreiben
+    };
+
+    // Uhrzeit + Jahr + BR-Block setzen
+    function updateTime() {
+        const now = new Date();
+        const timeText = document.getElementById("time-text");
+        if (!timeText) return;
+        const hours = now.getHours().toString().padStart(2, "0");
+        const minutes = now.getMinutes().toString().padStart(2, "0");
+        timeText.textContent = `${hours}:${minutes} Uhr`;
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        // Jahr
+        const yearEl = document.getElementById("year");
+        if (yearEl) yearEl.textContent = new Date().getFullYear().toString();
+
+        // BR-Block
+        const brMsgEl = document.getElementById("br-message");
+        const brDateEl = document.getElementById("br-date");
+        if (brMsgEl && BR_CONFIG.message) {
+            brMsgEl.textContent = BR_CONFIG.message;
+        }
+        if (brDateEl && BR_CONFIG.date) {
+            brDateEl.textContent = BR_CONFIG.date;
+        }
+
+        // Uhrzeit initial & Intervall
+        updateTime();
+        setInterval(updateTime, 30_000);
+    });
+</script>
+</body>
+</html>

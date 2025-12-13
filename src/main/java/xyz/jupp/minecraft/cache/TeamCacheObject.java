@@ -92,6 +92,24 @@ public class TeamCacheObject {
         getTeamCollection().changeTeamPoints(cost);
     }
 
+    public void downgradeTeamLevel() {
+        if (this.level > 0) this.level--;
+        if (!this.zoneOptionInteract) {
+            this.zoneOptionInteract = true;
+            getTeamCollection().changeAreaSettings(AreaOptionsEnum.INTERACTION);
+        }
+        if (!this.zoneOptionPvP) {
+            this.zoneOptionPvP = true;
+            getTeamCollection().changeAreaSettings(AreaOptionsEnum.PVP);
+        }
+        if (!this.zoneOptionMobDamage) {
+            this.zoneOptionMobDamage = true;
+            getTeamCollection().changeAreaSettings(AreaOptionsEnum.MOB_GRIEFING);
+        }
+        getTeamCollection().decTeamLevel();
+        getTeamCollection().changeTeamPoints(0);
+    }
+
     public boolean changeAreaSettings(@NotNull AreaOptionsEnum areaOption) {
         boolean dbResult = getTeamCollection().changeAreaSettings(areaOption);
         if (dbResult) {

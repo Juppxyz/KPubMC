@@ -18,7 +18,7 @@ import java.time.temporal.ChronoUnit;
 public class NetherTransferListener implements Listener {
 
     private static final LocalDateTime END_UNLOCK_DATE =
-            LocalDateTime.of(2025, 12, 14, 18, 0);
+            LocalDateTime.of(2025, 12, 10, 12, 0);
 
 
     @EventHandler

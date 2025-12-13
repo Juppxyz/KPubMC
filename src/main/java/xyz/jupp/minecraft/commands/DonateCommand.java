@@ -16,7 +16,7 @@ public class DonateCommand implements CommandExecutor {
             Player player = (Player) commandSender;
             player.sendMessage(Main.getChatPrefix() + "Du möchtest den Server unterstützen?");
             player.sendMessage(Main.getChatPrefix() + "Schau gerne mal hier vorbei:");
-            player.sendMessage(Main.getChatPrefix() + "§a" + "https://paypal.me/pazzleGG");
+            player.sendMessage(Main.getChatPrefix() + "§a" + "https://paypal.me/juppxyz");
             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1f,1f);
         }
         return false;

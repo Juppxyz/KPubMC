@@ -23,8 +23,8 @@ public class TeamCommand implements CommandExecutor {
 
             // open create new Team Inventory
             if (playerCacheObject.getTeamID() == null && args.length == 2 && args[0].equals("neu")) {
-                if (player.getExpToLevel() < 30) {
-                    player.sendMessage(Main.getChatPrefix() + "Du brauchst §a30 §fLevel, um ein Team zu erstellen.");
+                if (player.getExpToLevel() < 40) {
+                    player.sendMessage(Main.getChatPrefix() + "Du brauchst §a40 §fLevel, um ein Team zu erstellen.");
                     player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
                     return false;
                 }
@@ -37,8 +37,8 @@ public class TeamCommand implements CommandExecutor {
 
                 PlayerCollection playerCollection = new PlayerCollection(player);
                 int money = playerCollection.getMoney();
-                if (money < 1500) {
-                    player.sendMessage(Main.getChatPrefix() + "Das gründen eines Teams kostet " + Main.getCurrencyName(1500) + "§f.");
+                if (money < 2500) {
+                    player.sendMessage(Main.getChatPrefix() + "Das gründen eines Teams kostet " + Main.getCurrencyName(2500) + "§f.");
                     player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
                     return false;
                 }

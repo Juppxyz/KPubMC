@@ -198,7 +198,7 @@ public class ShopListener implements Listener {
         }
         if (event.getEntity().getType().equals(EntityType.VINDICATOR)) {
             Vindicator vindicator = (Vindicator) event.getEntity();
-            if (vindicator.getCustomName().equals(Main.getBlackMarketDealerVillagerName())) event.setCancelled(true);
+            if (vindicator.getCustomName() != null && vindicator.getCustomName().equals(Main.getBlackMarketDealerVillagerName())) event.setCancelled(true);
             return;
         }
         if (event.getEntity().getType().equals(EntityType.WANDERING_TRADER)) {
@@ -383,6 +383,8 @@ public class ShopListener implements Listener {
         if (foundIndex == -1) return false;
         ItemStack foundItem = inventory.getItem(foundIndex);
         if (foundItem == null) return false;
+        ItemMeta meta = foundItem.getItemMeta();
+        if (meta != null && "§5Bargeld".equals(meta.getDisplayName())) return false;
         foundItem.setAmount(foundItem.getAmount() - amount);
         playerCollection.updateMoney(playerCollection.getMoney() + price);
         playerCollection.getPlayer().sendMessage(Main.getChatPrefix() + "§a" + Main.getCurrencyName(price));

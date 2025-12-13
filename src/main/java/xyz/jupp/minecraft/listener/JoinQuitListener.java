@@ -11,15 +11,14 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
-import xyz.jupp.minecraft.cache.PlayerCacheObject;
 import xyz.jupp.minecraft.cache.TeamCacheObject;
 import xyz.jupp.minecraft.commands.SpecCommand;
 import xyz.jupp.minecraft.database.PlayerCollection;
 import xyz.jupp.minecraft.utils.JailHandler;
 import xyz.jupp.minecraft.utils.LastSeen;
 import xyz.jupp.minecraft.utils.Locations;
+import xyz.jupp.minecraft.utils.TabListUtil;
 
-import java.util.Objects;
 import java.util.UUID;
 
 public class JoinQuitListener implements Listener {
@@ -41,11 +40,28 @@ public class JoinQuitListener implements Listener {
         Player player = event.getPlayer();
         event.joinMessage(Component.empty());
 
-        boolean wasInactive = LastSeen.isInactiveAtLeast3MonthsOrNever(player.getName());
-        if (wasInactive) {
-            player.teleport(Locations.getCurrentSpawn());
-        }
+        int activeState = LastSeen.getJoinState(player);
+        applyTeamDisplayNames(player);
+        TabListUtil.updateTabFor(player);
 
+        if (activeState == 1) {
+            player.teleport(Locations.getCurrentSpawn());
+            Bukkit.broadcast(LEGACY_SEC.deserialize(
+                    "§8§l[§a§l+§8§l] §a§l" + player.getName() + " §f§lhat den Server zum ersten Mal betreten."
+            ));
+            sendWelcome(player);
+
+        } else if (activeState == 2) {
+            player.teleport(Locations.getCurrentSpawn());
+            Bukkit.broadcast(LEGACY_SEC.deserialize(
+                    "§8§l[§a§l+§8§l] §a§l" + player.getName() + " §f§list nach langer Zeit wieder zurückgekehrt"
+            ));
+
+        } else {
+            Bukkit.broadcast(LEGACY_SEC.deserialize(
+                    String.format("§8[§a+§8] %s §fhat den Server betreten.", player.getPlayerListName())
+            ));
+        }
 
         if (!SpecCommand.getSpecMode().isEmpty()) {
             for (UUID uuid : SpecCommand.getSpecMode()) {
@@ -54,17 +70,6 @@ public class JoinQuitListener implements Listener {
                     player.hidePlayer(Main.getInstance(), target);
                 }
             }
-        }
-
-        applyTeamDisplayNames(player);
-        Component joinMsg = LEGACY_SEC.deserialize(
-                String.format("§8[§a+§8] %s §fhat den Server betreten.", player.getPlayerListName())
-        );
-        Bukkit.broadcast(joinMsg);
-        if (!player.hasPlayedBefore()) {
-            Bukkit.broadcast(LEGACY_SEC.deserialize(
-                    "§8§l[§a§l+§8§l] §a§l" + player.getName() + " §f§lhat den Server zum ersten Mal betreten."));
-            sendWelcome(player);
         }
 
         // jail handling

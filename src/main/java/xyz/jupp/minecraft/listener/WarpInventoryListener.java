@@ -1,9 +1,6 @@
 package xyz.jupp.minecraft.listener;
 
-import org.bukkit.Bukkit;
-import org.bukkit.Location;
-import org.bukkit.OfflinePlayer;
-import org.bukkit.Sound;
+import org.bukkit.*;
 import org.bukkit.entity.HumanEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -14,6 +11,8 @@ import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
+import org.bukkit.persistence.PersistentDataContainer;
+import org.bukkit.persistence.PersistentDataType;
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.WarpCache;
@@ -23,8 +22,11 @@ import xyz.jupp.minecraft.inventory.WarpInventory;
 import xyz.jupp.minecraft.utils.PlayerTeleport;
 
 import java.util.Objects;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import static xyz.jupp.minecraft.inventory.WarpInventory.WARP_OWNER_KEY;
 
 public class WarpInventoryListener implements Listener {
 
@@ -117,61 +119,100 @@ public class WarpInventoryListener implements Listener {
 
                     if (displayName.startsWith("§aDein Warp")) {
 
-                        WarpCacheObject ownWarpObject = WarpCache.getInstance().getWarpCache().get(player.getUniqueId().toString());
-                        if (money < 200) {
-                            player.sendMessage(Main.getChatPrefix() + "§fDas teleportieren zu deinem Warp kostet " + Main.getCurrencyName(200) + "§f.");
-                            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
+                        WarpCacheObject ownWarpObject =
+                                WarpCache.getInstance().getWarpCache().get(player.getUniqueId().toString());
+
+                        if (ownWarpObject == null) {
+                            player.sendMessage(Main.getChatPrefix() + "§cDu hast aktuell keinen gültigen Warp gesetzt.");
+                            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
                             return;
                         }
 
-                        Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
+                        if (money < 200) {
+                            player.sendMessage(Main.getChatPrefix() + "§fDas Teleportieren zu deinem Warp kostet "
+                                    + Main.getCurrencyName(200) + "§f.");
+                            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
+                            return;
+                        }
+
+                        Bukkit.getScheduler().runTask(Main.getInstance(), () -> {
                             PlayerTeleport playerTeleport = new PlayerTeleport();
-                            Location location = new Location(Bukkit.getWorld(ownWarpObject.getWorldName()), ownWarpObject.getX(), ownWarpObject.getY(), ownWarpObject.getZ());
+                            Location location = new Location(
+                                    Bukkit.getWorld(ownWarpObject.getWorldName()),
+                                    ownWarpObject.getX(),
+                                    ownWarpObject.getY(),
+                                    ownWarpObject.getZ()
+                            );
                             playerTeleport.teleportAfter(player, location);
+
                             player.sendMessage(Main.getChatPrefix() + "§c-200 " + Main.getCurrencyName());
                             playerCollection.updateMoney(money - 200);
-                            player.playSound(player.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 2f,2f);
-
+                            player.playSound(player.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 2f, 2f);
                         });
-
                     }
+
 
                     if (displayName.startsWith("§fWarp von§8:")) {
                         if (money < 200) {
                             player.sendMessage(Main.getChatPrefix() + "§fDas teleportieren zu einem Warp kostet " + Main.getCurrencyName(200) + "§f.");
-                            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
+                            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
                             return;
                         }
 
                         ItemStack itemStack = event.getCurrentItem();
-                        ItemMeta meta = itemStack.getItemMeta();
-                        if ((meta instanceof SkullMeta)) {
-                            SkullMeta skullMeta = (SkullMeta) meta;
-                            OfflinePlayer owner = skullMeta.getOwningPlayer();
-                            if (owner == null) {
-                                player.sendMessage(Main.getChatPrefix() + "§cEin unerwarteter Fehler ist aufgetreten!");
-                                player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
-                                return;
-                            }
-
-                            WarpCacheObject targetWarpObject = WarpCache.getInstance().getWarpCache().get(owner.getUniqueId().toString());
-                            if (targetWarpObject == null) {
-                                player.sendMessage(Main.getChatPrefix() + "§cDer Warp konnte (irgendwie) nicht ermittelt werden.");
-                                player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
-                                return;
-                            }
-
-                            Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
-                                PlayerTeleport playerTeleport = new PlayerTeleport();
-                                Location location = new Location(Bukkit.getWorld(targetWarpObject.getWorldName()), targetWarpObject.getX(), targetWarpObject.getY(), targetWarpObject.getZ());
-                                playerTeleport.teleportAfter(player, location);
-
-                                player.sendMessage(Main.getChatPrefix() + "§c-200 " + Main.getCurrencyName());
-                                playerCollection.updateMoney(money - 200);
-                                player.sendMessage(Main.getChatPrefix() + "§fDu wurdest zum Warp von §a" + owner.getName() + " §fteleportiert.");
-                            });
+                        if (itemStack == null || itemStack.getType() != Material.PLAYER_HEAD) {
+                            return;
                         }
+
+                        ItemMeta meta = itemStack.getItemMeta();
+                        if (!(meta instanceof SkullMeta)) {
+                            return;
+                        }
+
+                        SkullMeta skullMeta = (SkullMeta) meta;
+                        PersistentDataContainer pdc = skullMeta.getPersistentDataContainer();
+
+                        String ownerUuidStr = pdc.get(WARP_OWNER_KEY, PersistentDataType.STRING);
+                        if (ownerUuidStr == null) {
+                            player.sendMessage(Main.getChatPrefix() + "§cDie Warp-Daten sind beschädigt (fehlende UUID).");
+                            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
+                            return;
+                        }
+
+                        UUID ownerUuid;
+                        try {
+                            ownerUuid = UUID.fromString(ownerUuidStr);
+                        } catch (IllegalArgumentException ex) {
+                            player.sendMessage(Main.getChatPrefix() + "§cDie Warp-Daten sind ungültig (korruptes UUID-Format).");
+                            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
+                            return;
+                        }
+
+                        OfflinePlayer owner = Bukkit.getOfflinePlayer(ownerUuid);
+
+                        WarpCacheObject targetWarpObject = WarpCache.getInstance().getWarpCache().get(ownerUuid.toString());
+                        if (targetWarpObject == null) {
+                            player.sendMessage(Main.getChatPrefix() + "§cDer Warp konnte (irgendwie) nicht ermittelt werden.");
+                            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
+                            return;
+                        }
+
+                        Bukkit.getScheduler().runTask(Main.getInstance(), () -> {
+                            PlayerTeleport playerTeleport = new PlayerTeleport();
+                            Location location = new Location(
+                                    Bukkit.getWorld(targetWarpObject.getWorldName()),
+                                    targetWarpObject.getX(),
+                                    targetWarpObject.getY(),
+                                    targetWarpObject.getZ()
+                            );
+                            playerTeleport.teleportAfter(player, location);
+
+                            player.sendMessage(Main.getChatPrefix() + "§c-200 " + Main.getCurrencyName());
+                            playerCollection.updateMoney(money - 200);
+                            player.sendMessage(Main.getChatPrefix() + "§fDu wurdest zum Warp von §a" + owner.getName() + " §fteleportiert.");
+                        });
                     }
+
 
                     Bukkit.getScheduler().runTask(Main.getInstance(), () -> {
                         if (player.getOpenInventory().getTopInventory().getType() != InventoryType.CRAFTING) {

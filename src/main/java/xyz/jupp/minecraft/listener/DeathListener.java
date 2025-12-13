@@ -192,6 +192,9 @@ public class DeathListener implements Listener {
                 if (playerTeamPoints < killCost) {
                     playerCacheObject.getTeamCacheObject().getTeamCollection().changeTeamPoints(0);
                     earnedPoints = playerTeamPoints;
+                    playerCacheObject.getTeamCacheObject().downgradeTeamLevel();
+
+
                 }else {
                     playerCacheObject.getTeamCacheObject().getTeamCollection().changeTeamPoints(playerTeamPoints - killCost);
                 }
@@ -205,6 +208,12 @@ public class DeathListener implements Listener {
                     }
                     if (tmpPlayerCacheObject.getTeamID().equals(playerCacheObject.getTeamID())) {
                         online.sendMessage(Main.getChatPrefix() + "§c-" + earnedPoints + " Team-Punkte §fwegen dem Tod durch " + killer.getDisplayName());
+                        if (earnedPoints < 250) {
+                            online.sendMessage(Main.getChatPrefix() + "§cEuer Team wurde ein Level herunter gestuft!");
+                            online.sendMessage(Main.getChatPrefix() + "§fAchtet in Zukunft immer auf genügend Team-Punkte!");
+                            online.sendMessage(" ");
+                            online.sendMessage("§f§oEure Optionen im Gebiets-Manager wurden zurückgesetzt.");
+                        }
                     }
                 }
 

@@ -1,24 +1,17 @@
 package xyz.jupp.minecraft.utils;
-
-import org.bukkit.Bukkit;
-import org.bukkit.OfflinePlayer;
-
-import java.time.Instant;
-import java.time.Period;
+import org.bukkit.entity.Player;
 
 public class LastSeen {
 
-    public static boolean isInactiveAtLeast3MonthsOrNever(String playerName) {
-        OfflinePlayer op = Bukkit.getOfflinePlayer(playerName);
-        if (op.isOnline()) {
-            return false;
+    public static int getJoinState(Player player) {
+        if (!player.hasPlayedBefore()) {
+            return 1;
         }
-        long lastSeen = op.getLastSeen();
-        if (lastSeen == 0L) {
-            return true;
-        }
-        long cutoff = Instant.now().minus(Period.ofMonths(3)).toEpochMilli();
-        return lastSeen < cutoff;
+        long lastPlayed = player.getLastPlayed();
+        long cutoff = System.currentTimeMillis()
+                - java.time.Duration.ofDays(90).toMillis();
+
+        return lastPlayed < cutoff ? 2 : 0;
     }
 
 }

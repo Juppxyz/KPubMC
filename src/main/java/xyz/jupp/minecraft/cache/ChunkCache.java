@@ -59,4 +59,23 @@ public class ChunkCache {
         return true;
     }
 
+    public boolean removeChunk(@NotNull String teamID, @NotNull String worldName, int x, int z) {
+        String chunkID = genChunkID(worldName, x, z);
+
+        if (!getChunkCache().containsKey(chunkID)) {
+            System.out.println(1.1);
+            return false;
+        }
+        System.out.println(2);
+        ChunkCacheObject cco = getChunkCache().get(chunkID);
+        if (!cco.getTeamID().equals(teamID)) return false;
+        System.out.println(2.2);
+
+        ChunkCollection chunkCollection = new ChunkCollection(teamID, chunkID);
+        chunkCollection.removeChunkInDatabase(teamID);
+        chunkCache.remove(chunkID);
+        System.out.println(3);
+        return true;
+    }
+
 }

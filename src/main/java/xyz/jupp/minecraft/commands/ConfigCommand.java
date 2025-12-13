@@ -11,6 +11,7 @@ import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.utils.BlackMarketHandler;
 import xyz.jupp.minecraft.utils.PermissionsUtil;
+import xyz.jupp.minecraft.utils.TabListUtil;
 
 public class ConfigCommand implements CommandExecutor {
 
@@ -25,6 +26,7 @@ public class ConfigCommand implements CommandExecutor {
 
             ConfigManager.getManager().updateConfig();
             BlackMarketHandler.forceReroll();
+            TabListUtil.updateTabForAll();
             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f,2f);
             player.sendMessage(Main.getChatPrefix() + "Die Config wurde §aerfolgreich §faktualisiert!");
         }else {

@@ -1,18 +1,18 @@
 {
   "serverMOTD":"§6§lKlotzscherPub §f§lMinecraft Server",
-  "tradeTax": 0.10,
-  "netherTransferTax": 0.06,
-  "deathTax": 0.12,
+  "tradeTax": 0.24,
+  "netherTransferTax": 0.7,
+  "deathTax": 0.15,
   "shopItems": [
-    {"name": "", "price": 1500, "sell": false, "amount": 1, "description": "", "material": "SCULK_SENSOR"},
-    {"name": "", "price": 900, "sell": false, "amount": 1, "description": "", "material": "SNIFFER_EGG"},
-    {"name": "", "price": 110, "sell": true, "amount": 16, "description": "", "material": "REDSTONE_BLOCK"},
-    {"name": "", "price": 1500, "sell": false, "amount": 2, "description": "", "material": "TOTEM_OF_UNDYING"},
-    {"name": "", "price": 25, "sell": false, "amount": 64, "description": "", "material": "AMETHYST_BLOCK"},
-    {"name": "", "price": 180, "sell": true, "amount": 32, "description": "", "material": "BAMBOO_BLOCK"},
+    {"name": "", "price": 250, "sell": false, "amount": 32, "description": "", "material": "FIREWORK_ROCKET"},
+    {"name": "", "price": 20000, "sell": false, "amount": 1, "description": "", "material": "NETHER_STAR"},
+    {"name": "", "price": 180, "sell": true, "amount": 16, "description": "", "material": "REDSTONE_BLOCK"},
+    {"name": "", "price": 300, "sell": false, "amount": 16, "description": "", "material": "COAL_BLOCK"},
+    {"name": "", "price": 600, "sell": false, "amount": 1, "description": "", "material": "SADDLE"},
+    {"name": "", "price": 123, "sell": true, "amount": 16, "description": "", "material": "LEATHER"},
     {"name": "", "price": 100, "sell": true, "amount": 32, "description": "", "material": "GOLDEN_CARROT"},
-    {"name": "", "price": 800, "sell": true, "amount": 1, "description": "", "material": "BELL"},
-    {"name": "", "price": 50, "sell": true, "amount": 64, "description": "", "material": "POTATO"},
-    {"name": "", "price": 15000, "sell": false, "amount": 1, "description": "", "material": "ELYTRA"}
+    {"name": "", "price": 120, "sell": true, "amount": 32, "description": "", "material": "POTATO"},
+    {"name": "", "price": 500, "sell": true, "amount": 16, "description": "", "material": "PUFFERFISH"},
+    {"name": "", "price": 100000, "sell": false, "amount": 1, "description": "", "material": "ELYTRA"}
   ]
 }
