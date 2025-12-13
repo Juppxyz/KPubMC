@@ -112,4 +112,4 @@ buildNumber.properties
 # Common working directory
 run/
 
-update_shop.py
+.update_shop.py
