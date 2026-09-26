@@ -2,52 +2,18 @@ package xyz.jupp.minecraft.items;
 
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
-import org.bukkit.inventory.ItemFlag;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.persistence.PersistentDataType;
 import xyz.jupp.minecraft.Main;
-import xyz.jupp.minecraft.utils.BlackMarketHandler;
 
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
-public class BedrockBreakerPickaxe implements CustomItemsInterface {
+public class BedrockBreakerPickaxe extends BlackMarketItem {
 
-    private final String itemName = "§8Bedrock-§7§lBreaker";
-    private final Material itemType = Material.WOODEN_PICKAXE;
-    private final int minCost = 15000;
+    public static final NamespacedKey KEY = new NamespacedKey(Main.getInstance(), "bedrock_breaker_pickaxe");
 
-    private final NamespacedKey key = new NamespacedKey(Main.getInstance(), "bedrock_breaker_pickaxe");
+    private static final List<String> BASE_LORE = List.of("§8Ein wahrer Brecher.", "", "§7§oNur einmal nutzbar!");
 
-    private final String[] baseLore = {"§8Ein wahrer Brecher.", "", "§7§oNur einmal nutzbar!"};
-
-    public ItemStack getItemStack(){
-        ItemStack item = new ItemStack(itemType);
-        ItemMeta meta = item.getItemMeta();
-        meta.getPersistentDataContainer().set(key, PersistentDataType.BYTE, (byte) 1);
-        meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
-        meta.setDisplayName(itemName);
-
-        List<String> lore = new ArrayList<>(Arrays.asList(baseLore));
-        lore.add("§fPreis: " + Main.getCurrencyName(BlackMarketHandler.getCurrentCosts().get()));
-        meta.setLore(lore);
-
-        item.setItemMeta(meta);
-        return item;
-    }
-
-    public int getMinCost() {
-        return minCost;
-    }
-
-    public Material getItemType() {
-        return itemType;
-    }
-
-    public String getItemName() {
-        return itemName;
+    public BedrockBreakerPickaxe() {
+        super("§8Bedrock-§7§lBreaker", Material.WOODEN_PICKAXE, 15000, KEY, BASE_LORE);
     }
 
 }

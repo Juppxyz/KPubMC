@@ -5,26 +5,32 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import xyz.jupp.minecraft.config.ConfigManager;
 
+// main thread only
 public class TabListUtil {
 
-    private static final String header = "Auslastung: ";
-    private static final String footer = "\n§fHandel: §a%d%% §8| §fTod: §a%d%% §8| §fTransfer: §a%d%%";
+    private static final String HEADER = "Auslastung: ";
+    private static final String FOOTER = "\n§fHandel: §a%d%% §8| §fTod: §a%d%% §8| §fTransfer: §a%d%%";
 
 
     public static void updateTabForAll() {
+        Component header = header();
+        Component footer = footer();
         for (Player player : Bukkit.getOnlinePlayers()) {
-            player.sendPlayerListHeaderAndFooter(
-                    Component.text(header + currentPerformance() + "\n"),
-                    Component.text(footer.formatted(Math.round(ConfigManager.getManager().getTradeTax()*100), Math.round(ConfigManager.getManager().getDeathTax()*100), Math.round(ConfigManager.getManager().getNetherTransferTax()*100)))
-            );
+            player.sendPlayerListHeaderAndFooter(header, footer);
         }
     }
 
     public static void updateTabFor(Player player) {
-        player.sendPlayerListHeaderAndFooter(
-                Component.text(header + currentPerformance() + "\n"),
-                Component.text(footer.formatted(Math.round(ConfigManager.getManager().getTradeTax()*100), Math.round(ConfigManager.getManager().getDeathTax()*100), Math.round(ConfigManager.getManager().getNetherTransferTax()*100)))
-        );
+        player.sendPlayerListHeaderAndFooter(header(), footer());
+    }
+
+    private static Component header() {
+        return Component.text(HEADER + currentPerformance() + "\n");
+    }
+
+    private static Component footer() {
+        ConfigManager config = ConfigManager.getManager();
+        return Component.text(FOOTER.formatted(Math.round(config.getTradeTax()*100), Math.round(config.getDeathTax()*100), Math.round(config.getNetherTransferTax()*100)));
     }
 
     private static String currentPerformance() {
@@ -39,7 +45,5 @@ public class TabListUtil {
         }
         return "§cHoch";
     }
-
-
 
 }

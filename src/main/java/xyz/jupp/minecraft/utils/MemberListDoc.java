@@ -7,19 +7,13 @@ import org.jetbrains.annotations.NotNull;
 public class MemberListDoc {
 
     public static Document getDoc(@NotNull Player player) {
-        Document document = new Document("uuid", player);
-        document.put("uuid", player.getUniqueId().toString());
-        document.put("role", "member");
-        document.put("nickname", player.getName());
-        return document;
+        return getDoc(player, "member");
     }
 
     public static Document getDoc(@NotNull Player player, @NotNull String role) {
-        Document document = new Document("uuid", player);
-        document.put("uuid", player.getUniqueId().toString());
-        document.put("role", role);
-        document.put("nickname", player.getName());
-        return document;
+        return new Document("uuid", player.getUniqueId().toString())
+                .append("role", role)
+                .append("nickname", player.getName());
     }
 
 }
