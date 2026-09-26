@@ -1,13 +1,16 @@
 package xyz.jupp.minecraft.cache;
 
+import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.IllegalPluginAccessException;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.database.TeamCollection;
 import xyz.jupp.minecraft.utils.AreaOptionsEnum;
 import xyz.jupp.minecraft.utils.Tasks;
+import xyz.jupp.minecraft.utils.Text;
 
 import java.util.UUID;
 
@@ -73,10 +76,16 @@ public class CacheHandler {
     }
 
 
+    // blocking, called on a worker: the announcement is sent on the main thread
     public void createNewTeam(@NotNull Player player, @NotNull String teamName, @NotNull String teamColor) {
         String teamID = TeamCollection.createNewTeam(player, teamName, teamColor);
         TeamCache.forgetUnknownTeams();
-        Bukkit.broadcastMessage(Main.getChatPrefix() + "§fDas Team " + teamColor + teamName + " §fwurde von §6" + player.getName() + " §fgegründet!");
+        Component announcement = Text.section(Main.getChatPrefix() + "§fDas Team " + teamColor + teamName + " §fwurde von §6" + player.getName() + " §fgegründet!");
+        try {
+            Tasks.sync(() -> Bukkit.broadcast(announcement));
+        } catch (IllegalPluginAccessException e) {
+            // server stop: only the announcement is dropped, the team is still assigned below
+        }
         getPlayerInCache(player).changeTeamID(teamID);
     }
 

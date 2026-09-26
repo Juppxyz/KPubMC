@@ -20,7 +20,6 @@ public final class Main extends JavaPlugin {
     private final static String blackMarketDealerVillagerName = "§8§lMorpheus";
     private final static String teamPointsDealerVillagerName = "§6§lNomad der Punktemakler";
 
-    private final static String consolePrefix = "[KPubMC] ";
     private final static String currencyName = "Schilling";
     private final static String teamName = "§aTeam";
 
@@ -161,7 +160,6 @@ public final class Main extends JavaPlugin {
     public static String getTeamName() {return teamName;}
     public static String getChatPrefix() {return chatPrefix;}
     public static String getCurrencyName() {return currencyName;}
-    public static String getConsolePrefix() {return consolePrefix;}
     public static String getShopVillagerName() {return shopVillagerName;}
     public static String getJewelerVillagerName() {return jewelerVillagerName;}
     public static String getFinanceVillagerFredName() {return financeVillagerFredName;}
