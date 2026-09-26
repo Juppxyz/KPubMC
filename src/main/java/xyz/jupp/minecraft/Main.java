@@ -1,10 +1,7 @@
 package xyz.jupp.minecraft;
 
 import org.bukkit.Bukkit;
-import org.bukkit.Location;
-import org.bukkit.World;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.scheduler.BukkitTask;
 import xyz.jupp.minecraft.cache.ChunkCache;
 import xyz.jupp.minecraft.cache.WarpCache;
 import xyz.jupp.minecraft.commands.*;
@@ -23,7 +20,6 @@ public final class Main extends JavaPlugin {
     private final static String teamPointsDealerVillagerName = "§6§lNomad der Punktemakler";
 
     private final static String consolePrefix = "[KPubMC] ";
-    private final static String version = "v2.0.0";
     private final static String currencyName = "Schilling";
     private final static String teamName = "§aTeam";
 
@@ -35,48 +31,36 @@ public final class Main extends JavaPlugin {
     // for static Access
     private static Main instance;
 
-    private BukkitTask afkTask;
-
+    // aliases are declared in plugin.yml
     private void registerCommands() {
-        Bukkit.getConsoleSender().sendMessage("register commands..");
-        this.getCommand("geld").setExecutor(new MoneyCommand());
+        Logger.console("register commands..");
         this.getCommand("money").setExecutor(new MoneyCommand());
-        this.getCommand("schilling").setExecutor(new MoneyCommand());
         this.getCommand("config").setExecutor(new ConfigCommand());
-        this.getCommand("hilfe").setExecutor(new HelpCommand());
         this.getCommand("help").setExecutor(new HelpCommand());
-        this.getCommand("sc").setExecutor(new SlimeChunkCommand());
         this.getCommand("slimechunk").setExecutor(new SlimeChunkCommand());
-        this.getCommand("einladungen").setExecutor(new InvitesCommand());
         this.getCommand("invites").setExecutor(new InvitesCommand());
         this.getCommand("team").setExecutor(new TeamCommand());
         this.getCommand("ranking").setExecutor(new RankingCommand());
         this.getCommand("hover").setExecutor(new HoverTextCommand());
-        this.getCommand("kopf").setExecutor(new PlayerHeadsCommand());
         this.getCommand("head").setExecutor(new PlayerHeadsCommand());
         this.getCommand("warp").setExecutor(new WarpCommand());
         this.getCommand("customItem").setExecutor(new ItemCommand());
-        this.getCommand("spenden").setExecutor(new DonateCommand());
         this.getCommand("donate").setExecutor(new DonateCommand());
         this.getCommand("spawn").setExecutor(new SpawnCommand());
         this.getCommand("rules").setExecutor(new RulesCommand());
-        this.getCommand("regeln").setExecutor(new RulesCommand());
         this.getCommand("spec").setExecutor(new SpecCommand());
-        this.getCommand("ec").setExecutor(new EnderchestCommand());
+        this.getCommand("enderchest").setExecutor(new EnderchestCommand());
         this.getCommand("createshop").setExecutor(new CreateShopCommand());
         this.getCommand("createbankier").setExecutor(new CreateBankierCommand());
-        this.getCommand("enderchest").setExecutor(new EnderchestCommand());
         this.getCommand("createjuweler").setExecutor(new CreateJewelerCommand());
         this.getCommand("createdealer").setExecutor(new CreateBlackMarketDealerCommand());
         this.getCommand("createtpdealer").setExecutor(new CreateTPDealerCommand());
         this.getCommand("dummy").setExecutor(new CreateDummyEntityCommand());
         this.getCommand("bestrafung").setExecutor(new JailCommand());
         this.getCommand("wanted").setExecutor(new WantedCommand());
-        this.getCommand("ursprung").setExecutor(new NullpointCommand());
         this.getCommand("origin").setExecutor(new NullpointCommand());
         this.getCommand("removechunk").setExecutor(new RemoveChunkCommand());
         this.getCommand("debug").setExecutor(new MonsterEventCommand());
-
     }
 
     private void registerListener() {
@@ -102,22 +86,18 @@ public final class Main extends JavaPlugin {
 
         // afk
         Bukkit.getPluginManager().registerEvents(new AfkListener(), this);
-
-        // Bukkit.getPluginManager().registerEvents(new SwordListener(), this);
-        // Bukkit.getPluginManager().registerEvents(new ElytraFlyListener(), this);
     }
 
     private void registerTasks() {
-        PlayerUpdaterTask playerListUpdate = new PlayerUpdaterTask();
-        Bukkit.getConsoleSender().sendMessage(consolePrefix + "§fregister tasks ..");
-        playerListUpdate.startTask();
+        Logger.console("register tasks..");
+        new PlayerUpdaterTask().startTask();
     }
 
 
     @Override
     public void onEnable() {
         instance = this;
-        afkTask = AfkHelper.tickKickTask().runTaskTimer(this, 20L, 20L);
+        AfkHelper.tickKickTask().runTaskTimer(this, 20L, 20L);
 
         Logger.console("running kpub-system..");
         Logger.console("load config..");
@@ -143,9 +123,9 @@ public final class Main extends JavaPlugin {
         JailHandler.startJailWatcherTask();
     }
 
+    // Bukkit cancels the plugin's tasks itself after onDisable
     @Override
     public void onDisable() {
-        if (afkTask != null) afkTask.cancel();
         MongoDB.close();
     }
 
@@ -155,7 +135,6 @@ public final class Main extends JavaPlugin {
 
     public static int getTeamLevelMultiple() {return teamLevelMultiple;}
 
-    public static String getVersion() {return version;}
     public static String getTeamName() {return teamName;}
     public static String getChatPrefix() {return chatPrefix;}
     public static String getCurrencyName() {return currencyName;}

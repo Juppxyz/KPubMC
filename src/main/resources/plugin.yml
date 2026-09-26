@@ -4,41 +4,50 @@ main: xyz.jupp.minecraft.Main
 api-version: '26.3'
 description: "Offizielles Plugin für den KlotzscherPub Minecraft Server. (2025)"
 
+# usage /<command>: the usage line Bukkit sends on "return false" repeats the typed label (e.g. /geld)
 commands:
   money:
-  geld:
-  schilling:
+    aliases: [geld, schilling]
+    usage: /<command>
   config:
-  hilfe:
   help:
-  sc:
+    aliases: [hilfe]
+    usage: /<command>
   slimechunk:
-  einladungen:
+    aliases: [sc]
+    usage: /<command>
   invites:
+    aliases: [einladungen]
+    usage: /<command>
   team:
   ranking:
   createshop:
   hover:
   head:
-  kopf:
+    aliases: [kopf]
+    usage: /<command>
   warp:
   customItem:
   donate:
-  spenden:
+    aliases: [spenden]
+    usage: /<command>
   spawn:
   rules:
-  regeln:
+    aliases: [regeln]
+    usage: /<command>
   createbankier:
   spec:
   createjuweler:
   createdealer:
   enderchest:
-  ec:
+    aliases: [ec]
+    usage: /<command>
   debug:
   createtpdealer:
   dummy:
   bestrafung:
   wanted:
-  ursprung:
   origin:
+    aliases: [ursprung]
+    usage: /<command>
   removechunk:
