@@ -8,6 +8,7 @@ import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Indexes;
+import org.bson.Document;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.config.ConfigManager;
 
@@ -53,7 +54,16 @@ public final class MongoDB {
 
     public static synchronized void connect() {
         if (instance != null) return;
-        instance = new MongoDB(resolveConnectionString());
+        MongoDB mongoDB = new MongoDB(resolveConnectionString());
+        try {
+            // the driver connects lazily: ping once so wrong hosts or credentials fail here with a clear message
+            mongoDB.kpubMC.runCommand(new Document("ping", 1));
+        } catch (MongoException e) {
+            mongoDB.mongoClient.close();
+            throw new IllegalStateException("MongoDB nicht erreichbar oder Anmeldung fehlgeschlagen (" + CONNECTION_STRING_ENV
+                    + " / " + CONNECTION_STRING_CONFIG_KEY + " prüfen): " + e.getMessage(), e);
+        }
+        instance = mongoDB;
     }
 
     public static MongoDB getInstance() {

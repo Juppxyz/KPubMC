@@ -1,15 +1,9 @@
 package xyz.jupp.minecraft.utils;
 
 import org.bukkit.Bukkit;
-import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
-
-import java.util.concurrent.ThreadLocalRandom;
-
-import static xyz.jupp.minecraft.utils.Locations.isLocationASpawn;
-
 
 public class PlayerUpdaterTask {
 
@@ -26,15 +20,14 @@ public class PlayerUpdaterTask {
 
     // async worker: the cache lookups may hit the database, everything else goes to the main thread
     private void update() {
-        boolean isMonsterEvent = ThreadLocalRandom.current().nextInt(200) == 0;
-        Tasks.sync(() -> updateOnMainThread(isMonsterEvent));
+        Tasks.sync(this::updateOnMainThread);
 
         for (Player player : Bukkit.getOnlinePlayers()) {
             CacheHandler.getInstance().getPlayerInCache(player).updatePlayer();
         }
     }
 
-    private void updateOnMainThread(boolean isMonsterEvent) {
+    private void updateOnMainThread() {
         TabListUtil.updateTabForAll();
 
         if (Bukkit.getOnlinePlayers().isEmpty()) {
@@ -46,32 +39,6 @@ public class PlayerUpdaterTask {
             return;
         }
         serverEmptyCheck = 0;
-
-        if (isMonsterEvent) {
-            for (Player player : Bukkit.getOnlinePlayers()) {
-                warnAboutMonsterEvent(player);
-            }
-        }
-    }
-
-    // Automatic monster events never spawned mobs: MobEvent.createMobEvent ran on an async thread, where Paper
-    // rejects every entity spawn. Only this warning reached the players, and it stays that way until the owner
-    // decides whether the automatic events should really spawn mobs (/debug still starts a real one).
-    private static void warnAboutMonsterEvent(Player player) {
-        Location bedSpawn = null;
-        if (player.isSleeping()) {
-            bedSpawn = player.getBedLocation();
-        }
-        if (bedSpawn == null) {
-            bedSpawn = player.getRespawnLocation();
-        }
-        if ((bedSpawn != null) && !isLocationASpawn(bedSpawn) && bedSpawn.getWorld().equals(player.getWorld())) {
-            double distance = bedSpawn.distance(player.getLocation());
-            if (distance <= 160) {
-                player.sendMessage(Main.getChatPrefix() + "§cSicherheitsmeldung: Ungeziefer im Schlafbereich erkannt.");
-                Logger.console("created monster event for player " + player.getName() + " at " + bedSpawn);
-            }
-        }
     }
 
 }

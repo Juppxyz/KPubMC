@@ -60,7 +60,6 @@ public final class Main extends JavaPlugin {
         this.getCommand("wanted").setExecutor(new WantedCommand());
         this.getCommand("origin").setExecutor(new NullpointCommand());
         this.getCommand("removechunk").setExecutor(new RemoveChunkCommand());
-        this.getCommand("debug").setExecutor(new MonsterEventCommand());
     }
 
     private void registerListener() {

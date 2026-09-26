@@ -28,7 +28,6 @@ import org.bukkit.potion.PotionEffectType;
 import org.bukkit.util.Vector;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.items.BedrockBreakerPickaxe;
-import xyz.jupp.minecraft.items.PoisonBow;
 import xyz.jupp.minecraft.utils.Locations;
 import xyz.jupp.minecraft.utils.Text;
 
@@ -38,7 +37,6 @@ public class CustomToolsListener implements Listener {
     private static final NamespacedKey FLAMETHROWER_KEY = new NamespacedKey(Main.getInstance(), "flamethrower_sword");
     private static final NamespacedKey POISON_BOW_KEY = new NamespacedKey(Main.getInstance(), "poison_bow");
     private static final String BEDROCK_BREAKER_NAME = new BedrockBreakerPickaxe().getItemName();
-    private static final String POISON_BOW_PLAIN_NAME = Text.strip(new PoisonBow().getItemName());
 
     @EventHandler(ignoreCancelled = true)
     public void onFlamethrowerUse(PlayerArmSwingEvent event) {
@@ -122,10 +120,8 @@ public class CustomToolsListener implements Listener {
         ItemMeta meta = usedBow.getItemMeta();
         if (meta == null || !meta.hasCustomName()) return;
 
-        // PersistentDataContainer, sonst Fallback auf den Namen
-        boolean isPoisonBow = meta.getPersistentDataContainer().has(POISON_BOW_KEY, PersistentDataType.BYTE)
-                || Text.strip(Text.legacy(meta.customName())).equalsIgnoreCase(POISON_BOW_PLAIN_NAME);
-        if (!isPoisonBow) return;
+        // nur echte Giftbögen tragen den PDC-Marker, ein im Amboss umbenannter Bogen nicht
+        if (!meta.getPersistentDataContainer().has(POISON_BOW_KEY, PersistentDataType.BYTE)) return;
 
         Entity proj = event.getProjectile();
         Arrow arrow;

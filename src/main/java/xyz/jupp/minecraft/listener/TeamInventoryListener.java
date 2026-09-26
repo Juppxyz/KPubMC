@@ -17,7 +17,6 @@ import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.ChunkCache;
 import xyz.jupp.minecraft.cache.PlayerCacheObject;
 import xyz.jupp.minecraft.cache.TeamCacheObject;
-import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.database.PlayerCollection;
 import xyz.jupp.minecraft.database.TeamCollection;
 import xyz.jupp.minecraft.inventory.MainThread;
@@ -33,6 +32,9 @@ import java.util.Set;
 
 public class TeamInventoryListener implements Listener {
 
+    // same price that /team neu announces and checks
+    private static final int TEAM_CREATION_COST = 2500;
+
     private static final Set<Menu.Type> TEAM_MENUS = EnumSet.of(
             Menu.Type.TEAM_CREATE, Menu.Type.TEAM_MAIN, Menu.Type.TEAM_ROLES, Menu.Type.TEAM_INVITE, Menu.Type.TEAM_AREA);
 
@@ -42,6 +44,8 @@ public class TeamInventoryListener implements Listener {
         Menu menu = Menu.of(event.getInventory());
         if (menu == null || !TEAM_MENUS.contains(menu.getType())) return;
         event.setCancelled(true);
+        // only the menu's own buttons count, not (renamed) items in the player's inventory
+        if (event.getClickedInventory() != event.getView().getTopInventory()) return;
 
         ItemStack clickedItem = event.getCurrentItem();
         if (clickedItem == null) return;
@@ -71,13 +75,19 @@ public class TeamInventoryListener implements Listener {
             } else {
                 String teamName = teamNameWithColor.substring(2);
                 Tasks.async(() -> {
+                    if (!PlayerCollection.tryWithdrawMoney(player, TEAM_CREATION_COST)) {
+                        MainThread.run(() -> {
+                            player.sendMessage(Main.getChatPrefix() + "Das gründen eines Teams kostet " + Main.getCurrencyName(TEAM_CREATION_COST) + "§f.");
+                            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
+                        });
+                        return;
+                    }
                     CacheHandler.getInstance().createNewTeam(player, teamName, teamColor);
-                    PlayerCollection.addMoney(player, -500);
                     MainThread.run(() -> {
                         player.playSound(player.getLocation(), Sound.ENTITY_LIGHTNING_BOLT_THUNDER, 2f, 2f);
-                        player.sendMessage(Main.getChatPrefix() + String.format("Du hast das Team §%s%s §ferstellt!", teamColor, teamName));
-                        player.playerListName(Text.listName("§" + teamColor + "§l" + player.getName(), player.getName()));
-                        player.setDisplayName("§" + teamColor + "§l" + player.getName());
+                        player.sendMessage(Main.getChatPrefix() + String.format("Du hast das Team %s%s §ferstellt!", teamColor, teamName));
+                        player.playerListName(Text.listName(teamColor + "§l" + player.getName(), player.getName()));
+                        player.setDisplayName(teamColor + "§l" + player.getName());
                     });
                 });
             }
@@ -109,12 +119,6 @@ public class TeamInventoryListener implements Listener {
         if (displayName.contains("Rollen")) {
             PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
             TeamInventory.openInventory(TeamInventory.TeamInventoryTypes.SETTINGS, playerCacheObject);
-            return;
-        }
-
-        if (displayName.contains("Team-Punkte kaufen")) {
-            // Klickt der User mit Links -> 1000, Rechts -> 10000
-            buyTeamPoints(player, event.getClick().isLeftClick() ? 1000 : 10000);
             return;
         }
 
@@ -199,38 +203,6 @@ public class TeamInventoryListener implements Listener {
     }
 
 
-    private static void buyTeamPoints(Player player, int tradeType) {
-        Tasks.async(() -> {
-            PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
-            int playerMoney = PlayerCollection.getMoney(player);
-
-            if (playerMoney < tradeType) {
-                MainThread.run(() -> {
-                    player.sendMessage(Main.getChatPrefix() + "§fDu musst mindestens §c" + tradeType + " " + Main.getCurrencyName() + " §fbesitzen um diese §fzu tauschen." );
-                    player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
-                });
-                return;
-            }
-
-            int tradedMoney = (int) Math.floor(tradeType - (ConfigManager.getManager().getTradeTax() * tradeType) );
-            if (!TeamCollection.addTeamPoints(playerCacheObject.getTeamID(), tradedMoney)) return;
-
-            MainThread.run(() -> {
-                player.sendMessage(Main.getChatPrefix() + "§fDu hast §f" + Main.getCurrencyName(tradedMoney) + " §fin die Team-Kasse eingezahlt!");
-                player.playSound(player.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 2f,2f);
-                player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f,2f);
-
-                for (Player online : Bukkit.getOnlinePlayers()) {
-                    if (online.getName().equals(player.getName())) continue;
-                    if (isTeamMember(online, playerCacheObject.getTeamID())) {
-                        online.sendMessage(Main.getChatPrefix() + "§fEs wurden " + Main.getCurrencyName(tradedMoney) + " §fvon " + playerCacheObject.getTeamColor() + player.getName() + " §fin die Team-Kasse eingezahlt!");
-                    }
-                }
-            });
-        });
-    }
-
-
     private static void claimChunk(Player player) {
         Location currentLocation = player.getLocation();
 
@@ -255,6 +227,14 @@ public class TeamInventoryListener implements Listener {
             PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
             String teamID = playerCacheObject.getTeamID();
 
+            if (ChunkCache.getInstance().getClaim(worldName, chunkX, chunkZ) != null) {
+                MainThread.run(() -> {
+                    player.sendMessage(Main.getChatPrefix() + "§cDieser Chunk wurde bereits beansprucht.");
+                    player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
+                });
+                return;
+            }
+
             if (!TeamCollection.tryWithdrawTeamPoints(teamID, 200)) {
                 MainThread.run(() -> {
                     player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
@@ -265,6 +245,8 @@ public class TeamInventoryListener implements Listener {
 
             boolean isChunkClaimed = ChunkCache.getInstance().addChunk(teamID, worldName, chunkX, chunkZ);
             if (!isChunkClaimed){
+                // claimed by someone else in the meantime: give the points back
+                TeamCollection.addTeamPoints(teamID, 200);
                 MainThread.run(() -> {
                     player.sendMessage(Main.getChatPrefix() + "§cDieser Chunk wurde bereits beansprucht.");
                     player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);

@@ -73,7 +73,8 @@ public final class BlackMarketHandler {
     }
 
     private static double randomProbabilitySkewed() {
-        return randomPercentSkewed(0.1, 0.5, 3.0) / 100.0;
+        // 10-50 % surcharge on the minimum price, skewed towards 10 %
+        return randomPercentSkewed(10.0, 50.0, 3.0) / 100.0;
     }
 
     public static AtomicInteger getCurrentCosts() {

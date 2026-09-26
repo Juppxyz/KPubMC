@@ -42,7 +42,6 @@ commands:
   enderchest:
     aliases: [ec]
     usage: /<command>
-  debug:
   createtpdealer:
   dummy:
   bestrafung:

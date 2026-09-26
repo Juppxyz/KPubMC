@@ -117,10 +117,9 @@ public class WarpInventoryListener implements Listener {
 
     private static void updateWarp(Player player) {
         Tasks.async(() -> {
-            if (PlayerCollection.getMoney(player) < 5000 || !PlayerCollection.tryWithdrawMoney(player, 500)) {
+            if (!PlayerCollection.tryWithdrawMoney(player, 500)) {
                 MainThread.run(() -> {
-                    player.sendMessage(Main.getChatPrefix() + "Das aktualisieren deines Warps kostet " + Main.getCurrencyName(5000) + "§f.");
-                    player.sendMessage(Main.getChatPrefix() + "§c-5000 " + Main.getCurrencyName());
+                    player.sendMessage(Main.getChatPrefix() + "Das aktualisieren deines Warps kostet " + Main.getCurrencyName(500) + "§f.");
                     player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
                     closeMenu(player);
                 });

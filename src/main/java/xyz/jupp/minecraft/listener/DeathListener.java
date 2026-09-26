@@ -4,12 +4,10 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Sound;
-import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.inventory.ItemStack;
@@ -43,10 +41,8 @@ public class DeathListener implements Listener {
     private static final double ARENA_MAX_Z = 150257.0D;
     private final static int killCost = 250;
 
-    private static final String MONSTER_EVENT_NAME = "§c§lMonster-Event";
     // the listener is created in onEnable, so the plugin instance exists here
     private static final KeepInventoryItem KEEP_INVENTORY_ITEM = new KeepInventoryItem();
-    private static final String KEEP_INVENTORY_PLAIN_NAME = Text.strip(KEEP_INVENTORY_ITEM.getItemName());
 
     private static boolean isPlayerInArena(Player player) {
         Location location = player.getLocation();
@@ -67,8 +63,7 @@ public class DeathListener implements Listener {
     }
 
     private static boolean isKeepInventoryItem(ItemMeta meta) {
-        return meta.getPersistentDataContainer().has(KEEP_INVENTORY_ITEM.getKey(), PersistentDataType.BYTE)
-                || (meta.hasCustomName() && Text.strip(Text.legacy(meta.customName())).equalsIgnoreCase(KEEP_INVENTORY_PLAIN_NAME));
+        return meta.getPersistentDataContainer().has(KEEP_INVENTORY_ITEM.getKey(), PersistentDataType.BYTE);
     }
 
     // from a worker: a death during /stop still finishes its database work, only the main-thread part is dropped
@@ -255,29 +250,6 @@ public class DeathListener implements Listener {
             });
         });
     }
-
-    @EventHandler
-    public void onDyingEntity(EntityDeathEvent event) {
-        Player killer = event.getEntity().getKiller();
-        if (killer == null) return;
-
-        Entity entity = event.getEntity();
-        if (!entity.isCustomNameVisible()) return;
-        if (!MONSTER_EVENT_NAME.equals(Text.legacyOrNull(entity.customName()))) return;
-
-        Tasks.async(() -> {
-            String teamID = CacheHandler.getInstance().getPlayerInCache(killer).getTeamID();
-            if (teamID == null) return;
-
-            if (!TeamCollection.addTeamPoints(teamID, 10)) return;
-
-            sync(() -> forEachOnlineTeamMember(teamID, online -> {
-                online.sendMessage(Main.getChatPrefix() + "§a+10 Team-Punkte");
-                online.playSound(online.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.4f, 0.2f);
-            }));
-        });
-    }
-
 
     @EventHandler
     public void atRespawn(PlayerRespawnEvent event) {
