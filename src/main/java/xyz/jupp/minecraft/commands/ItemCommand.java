@@ -6,6 +6,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
+import xyz.jupp.minecraft.items.LightningSword;
 import xyz.jupp.minecraft.utils.PermissionsUtil;
 
 public class ItemCommand implements CommandExecutor {
@@ -25,7 +26,14 @@ public class ItemCommand implements CommandExecutor {
                 }
 
                 String itemName = args[0].toLowerCase();
-                player.sendMessage(Main.getChatPrefix() + "Unbekanntes Item: " + itemName);
+
+                switch (itemName) {
+                    case "sword" -> {
+                        player.getInventory().addItem(new LightningSword().getSword());
+                        player.sendMessage(Main.getChatPrefix() + "Du hast das STURMSCHWERT erhalten!");
+                    }
+                    default -> player.sendMessage(Main.getChatPrefix() + "Unbekanntes Item: " + itemName);
+                }
                 return true;
             }
         }

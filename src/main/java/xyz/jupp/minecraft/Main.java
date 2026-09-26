@@ -2,6 +2,7 @@ package xyz.jupp.minecraft;
 
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitWorker;
 import xyz.jupp.minecraft.cache.ChunkCache;
 import xyz.jupp.minecraft.cache.WarpCache;
 import xyz.jupp.minecraft.commands.*;
@@ -123,10 +124,32 @@ public final class Main extends JavaPlugin {
         JailHandler.startJailWatcherTask();
     }
 
-    // Bukkit cancels the plugin's tasks itself after onDisable
+    // Running async workers (e.g. a money transfer between withdraw and credit) are not interrupted by Bukkit,
+    // so the client is only closed once they are done (bounded, Paper itself waits 5 s for them after onDisable).
     @Override
     public void onDisable() {
+        getServer().getScheduler().cancelTasks(this);
+        awaitRunningWorkers(5_000L);
         MongoDB.close();
+    }
+
+    private void awaitRunningWorkers(long timeoutMillis) {
+        long deadline = System.currentTimeMillis() + timeoutMillis;
+        while (hasRunningWorkers() && System.currentTimeMillis() < deadline) {
+            try {
+                Thread.sleep(20L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+    }
+
+    private boolean hasRunningWorkers() {
+        for (BukkitWorker worker : getServer().getScheduler().getActiveWorkers()) {
+            if (worker.getOwner() == this && worker.getThread() != Thread.currentThread()) return true;
+        }
+        return false;
     }
 
 

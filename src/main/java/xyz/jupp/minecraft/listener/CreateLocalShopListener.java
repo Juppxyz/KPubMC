@@ -278,7 +278,8 @@ public class CreateLocalShopListener implements Listener {
         return firstMaterial;
     }
 
-    private static boolean removeItems(Chest chest, Material material, int amountToRemove) {
+    // synchronized: two purchases running at the same time cannot both take the same stacks
+    private static synchronized boolean removeItems(Chest chest, Material material, int amountToRemove) {
         Inventory inventory = chest.getInventory();
         int remainingAmount = amountToRemove;
         for (ItemStack item : inventory.getContents()) {

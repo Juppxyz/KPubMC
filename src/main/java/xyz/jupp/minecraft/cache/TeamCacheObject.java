@@ -73,7 +73,7 @@ public class TeamCacheObject {
         return newRole;
     }
 
-    // the points are withdrawn by the caller
+    // the points are withdrawn by the caller, holding this object's lock together with the level read
     public synchronized void upgradeTeamLevel() {
         this.level++;
         TeamCollection.incTeamLevel(teamID);

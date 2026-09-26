@@ -65,12 +65,10 @@ public class PlayerCacheObject {
     }
 
 
-    public boolean changeTeamInvite() {
-        boolean newValue;
-        synchronized (this) {
-            newValue = !teamInvites;
-            teamInvites = newValue;
-        }
+    // the write stays inside the lock, so the database receives the toggles in the same order as the cache
+    public synchronized boolean changeTeamInvite() {
+        boolean newValue = !teamInvites;
+        teamInvites = newValue;
         PlayerCollection.setTeamInvites(uuid, newValue);
         return newValue;
     }
@@ -90,10 +88,13 @@ public class PlayerCacheObject {
     // re-reads teamID/teamInvites from the database and sets the names on the main thread
     public void updatePlayer() {
         Tasks.async(() -> {
-            Document document = PlayerCollection.getPlayerDocument(uuid);
-            if (document == null) return;
-            this.teamID = document.getString("teamID");
-            this.teamInvites = document.getBoolean("teamInvites", false);
+            // same lock as changeTeamInvite, a toggle during the read is not overwritten with the old value
+            synchronized (this) {
+                Document document = PlayerCollection.getPlayerDocument(uuid);
+                if (document == null) return;
+                this.teamID = document.getString("teamID");
+                this.teamInvites = document.getBoolean("teamInvites", false);
+            }
 
             Tasks.sync(() -> {
                 Player player = getPlayer();

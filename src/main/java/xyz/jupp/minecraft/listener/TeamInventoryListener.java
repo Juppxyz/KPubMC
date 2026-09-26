@@ -99,17 +99,25 @@ public class TeamInventoryListener implements Listener {
                             return;
                         }
 
-                        int teamLevel = teamCacheObject.getLevel();
-                        int cost = teamLevel == 1 ? 5000 : (teamLevel * Main.getTeamLevelMultiple());
+                        // level, price and withdrawal under the team's lock (same monitor as upgradeTeamLevel),
+                        // so a double click cannot buy two levels at the price of the current one
+                        boolean upgraded;
+                        synchronized (teamCacheObject) {
+                            int teamLevel = teamCacheObject.getLevel();
+                            // second click in the still open menu after the max level was reached (the menu shows "Max-Level Team" then)
+                            if (teamLevel >= 5) return;
+                            int cost = teamLevel == 1 ? 5000 : (teamLevel * Main.getTeamLevelMultiple());
+                            upgraded = TeamCollection.tryWithdrawTeamPoints(teamCacheObject.getTeamID(), cost);
+                            if (upgraded) teamCacheObject.upgradeTeamLevel();
+                        }
 
-                        if (!TeamCollection.tryWithdrawTeamPoints(teamCacheObject.getTeamID(), cost)) {
+                        if (!upgraded) {
                             player.sendMessage("%s§fDein %sTeam §fhat §cnicht §fgenügend Punkte um das Level zu upgraden.".formatted(Main.getChatPrefix(), teamCacheObject.getTeamColor()));
                             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
                             Bukkit.getScheduler().runTask(Main.getInstance(), () -> {player.closeInventory();});
                             return;
                         }
 
-                        teamCacheObject.upgradeTeamLevel();
                         player.sendMessage(Main.getChatPrefix() + "§aDu hast das Level deines Teams erfolgreich hochgestuft!");
                         player.sendMessage(Main.getChatPrefix() + "§fVorteile und Upgrades kannst du am aktuellen Spawn nachlesen.");
                         player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f,2f);

@@ -216,21 +216,23 @@ public class ShopListener implements Listener {
 
             if (title.contains(Main.getShopVillagerName())) {
                 event.setCancelled(true);
-                Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
-                    ItemStack clickedItem = event.getCurrentItem();
-                    if (clickedItem == null) return;
-                    String displayName = clickedItem.getItemMeta().getDisplayName();
-                    if (displayName.equals("§7---")) return;
-                    int price = 0;
-                    if ((clickedItem.getItemMeta().getLore() != null) && !clickedItem.getItemMeta().getLore().isEmpty()){
-                        String loreLine = clickedItem.getItemMeta().getLore().get(0);
-                        Pattern pattern = Pattern.compile("§fPreis: §a(\\d+) Schilling");
-                        Matcher matcher = pattern.matcher(loreLine);
-                        if (matcher.find()) price = Integer.parseInt(matcher.group(1));
-                    }
-                    if (price < 1) return;
+                // the click is evaluated on the main thread (sold stacks are taken here), only the bookings run async
+                ItemStack clickedItem = event.getCurrentItem();
+                if (clickedItem == null || clickedItem.getItemMeta() == null) return;
+                String displayName = clickedItem.getItemMeta().getDisplayName();
+                if (displayName.equals("§7---")) return;
+                int parsedPrice = 0;
+                if ((clickedItem.getItemMeta().getLore() != null) && !clickedItem.getItemMeta().getLore().isEmpty()){
+                    String loreLine = clickedItem.getItemMeta().getLore().get(0);
+                    Pattern pattern = Pattern.compile("§fPreis: §a(\\d+) Schilling");
+                    Matcher matcher = pattern.matcher(loreLine);
+                    if (matcher.find()) parsedPrice = Integer.parseInt(matcher.group(1));
+                }
+                if (parsedPrice < 1) return;
+                int price = parsedPrice;
 
-                    if (displayName.equals("§5§oZufall")) {
+                if (displayName.equals("§5§oZufall")) {
+                    Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
                         int money = PlayerCollection.getMoney(player);
                         if ( money < price) {
                             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
@@ -251,23 +253,33 @@ public class ShopListener implements Listener {
                         player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f,2f);
                         player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f,2f);
                         Logger.console(Main.getConsolePrefix() + "player §a" + player.getUniqueId() + " §fhas §abought §f" + shopItem.material() + " for §a" + price);
+                    });
+                    return;
+                }
+
+                boolean sell = event.getClick().equals(ClickType.RIGHT);
+                int amount = clickedItem.getAmount();
+                Material material = clickedItem.getType();
+                @Nullable List<String> lore = clickedItem.getItemMeta().getLore();
+                if (sell && ((lore.size() > 1 && lore.get(1) != null) && lore.get(1).startsWith("§fVerkaufen"))) {
+                    // taken synchronously, so fast clicks cannot sell the same stack twice
+                    if (!takeItemsToSell(player, material, amount)) {
+                        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
                         return;
                     }
+                    int sellPrice = price / 2;
+                    Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
+                        PlayerCollection.addMoney(player, sellPrice);
+                        player.sendMessage(Main.getChatPrefix() + "§a" + Main.getCurrencyName(sellPrice));
+                        Logger.console(Main.getConsolePrefix() + "player §a" + player.getUniqueId() + " §fhas §6sold §f" + material.name() + " for §a" + sellPrice);
+                        player.playSound(player.getLocation(), Sound.BLOCK_LAVA_POP, 2f,2f);
+                        player.sendMessage(Main.getChatPrefix() + String.format("Du hast §e%d §6%s §fverkauft.", amount, material.name()));
+                    });
+                    return;
+                }
 
-                    boolean sell = event.getClick().equals(ClickType.RIGHT);
-                    int amount = clickedItem.getAmount();
-                    @Nullable List<String> lore = clickedItem.getItemMeta().getLore();
-                    if (sell && ((lore.size() > 1 && lore.get(1) != null) && lore.get(1).startsWith("§fVerkaufen"))) {
-                        if (sellItems(player, clickedItem.getType(), amount, price / 2)) {
-                            player.playSound(player.getLocation(), Sound.BLOCK_LAVA_POP, 2f,2f);
-                            player.sendMessage(Main.getChatPrefix() + String.format("Du hast §e%d §6%s §fverkauft.", amount, clickedItem.getType().name()));
-                        }else {
-                            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
-                        }
-                        return;
-                    }
-
-                    if (buyItems(player, clickedItem.getType(), displayName, amount, price)) {
+                Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
+                    if (buyItems(player, material, displayName, amount, price)) {
                         player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f,2f);
                     }else {
                         player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
@@ -361,7 +373,8 @@ public class ShopListener implements Listener {
     }
 
 
-    private boolean sellItems(Player player, Material material, int amount, int price) {
+    // main thread only: removes the sold amount from the first matching stack, the credit is booked by the caller
+    private boolean takeItemsToSell(Player player, Material material, int amount) {
         Inventory inventory = player.getInventory();
         int foundIndex = -1;
         for (int i = 0; i < 46; i++) {
@@ -378,9 +391,6 @@ public class ShopListener implements Listener {
         ItemMeta meta = foundItem.getItemMeta();
         if (meta != null && "§5Bargeld".equals(meta.getDisplayName())) return false;
         foundItem.setAmount(foundItem.getAmount() - amount);
-        PlayerCollection.addMoney(player, price);
-        player.sendMessage(Main.getChatPrefix() + "§a" + Main.getCurrencyName(price));
-        Logger.console(Main.getConsolePrefix() + "player §a" + player.getUniqueId() + " §fhas §6sold §f" + material.name() + " for §a" + price);
         return true;
     }
 
