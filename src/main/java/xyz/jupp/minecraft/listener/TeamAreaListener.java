@@ -17,7 +17,7 @@ public class TeamAreaListener implements Listener {
     // README: the mob griefing part is in the MobLimiterListener
 
     private boolean isProtected(@NotNull Location location, int neededLevel) {
-        ChunkCacheObject chunkCacheObject = ChunkCache.getInstance().getChunkObject(location.getWorld().getName(), location.getChunk().getX(), location.getChunk().getZ());
+        ChunkCacheObject chunkCacheObject = ChunkCache.getInstance().getClaim(location);
         if (chunkCacheObject == null) return false;
 
         TeamCacheObject teamCacheObject = CacheHandler.getInstance().getTeamCacheObject(chunkCacheObject.getTeamID());
@@ -56,7 +56,7 @@ public class TeamAreaListener implements Listener {
             location = event.getPlayer().getLocation();
         }
 
-        ChunkCacheObject chunkCacheObject = ChunkCache.getInstance().getChunkObject(location.getWorld().getName(), location.getChunk().getX(), location.getChunk().getZ());
+        ChunkCacheObject chunkCacheObject = ChunkCache.getInstance().getClaim(location);
         if (chunkCacheObject == null) return;
 
         TeamCacheObject teamCacheObject = CacheHandler.getInstance().getTeamCacheObject(chunkCacheObject.getTeamID());

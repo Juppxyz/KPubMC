@@ -42,7 +42,7 @@ public class PlayerMovementListener implements Listener {
         Location currentLocation = player.getLocation();
         String playerUUID = player.getUniqueId().toString();
 
-        ChunkCacheObject chunkCacheObject = ChunkCache.getInstance().getChunkObject(currentLocation.getWorld().getName(), newChunk.getX(), newChunk.getZ());
+        ChunkCacheObject chunkCacheObject = ChunkCache.getInstance().getClaim(currentLocation.getWorld().getName(), newChunk.getX(), newChunk.getZ());
         if (chunkCacheObject == null) {
             if (ClaimedAreaHelper.getPlayersInClaimedAreas().remove(playerUUID) |
                     ClaimedAreaHelper.getTeamPlayerInArea().remove(playerUUID)) {

@@ -77,6 +77,8 @@ def write_config(path: str, config_data: Dict[str, Any]) -> None:
 def build_prompt(current_config: Dict[str, Any]) -> str:
     old_items = current_config.get("shopItems", [])
     old_materials = [item.get("material") for item in old_items if isinstance(item, dict)]
+    # the database credentials must never be sent to OpenAI
+    prompt_config = {key: value for key, value in current_config.items() if key != "mongoConnectionString"}
 
     return (
         "Du wirkst als Konfigurations-Generator für einen kleinen Minecraft-Ingame-Shop. "
@@ -112,7 +114,7 @@ def build_prompt(current_config: Dict[str, Any]) -> str:
         "- 'shopItems' muss ein Array mit exakt 10 Elementen sein.\n"
         "- Kein Fließtext, keine Erklärungen, keine Kommentare – nur JSON.\n\n"
         f"Hier ist die aktuelle Konfiguration als Kontext (NICHT direkt zurückgeben, nur zur Orientierung):\n"
-        f"{json.dumps(current_config, ensure_ascii=False)}"
+        f"{json.dumps(prompt_config, ensure_ascii=False)}"
     )
 
 

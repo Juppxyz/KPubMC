@@ -15,13 +15,10 @@ import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.*;
 import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.database.PlayerCollection;
-import xyz.jupp.minecraft.database.TeamBlockCollection;
 import xyz.jupp.minecraft.database.TeamCollection;
 import xyz.jupp.minecraft.inventory.TeamInventory;
 import xyz.jupp.minecraft.utils.AreaOptionsEnum;
 import xyz.jupp.minecraft.utils.Locations;
-import xyz.jupp.minecraft.utils.Logger;
-import xyz.jupp.minecraft.utils.TeamBlock;
 
 public class TeamInventoryListener implements Listener {
 
@@ -49,9 +46,7 @@ public class TeamInventoryListener implements Listener {
                         }
                         String teamName = teamNamePaperItem.getItemMeta().getDisplayName().substring(2);
                         CacheHandler.getInstance().createNewTeam(player, teamName, teamColor);
-                        PlayerCollection playerCollection = new PlayerCollection(player);
-                        int money = playerCollection.getMoney();
-                        playerCollection.updateMoney(money - 500);
+                        PlayerCollection.addMoney(player, -500);
                         player.playSound(player.getLocation(), Sound.ENTITY_LIGHTNING_BOLT_THUNDER, 2f, 2f);
                         player.sendMessage(Main.getChatPrefix() + String.format("Du hast das Team §%s%s §ferstellt!", teamColor, teamName));
                         player.setPlayerListName("§" + teamColor + "§l" + player.getName());
@@ -105,17 +100,16 @@ public class TeamInventoryListener implements Listener {
                         }
 
                         int teamLevel = teamCacheObject.getLevel();
-                        int teamPoints = teamCacheObject.getTeamCollection().getTeamPoints();
                         int cost = teamLevel == 1 ? 5000 : (teamLevel * Main.getTeamLevelMultiple());
 
-                        if (teamPoints < cost) {
+                        if (!TeamCollection.tryWithdrawTeamPoints(teamCacheObject.getTeamID(), cost)) {
                             player.sendMessage("%s§fDein %sTeam §fhat §cnicht §fgenügend Punkte um das Level zu upgraden.".formatted(Main.getChatPrefix(), teamCacheObject.getTeamColor()));
                             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
                             Bukkit.getScheduler().runTask(Main.getInstance(), () -> {player.closeInventory();});
                             return;
                         }
 
-                        teamCacheObject.upgradeTeamLevel(teamPoints - cost);
+                        teamCacheObject.upgradeTeamLevel();
                         player.sendMessage(Main.getChatPrefix() + "§aDu hast das Level deines Teams erfolgreich hochgestuft!");
                         player.sendMessage(Main.getChatPrefix() + "§fVorteile und Upgrades kannst du am aktuellen Spawn nachlesen.");
                         player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f,2f);
@@ -141,50 +135,6 @@ public class TeamInventoryListener implements Listener {
                     });
                 }
 
-                /** @Deprecated
-                if (displayName.contains("TeamBlock")) {
-                    Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
-                        PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
-                        TeamCacheObject teamCacheObject = playerCacheObject.getTeamCacheObject();
-                        int alreadyPurchased = teamCacheObject.getAlreadyPurchased();
-                        int price = 2500 + (alreadyPurchased * 2500);
-                        int money = playerCacheObject.getPlayerCollection().getMoney();
-
-                        if (money < price) {
-                            player.sendMessage(Main.getChatPrefix() + "Du hast derzeit nicht genügend Taler.");
-                            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
-                            return;
-                        }
-
-                        playerCacheObject.getPlayerCollection().updateMoney(money - price);
-                        CacheHandler.getInstance().incAlreadyPurchased(playerCacheObject);
-                        player.getInventory().addItem(TeamBlock.createTeamBlock(playerCacheObject));
-                        TeamBlockCollection teamBlockCollection = new TeamBlockCollection(playerCacheObject.getTeamID());
-
-                        teamBlockCollection.createNewTeamBlock();
-                        TeamBlockCacheObject teamBlockCacheObject = TeamBlockCache.getTeamBlock(playerCacheObject.getTeamID());
-                        teamBlockCacheObject.setActive(true);
-
-                        Logger.console("teamblock (" +alreadyPurchased + ") was bought [" + teamCacheObject.getTeamID() + "]");
-
-                        PlayerCacheObject tmpPlayerCacheObject = null;
-                        for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
-                            onlinePlayer.sendMessage(Main.getChatPrefix() + "Der TeamBlock von " + playerCacheObject.getTeamColor()+playerCacheObject.getTeamCacheObject().getTeamName() + " §fist nun aktiv!");
-                            tmpPlayerCacheObject = CacheHandler.getInstance().getPlayerInCache(onlinePlayer);
-                            if ((tmpPlayerCacheObject.getTeamID() != null) && (tmpPlayerCacheObject.getTeamID().equals(playerCacheObject.getTeamID())) ){
-                                onlinePlayer.playSound(player.getLocation(), Sound.ENTITY_ENDER_DRAGON_GROWL, 2f,2f);
-                                onlinePlayer.sendMessage(playerCacheObject.getTeamColor() + "Team Info §8» §fEuer TeamBlock wurde " + (alreadyPurchased>0 ? "wieder " : "") + "aktiviert!");
-                                onlinePlayer.sendMessage(playerCacheObject.getTeamColor() + "§fNun habt ihr die Möglichkeit durch seltene Items, TeamPunkte freizuschalten. Diese bieten euch starke Extras!");
-                                onlinePlayer.sendMessage(playerCacheObject.getTeamColor() + "§fDer Block kann jedoch von anderen Teams zerstört werden, passt also gut auf ihn auf.");
-                                continue;
-                            }
-                            onlinePlayer.playSound(onlinePlayer.getLocation(), Sound.ENTITY_LIGHTNING_BOLT_IMPACT, 2f,2f);
-                        }
-                    });
-                    player.closeInventory();
-                    return;
-                }**/
-
                 if (displayName.contains("Rollen")) {
                     PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
                     TeamInventory.openInventory(TeamInventory.TeamInventoryTypes.SETTINGS, playerCacheObject);;
@@ -194,8 +144,7 @@ public class TeamInventoryListener implements Listener {
                 if (displayName.contains("Team-Punkte kaufen")) {
                     Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
                         PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
-                        PlayerCollection playerCollection = playerCacheObject.getPlayerCollection();
-                        int playerMoney = playerCollection.getMoney();
+                        int playerMoney = PlayerCollection.getMoney(player);
                         // Klickt der User mit Links -> 100, Rechts -> 1000
                         int tradeType = event.getClick().isLeftClick() ? 1000 : 10000;
 
@@ -206,9 +155,7 @@ public class TeamInventoryListener implements Listener {
                         }
 
                         int tradedMoney = (int) Math.floor(tradeType - (ConfigManager.getManager().getTradeTax() * tradeType) );
-                        TeamCollection teamCollection = new TeamCollection(playerCacheObject.getTeamID());
-                        int teamPoints = teamCollection.getTeamPoints();
-                        teamCollection.changeTeamPoints(teamPoints + tradedMoney);
+                        if (!TeamCollection.addTeamPoints(playerCacheObject.getTeamID(), tradedMoney)) return;
 
                         player.sendMessage(Main.getChatPrefix() + "§fDu hast §f" + Main.getCurrencyName(tradedMoney) + " §fin die Team-Kasse eingezahlt!");
                         player.playSound(player.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 2f,2f);
@@ -243,16 +190,13 @@ public class TeamInventoryListener implements Listener {
                         }
 
                         PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
-                        TeamCollection teamCollection = new TeamCollection(playerCacheObject.getTeamID());
-                        int teamPoints = teamCollection.getTeamPoints();
 
-                        if (teamPoints < 200) {
+                        if (!TeamCollection.tryWithdrawTeamPoints(playerCacheObject.getTeamID(), 200)) {
                             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
                             player.sendMessage(Main.getChatPrefix() + "§cDein Team hat leider noch nicht genügend Punkte.");
                             return;
                         }
 
-                        teamCollection.changeTeamPoints(teamPoints - 200);
                         boolean isChunkClaimed = ChunkCache.getInstance().addChunk(
                                 playerCacheObject.getTeamID(),
                                 currentLocation.getWorld().getName(),
@@ -354,8 +298,7 @@ public class TeamInventoryListener implements Listener {
                                 PlayerCacheObject selectedPlayerCacheObject = CacheHandler.getInstance().getPlayerInCache(selectedPlayer);
                                 newRole = CacheHandler.getInstance().changeTeamMemberRole(selectedPlayerCacheObject);
                             }else {
-                                TeamCollection teamCollection = new TeamCollection(playerCacheObject.getTeamID());
-                                newRole = teamCollection.changeRoleFromMember(player);
+                                newRole = TeamCollection.toggleMemberRole(playerCacheObject.getTeamID(), player.getUniqueId());
                             }
 
                             ItemMeta itemMeta = clickedItem.getItemMeta();

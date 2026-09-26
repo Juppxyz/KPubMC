@@ -28,8 +28,7 @@ public class PlayerHeadsCommand implements CommandExecutor {
             }
 
             Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
-                PlayerCollection playerCollection = new PlayerCollection(player);
-                int money = playerCollection.getMoney();
+                int money = PlayerCollection.getMoney(player);
 
                 if (money < 100) {
                     player.sendMessage(Main.getChatPrefix() + "Ein §aCustomHead §fkostet " + Main.getCurrencyName(100) + "§f.");
@@ -50,7 +49,11 @@ public class PlayerHeadsCommand implements CommandExecutor {
                 playerHeadMeta.setDisplayName("§a" + targetName);
                 playerHead.setItemMeta(playerHeadMeta);
 
-                playerCollection.updateMoney(money - 100);
+                if (!PlayerCollection.tryWithdrawMoney(player, 100)) {
+                    player.sendMessage(Main.getChatPrefix() + "Ein §aCustomHead §fkostet " + Main.getCurrencyName(100) + "§f.");
+                    player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
+                    return;
+                }
                 player.getInventory().addItem(playerHead);
 
                 player.sendMessage(Main.getChatPrefix() + "Du hast den Kopf von §a" + targetName + " §fgekauft.");

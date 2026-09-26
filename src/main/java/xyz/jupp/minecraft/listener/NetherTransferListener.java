@@ -59,8 +59,7 @@ public class NetherTransferListener implements Listener {
         float transferTaxRate = ConfigManager.getManager().getNetherTransferTax();
 
         Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
-            PlayerCollection playerCollection = new PlayerCollection(player);
-            int money = playerCollection.getMoney();
+            int money = PlayerCollection.getMoney(player);
 
             if (money <= 100) {
                 // ⚠ player.sendMessage() eigentlich nur im Main-Thread
@@ -71,8 +70,7 @@ public class NetherTransferListener implements Listener {
             }
 
             int tax = Math.round(money * transferTaxRate);
-            int updatedMoney = money - tax;
-            playerCollection.updateMoney(updatedMoney);
+            PlayerCollection.addMoney(player, -tax);
 
             Bukkit.getScheduler().runTask(Main.getInstance(), () -> {
                 player.sendMessage(String.format(

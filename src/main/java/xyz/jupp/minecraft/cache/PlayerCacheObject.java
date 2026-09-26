@@ -4,47 +4,59 @@ import org.bson.Document;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
-import xyz.jupp.minecraft.Main;
+import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.database.PlayerCollection;
+import xyz.jupp.minecraft.utils.Tasks;
+
+import java.util.UUID;
 
 public class PlayerCacheObject {
 
-    // knowledge variables
-    private String teamID;
-    private Player player;
-    private boolean teamInvites;
-    private PlayerCollection playerCollection;
-    private TeamCacheObject teamCacheObject = null;
+    // knowledge variables (written by async tasks and the main thread, therefore volatile)
+    private final UUID uuid;
+    private volatile Player player;
+    private volatile String teamID;
+    private volatile boolean teamInvites;
+    private volatile TeamCacheObject teamCacheObject = null;
 
-    private boolean jail = false;
-    private long jailEnd = 0;
-    private boolean isWanted = false;
-
-
-    PlayerCacheObject(@NotNull Player player){
-        this.playerCollection = new PlayerCollection(player);
-        this.player = player;
-        initPlayerObject();
-    }
+    private volatile boolean jail = false;
+    private volatile long jailEnd = 0;
+    private volatile boolean isWanted = false;
 
 
-    private void initPlayerObject() {
-        Document document = getPlayerCollection().getPlayerDocument();
+    private PlayerCacheObject(@NotNull UUID uuid, @NotNull Document document) {
+        this.uuid = uuid;
         this.teamID = document.getString("teamID");
         if (teamID != null) {
             this.teamCacheObject = TeamCache.getTeam(teamID);
         }
-        this.teamInvites = document.getBoolean("teamInvites");
-        this.jail = document.getBoolean("jail");
-        this.jailEnd = document.getLong("jailEnd");
-        this.isWanted = document.getBoolean("isWanted");
+        this.teamInvites = document.getBoolean("teamInvites", false);
+        this.jail = document.getBoolean("jail", false);
+        this.jailEnd = document.get("jailEnd") instanceof Number number ? number.longValue() : 0L;
+        this.isWanted = document.getBoolean("isWanted", false);
+    }
+
+    // Loads the player from the database (blocking). A missing document is created like on the first login.
+    static PlayerCacheObject load(@NotNull UUID uuid) {
+        Document document = PlayerCollection.getPlayerDocument(uuid);
+        if (document == null) {
+            PlayerCollection.createIfAbsent(uuid);
+            document = PlayerCollection.getPlayerDocument(uuid);
+            if (document == null) throw new IllegalStateException("no player document for " + uuid);
+        }
+        return new PlayerCacheObject(uuid, document);
+    }
+
+    void attach(@NotNull Player player) {
+        if (this.player != player) this.player = player;
     }
 
 
     // new added in 2023 version
     public String getTeamColor() {
-        if (teamID == null) return "§a";
-        return getTeamCacheObject().getTeamColor();
+        TeamCacheObject team = getTeamCacheObject();
+        if (teamID == null || team == null) return "§a";
+        return team.getTeamColor();
     }
 
 
@@ -54,51 +66,61 @@ public class PlayerCacheObject {
 
 
     public boolean changeTeamInvite() {
-        teamInvites = !teamInvites;
-        return playerCollection.changeTeamInvite();
+        boolean newValue;
+        synchronized (this) {
+            newValue = !teamInvites;
+            teamInvites = newValue;
+        }
+        PlayerCollection.setTeamInvites(uuid, newValue);
+        return newValue;
     }
 
 
     public void changeTeamID(String id) {
         this.teamID = id;
-        if (teamID != null) {
+        if (id != null) {
             this.teamCacheObject = TeamCache.getTeam(id);
         }else {
             this.teamCacheObject = null;
         }
-        getPlayerCollection().changeTeamID(id);
+        PlayerCollection.changeTeamID(uuid, id);
     }
 
 
+    // re-reads teamID/teamInvites from the database and sets the names on the main thread
     public void updatePlayer() {
-        Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
-            Document document = new PlayerCollection(this.player).getPlayerDocument();
-            String dbTeamID = document.getString("teamID");
-            boolean dbTeamInvites = document.getBoolean("teamInvites");
-            this.teamID = dbTeamID;
-            this.teamInvites = dbTeamInvites;
+        Tasks.async(() -> {
+            Document document = PlayerCollection.getPlayerDocument(uuid);
+            if (document == null) return;
+            this.teamID = document.getString("teamID");
+            this.teamInvites = document.getBoolean("teamInvites", false);
 
-            if (getTeamID() == null || getTeamCacheObject() == null) {
-                getPlayer().setDisplayName("§a" + getPlayer().getName());
-                getPlayer().setPlayerListName("§a" + getPlayer().getName());
-                return;
-            }
+            Tasks.sync(() -> {
+                Player player = getPlayer();
+                if (player == null || !player.isOnline()) return;
+                TeamCacheObject team = getTeamCacheObject();
 
-            if (getTeamCacheObject().getTeamOwner().equals(getPlayer().getUniqueId().toString())) {
-                getPlayer().setPlayerListName(getTeamCacheObject().getTeamColor() + "§l" + getPlayer().getName());
-                getPlayer().setDisplayName(getTeamCacheObject().getTeamColor() + "§l" + getPlayer().getName());
-                return;
-            }
+                if (getTeamID() == null || team == null) {
+                    player.setDisplayName("§a" + player.getName());
+                    player.setPlayerListName("§a" + player.getName());
+                    return;
+                }
 
-            if (getTeamCacheObject().getTeamVices().contains(getPlayer().getUniqueId().toString())) {
-                getPlayer().setPlayerListName(getTeamCacheObject().getTeamColor() + "§o" + getPlayer().getName());
-                getPlayer().setDisplayName(getTeamCacheObject().getTeamColor() + "§o" + getPlayer().getName());
-                return;
-            }
+                if (team.getTeamOwner().equals(uuid.toString())) {
+                    player.setPlayerListName(team.getTeamColor() + "§l" + player.getName());
+                    player.setDisplayName(team.getTeamColor() + "§l" + player.getName());
+                    return;
+                }
 
-            getPlayer().setPlayerListName(getTeamCacheObject().getTeamColor() + getPlayer().getName());
-            getPlayer().setDisplayName(getTeamCacheObject().getTeamColor() + getPlayer().getName());
+                if (team.getTeamVices().contains(uuid.toString())) {
+                    player.setPlayerListName(team.getTeamColor() + "§o" + player.getName());
+                    player.setDisplayName(team.getTeamColor() + "§o" + player.getName());
+                    return;
+                }
 
+                player.setPlayerListName(team.getTeamColor() + player.getName());
+                player.setDisplayName(team.getTeamColor() + player.getName());
+            });
         });
     }
 
@@ -111,7 +133,7 @@ public class PlayerCacheObject {
         long now = System.currentTimeMillis();
         long futureMillis = now + (hours * 60L * 60L * 1000L);
         this.jailEnd = futureMillis;
-        playerCollection.setJail(jail, futureMillis);
+        PlayerCollection.setJail(uuid, jail, futureMillis);
     }
     public void unsetJail(boolean isEscaped) {
         this.jail = false;
@@ -123,7 +145,7 @@ public class PlayerCacheObject {
             this.jailEnd = 0L;
         }
         this.isWanted = isEscaped;
-        playerCollection.unsetJail(this.jailEnd);
+        PlayerCollection.unsetJail(uuid, this.jailEnd);
     }
     public boolean isJail() {
         return jail;
@@ -136,22 +158,24 @@ public class PlayerCacheObject {
     }
     public void setWanted(boolean wanted) {
         isWanted = wanted;
-        playerCollection.setIsWanted(wanted);
+        PlayerCollection.setIsWanted(uuid, wanted);
     }
 
 
 
     // Getter
-    public PlayerCollection getPlayerCollection() {
-        return playerCollection;
-    }
-
     public boolean isTeamInvites() {
         return teamInvites;
     }
 
-    public Player getPlayer() {
-        return player;
+    public UUID getUuid() {
+        return uuid;
+    }
+
+    // null if the player is offline and was never attached
+    public @Nullable Player getPlayer() {
+        Player attached = this.player;
+        return attached != null ? attached : Bukkit.getPlayer(uuid);
     }
 
     public String getTeamID() {

@@ -28,9 +28,9 @@ public class JoinQuitListener implements Listener {
     @EventHandler
     public void onPreLogin(AsyncPlayerPreLoginEvent event) {
         UUID uuid = event.getUniqueId();
-        PlayerCollection playerCollection = new PlayerCollection(uuid.toString());
-        if (!playerCollection.existPlayerInDatabase()) {
-            playerCollection.createNewPlayerInDatabase();
+        PlayerCollection.createIfAbsent(uuid);
+        if (event.getLoginResult() == AsyncPlayerPreLoginEvent.Result.ALLOWED) {
+            CacheHandler.getInstance().preloadPlayer(uuid);
         }
     }
 

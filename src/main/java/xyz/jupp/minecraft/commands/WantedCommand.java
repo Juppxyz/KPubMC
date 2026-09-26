@@ -11,8 +11,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
-import xyz.jupp.minecraft.cache.CacheHandler;
-import xyz.jupp.minecraft.cache.PlayerCacheObject;
+import xyz.jupp.minecraft.database.PlayerCollection;
 
 import java.util.List;
 import java.util.UUID;
@@ -25,8 +24,7 @@ public class WantedCommand implements CommandExecutor {
             Player player = (Player) commandSender;
 
             Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
-                PlayerCacheObject pco = CacheHandler.getInstance().getPlayerInCache(player);
-                List<Document> wantedPlayers = pco.getPlayerCollection().getWantedPlayers();
+                List<Document> wantedPlayers = PlayerCollection.getWantedPlayers();
 
                 if (wantedPlayers.isEmpty()) {
                     player.sendMessage(Main.getChatPrefix() + " ");

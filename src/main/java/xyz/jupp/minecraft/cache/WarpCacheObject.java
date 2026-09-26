@@ -4,10 +4,10 @@ import org.jetbrains.annotations.NotNull;
 
 public class WarpCacheObject {
 
-    private double x = 0.0D;
-    private double y = 0.0D;
-    private double z = 0.0D;
-    private String worldName = null;
+    private final double x;
+    private final double y;
+    private final double z;
+    private final String worldName;
 
     WarpCacheObject(double x, double y, double z, @NotNull String worldName) {
         this.x = x;

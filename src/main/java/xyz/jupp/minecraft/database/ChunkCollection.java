@@ -4,45 +4,40 @@ import com.mongodb.client.FindIterable;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.model.Filters;
 import org.bson.Document;
-import org.bson.conversions.Bson;
-import org.bukkit.Bukkit;
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
 
+/**
+ * DAO for the collection 'chunks' (claimed team chunks). Stateless, every method is blocking.
+ */
+public final class ChunkCollection {
 
-public class ChunkCollection {
+    private ChunkCollection() {}
 
-    private static final MongoCollection<Document> chunkCollection = MongoDB.getInstance().getKpubMC().getCollection("chunks");
-
-    private String teamID = null;
-    private String chunkID = null;
-
-    public ChunkCollection(@NotNull String teamID, @NotNull String chunkID) {
-        this.teamID = teamID;
-        this.chunkID = chunkID;
+    private static MongoCollection<Document> chunks() {
+        return MongoDB.getInstance().getKpubMC().getCollection("chunks");
     }
 
-    public void createChunkInDatabase(@NotNull String worldName, int x, int z) {
+    public static void createChunkInDatabase(@NotNull String teamID, @NotNull String chunkID, @NotNull String worldName, int x, int z) {
         Document doc = new Document("teamID", teamID);
         doc.append("x", x);
         doc.append("z", z);
         doc.append("worldName", worldName);
-        doc.append("chunkID", this.chunkID);
-        chunkCollection.insertOne(doc);
-        Bukkit.getConsoleSender().sendMessage(Main.getConsolePrefix() + "");
+        doc.append("chunkID", chunkID);
+        chunks().insertOne(doc);
+        Main.getInstance().getSLF4JLogger().info("claimed chunk {} for team {}", chunkID, teamID);
     }
 
-    public void removeChunkInDatabase(@NotNull String teamID) {
-        Bson filter = Filters.and(
-                Filters.eq("chunkID", this.chunkID),
+    public static void removeChunkInDatabase(@NotNull String teamID, @NotNull String chunkID) {
+        chunks().deleteOne(Filters.and(
+                Filters.eq("chunkID", chunkID),
                 Filters.eq("teamID", teamID)
-        );
-        chunkCollection.deleteOne(filter);
+        ));
+        Main.getInstance().getSLF4JLogger().info("released chunk {} of team {}", chunkID, teamID);
     }
 
     public static FindIterable<Document> getAllChunksFromDatabase() {
-        FindIterable<Document> iterDoc = chunkCollection.find();
-        return iterDoc;
+        return chunks().find();
     }
 
 }

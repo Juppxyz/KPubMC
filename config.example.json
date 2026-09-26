@@ -3,6 +3,7 @@
   "tradeTax": 0.24,
   "netherTransferTax": 0.7,
   "deathTax": 0.15,
+  "mongoConnectionString": "mongodb://USER:PASSWORD@HOST:27017/?authSource=admin",
   "shopItems": [
     {"name": "", "price": 250, "sell": false, "amount": 32, "description": "", "material": "FIREWORK_ROCKET"},
     {"name": "", "price": 20000, "sell": false, "amount": 1, "description": "", "material": "NETHER_STAR"},

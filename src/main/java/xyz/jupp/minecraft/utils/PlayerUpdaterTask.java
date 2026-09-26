@@ -18,11 +18,10 @@ import static xyz.jupp.minecraft.utils.Locations.isLocationASpawn;
 import static xyz.jupp.minecraft.utils.MobEvent.createMobEvent;
 
 
-public class PlayerUpdaterTask implements TaskHandler.Tasks {
+public class PlayerUpdaterTask {
 
     private int serverEmptyCheck = 0;
 
-    @Override
     public boolean startTask() {
         Bukkit.getScheduler().scheduleAsyncRepeatingTask(Main.getInstance(), () -> {
             Bukkit.getConsoleSender().sendMessage(Main.getConsolePrefix() + "§fupdating players data..");

@@ -36,12 +36,6 @@ public class ShopInventory {
 
     private static Inventory createNewMainShopInventory(Player player) {
         boolean isReducedPrice = false;
-        //PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
-        //if (playerCacheObject.getTeamID() != null) {
-        //    TeamCollection teamCollection = new TeamCollection(playerCacheObject.getTeamID());
-        //    TeamBlockCacheObject teamBlockCacheObject = TeamBlockCache.getTeamBlock(teamCollection.getTeamID());
-        //    isReducedPrice = (teamCollection.getTeamPoints() > 49) && teamBlockCacheObject.isActive();
-        //}
 
         Inventory inventory = Bukkit.createInventory(player, 36, isReducedPrice ? Main.getShopVillagerName()+ " §8(§aRabatte!§8)" : Main.getShopVillagerName());
         List<ShopItem> shopItems = ConfigManager.getShopItems();
@@ -55,9 +49,9 @@ public class ShopInventory {
         for (int i = 0; i < shopItems.size(); i++) {
             if (tmpInvIndex == 16) tmpInvIndex = 20;
             if (tmpInvIndex > 24) break;
-            allPrices += shopItems.get(i).getPrice();
+            allPrices += shopItems.get(i).price();
             ShopItem shopItem = shopItems.get(i);
-            int price = shopItem.getPrice();
+            int price = shopItem.price();
 
             float tradeTax = ConfigManager.getManager().getTradeTax();
             if (tradeTax != 0.0) {
@@ -65,16 +59,16 @@ public class ShopInventory {
             }
 
             if (isReducedPrice) {
-                float discount = price - (shopItem.getPrice() * 0.2f);
+                float discount = price - (shopItem.price() * 0.2f);
                 price = Math.round(discount);
             }
             inventory.setItem(tmpInvIndex, createNewShopItem(
-                    shopItem.getName(),
-                    shopItem.getMaterial(),
+                    shopItem.name(),
+                    shopItem.material(),
                     price,
-                    shopItem.isSell(),
-                    shopItem.getAmount(),
-                    shopItem.getDescription(), isReducedPrice)
+                    shopItem.sell(),
+                    shopItem.amount(),
+                    shopItem.description(), isReducedPrice)
             );
             tmpInvIndex++;
         }

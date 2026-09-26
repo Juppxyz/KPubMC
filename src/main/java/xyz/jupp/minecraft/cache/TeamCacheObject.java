@@ -1,55 +1,43 @@
 package xyz.jupp.minecraft.cache;
 
 import org.bson.Document;
-import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
-import xyz.jupp.minecraft.Main;
-import xyz.jupp.minecraft.cache.exceptions.TeamNotExistException;
 import xyz.jupp.minecraft.database.TeamCollection;
 import xyz.jupp.minecraft.utils.AreaOptionsEnum;
 import xyz.jupp.minecraft.utils.MemberListDoc;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
+import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class TeamCacheObject {
 
-    private String          teamID;
-    private String          teamName;
-    private String          teamColor;
-    private List<Document>  membersList;
-    private TeamCollection  teamCollection;
-    private int             level;
-    private boolean         zoneOptionPvP;
-    private boolean         zoneOptionMobDamage;
-    private boolean         zoneOptionInteract;
+    private final String            teamID;
+    private final String            teamName;
+    private final String            teamColor;
+    private final List<Document>    membersList;
+    private volatile int            level;
+    private volatile boolean        zoneOptionPvP;
+    private volatile boolean        zoneOptionMobDamage;
+    private volatile boolean        zoneOptionInteract;
 
 
     // roles
-    private String              teamOwner;
-    private ArrayList<String>   teamVices = new ArrayList<>(10);
+    private final String            teamOwner;
+    private final List<String>      teamVices = new CopyOnWriteArrayList<>();
 
-    TeamCacheObject(@NotNull String teamID) throws TeamNotExistException {
-        this.teamCollection = new TeamCollection(teamID);
-        if (!teamCollection.existTeam()) throw new TeamNotExistException(String.format("the team with id %s doesn't exist", teamID));
+    // Throws a RuntimeException if the document misses required fields, TeamCache treats the team as unknown then.
+    TeamCacheObject(@NotNull String teamID, @NotNull Document document) {
         this.teamID = teamID;
-        initTeamCacheObject();
-    }
-
-    private void initTeamCacheObject() {
-        Document document = getTeamCollection().getTeamDocument();
         this.teamName = document.getString("teamName");
         this.teamColor = document.getString("teamColor");
         this.teamOwner = document.getString("teamOwner");
-        this.membersList = (List<Document>) document.get("members");
+        this.membersList = new CopyOnWriteArrayList<>(document.getList("members", Document.class));
         this.level = document.getInteger("level");
-        if (!membersList.isEmpty()) {
-            for (Document doc : membersList) {
-                if (doc.getString("role").equals("vice")){
-                    teamVices.add(doc.getString("uuid"));
-                }
+        for (Document doc : membersList) {
+            if (doc.getString("role").equals("vice")){
+                teamVices.add(doc.getString("uuid"));
             }
         }
         this.zoneOptionPvP = document.getBoolean("zoneOptionPvP");
@@ -58,83 +46,73 @@ public class TeamCacheObject {
     }
 
     public void addPlayerToMemberList(@NotNull Player player) {
-        membersList.add(MemberListDoc.getDoc(player));
-        getTeamCollection().addMemberToTeam(player);
+        Document memberDocument = MemberListDoc.getDoc(player);
+        membersList.add(memberDocument);
+        TeamCollection.addMember(teamID, memberDocument);
     }
 
     public void removePlayerFromMemberList(@NotNull Player player) {
-        for (Document document : membersList) {
-            if (Objects.equals(document.getString("uuid"), player.getUniqueId().toString())) {
-                membersList.remove(document);
-                getTeamCollection().removeMemberFromTeam(player);
-                teamVices.remove(player.getUniqueId().toString());
-                return;
-            }
+        String uuid = player.getUniqueId().toString();
+        if (membersList.removeIf(document -> uuid.equals(document.getString("uuid")))) {
+            TeamCollection.removeMember(teamID, player.getUniqueId());
+            teamVices.remove(uuid);
         }
-
     }
 
-    public String changePlayerTeamRole(@NotNull Player player) {
-        boolean isVice = false;
-        if (getTeamVices().contains(player.getUniqueId().toString())){
-            getTeamVices().remove(player.getUniqueId().toString());
-        }else {
-            isVice = true;
-            getTeamVices().add(player.getUniqueId().toString());
+    // toggles member <-> vice in the cache and writes the resulting role
+    public synchronized String changePlayerTeamRole(@NotNull UUID uuid) {
+        String id = uuid.toString();
+        boolean isVice = !teamVices.contains(id);
+        if (isVice) {
+            teamVices.add(id);
+        } else {
+            teamVices.remove(id);
         }
-        Bukkit.getConsoleSender().sendMessage(Main.getConsolePrefix() + "change role from §a" + player.getUniqueId() + "§f(§a" + isVice + "§f) [" + getTeamID() + "]");
-        return getTeamCollection().changeRoleFromMember(player);
+        String newRole = isVice ? "vice" : "member";
+        TeamCollection.setMemberRole(teamID, uuid, newRole);
+        return newRole;
     }
 
-    public void upgradeTeamLevel(int cost) {
+    // the points are withdrawn by the caller
+    public synchronized void upgradeTeamLevel() {
         this.level++;
-        getTeamCollection().incTeamLevel();
-        getTeamCollection().changeTeamPoints(cost);
+        TeamCollection.incTeamLevel(teamID);
     }
 
-    public void downgradeTeamLevel() {
+    // the points are reset by the caller
+    public synchronized void downgradeTeamLevel() {
         if (this.level > 0) this.level--;
-        if (!this.zoneOptionInteract) {
-            this.zoneOptionInteract = true;
-            getTeamCollection().changeAreaSettings(AreaOptionsEnum.INTERACTION);
-        }
-        if (!this.zoneOptionPvP) {
-            this.zoneOptionPvP = true;
-            getTeamCollection().changeAreaSettings(AreaOptionsEnum.PVP);
-        }
-        if (!this.zoneOptionMobDamage) {
-            this.zoneOptionMobDamage = true;
-            getTeamCollection().changeAreaSettings(AreaOptionsEnum.MOB_GRIEFING);
-        }
-        getTeamCollection().decTeamLevel();
-        getTeamCollection().changeTeamPoints(0);
+        this.zoneOptionInteract = true;
+        this.zoneOptionPvP = true;
+        this.zoneOptionMobDamage = true;
+        TeamCollection.resetAreaOptions(teamID);
+        TeamCollection.decTeamLevel(teamID);
     }
 
-    public boolean changeAreaSettings(@NotNull AreaOptionsEnum areaOption) {
-        boolean dbResult = getTeamCollection().changeAreaSettings(areaOption);
-        if (dbResult) {
-            if (areaOption == AreaOptionsEnum.PVP) {
-                this.zoneOptionPvP = !isZoneOptionPvP();
-            }else if (areaOption == AreaOptionsEnum.INTERACTION) {
-                this.zoneOptionInteract = !isZoneOptionInteract();
-            }else if (areaOption == AreaOptionsEnum.MOB_GRIEFING) {
-                this.zoneOptionMobDamage = !isZoneOptionMobDamage();
+    public synchronized boolean changeAreaSettings(@NotNull AreaOptionsEnum areaOption) {
+        boolean newValue = switch (areaOption) {
+            case PVP -> !zoneOptionPvP;
+            case INTERACTION -> !zoneOptionInteract;
+            case MOB_GRIEFING -> !zoneOptionMobDamage;
+        };
+        boolean teamExists = TeamCollection.setAreaOption(teamID, areaOption, newValue);
+        if (teamExists) {
+            switch (areaOption) {
+                case PVP -> this.zoneOptionPvP = newValue;
+                case INTERACTION -> this.zoneOptionInteract = newValue;
+                case MOB_GRIEFING -> this.zoneOptionMobDamage = newValue;
             }
         }
-        return dbResult;
+        return teamExists;
     }
 
 
     // Getter
-    public TeamCollection getTeamCollection() {
-        return teamCollection;
-    }
-
     public String getTeamColor() {
         return "" + teamColor;
     }
 
-    public ArrayList<String> getTeamVices() {
+    public List<String> getTeamVices() {
         return teamVices;
     }
 

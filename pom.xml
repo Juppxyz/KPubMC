@@ -29,6 +29,10 @@
                 <version>3.16.0</version>
                 <configuration>
                     <release>${java.version}</release>
+                    <!-- a leftover local Secrets.java (old credential holder) must never end up in the jar -->
+                    <excludes>
+                        <exclude>xyz/jupp/minecraft/utils/Secrets.java</exclude>
+                    </excludes>
                 </configuration>
             </plugin>
             <plugin>
@@ -51,10 +55,6 @@
                                 <relocation>
                                     <pattern>org.bson</pattern>
                                     <shadedPattern>${shade.package}.bson</shadedPattern>
-                                </relocation>
-                                <relocation>
-                                    <pattern>org.json</pattern>
-                                    <shadedPattern>${shade.package}.json</shadedPattern>
                                 </relocation>
                             </relocations>
                             <transformers>
@@ -104,11 +104,6 @@
             <groupId>org.mongodb</groupId>
             <artifactId>mongodb-driver-sync</artifactId>
             <version>5.13.0</version>
-        </dependency>
-        <dependency>
-            <groupId>org.json</groupId>
-            <artifactId>json</artifactId>
-            <version>20260814</version>
         </dependency>
     </dependencies>
 </project>

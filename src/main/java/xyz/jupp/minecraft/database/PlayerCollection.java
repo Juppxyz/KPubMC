@@ -1,213 +1,180 @@
 package xyz.jupp.minecraft.database;
 
-import com.mongodb.client.FindIterable;
 import com.mongodb.client.MongoCollection;
+import com.mongodb.client.model.FindOneAndUpdateOptions;
+import com.mongodb.client.model.ReturnDocument;
+import com.mongodb.client.model.UpdateOptions;
+import com.mongodb.client.result.UpdateResult;
 import org.bson.Document;
 import org.bson.conversions.Bson;
-import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
 import xyz.jupp.minecraft.Main;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
+import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
+import static com.mongodb.client.model.Filters.gte;
+import static com.mongodb.client.model.Projections.include;
+import static com.mongodb.client.model.Updates.inc;
+import static com.mongodb.client.model.Updates.set;
 
+/**
+ * DAO for the collection 'player'. Stateless, every method is blocking (call it off the main thread where possible).
+ * money is stored as Int32 and only changed with $inc, so parallel bookings cannot overwrite each other.
+ */
+public final class PlayerCollection {
 
-public class PlayerCollection {
+    private PlayerCollection() {}
 
-    private final MongoCollection<Document> playerCollection = MongoDB.getInstance().getKpubMC().getCollection("player");
+    public enum TransferResult { SUCCESS, INSUFFICIENT_FUNDS, TARGET_NOT_FOUND }
 
-    private Player player;
-    private String uuid;
+    private static final FindOneAndUpdateOptions RETURN_MONEY_AFTER = new FindOneAndUpdateOptions()
+            .returnDocument(ReturnDocument.AFTER)
+            .projection(include("money"));
 
-    public PlayerCollection(@NotNull Player player) {
-        this.player = player;
-        this.uuid = player.getUniqueId().toString();
+    private static MongoCollection<Document> players() {
+        return MongoDB.getInstance().getKpubMC().getCollection("player");
     }
 
-    // only usage fpr the prelogin
-    public PlayerCollection(@NotNull String uuid) {
-        this.uuid = uuid;
+    private static Logger log() {
+        return Main.getInstance().getSLF4JLogger();
+    }
+
+    private static Bson byUuid(@NotNull UUID uuid) {
+        return eq("uuid", uuid.toString());
     }
 
 
-    /* create a new player in the database */
-    public void createNewPlayerInDatabase() {
-        // currently not needed, this checks is in front of the currently only usage
-        //if (existPlayerInDatabase()) return;
-
-        String uuid;
-        if (getPlayer() == null) {
-            uuid = getUuid();
-        }else {
-            uuid = getPlayer().getUniqueId().toString();
+    /* create the player document if it does not exist yet (same fields and types as ever) */
+    public static void createIfAbsent(@NotNull UUID uuid) {
+        Document defaults = new Document("teamInvites", false)
+                .append("cheatingKicks", 0)
+                .append("loginStreak", 0)
+                .append("jail", false)
+                .append("jailEnd", 0L)
+                .append("isWanted", false)
+                .append("teamID", null)
+                .append("money", 250);
+        UpdateResult result = players().updateOne(byUuid(uuid), new Document("$setOnInsert", defaults), new UpdateOptions().upsert(true));
+        if (result.getUpsertedId() != null) {
+            log().info("create new player {} in database.", uuid);
         }
-
-        Document playerDocument = new Document("uuid", uuid);
-        playerDocument.append("teamInvites", false);
-        playerDocument.append("cheatingKicks", 0);
-        playerDocument.append("loginStreak", 0);
-        playerDocument.append("jail", false);
-        playerDocument.append("jailEnd", 0L);
-        playerDocument.append("isWanted", false);
-        playerDocument.append("teamID", null);
-        playerDocument.append("money", 250);
-        playerDocument.append("uuid", uuid);
-        Bukkit.getConsoleSender().sendMessage(Main.getConsolePrefix() + "create new player " + uuid + " in database.");
-        playerCollection.insertOne(playerDocument);
     }
 
-    public boolean existPlayerInDatabase() {
-        Bson filter;
-        if (getPlayer() == null){
-            filter = eq("uuid", getUuid());
-            return (playerCollection.find(filter).first() != null);
+    public static @Nullable Document getPlayerDocument(@NotNull UUID uuid) {
+        return players().find(byUuid(uuid)).first();
+    }
+
+
+    public static void setTeamInvites(@NotNull UUID uuid, boolean teamInvites) {
+        players().updateOne(byUuid(uuid), set("teamInvites", teamInvites));
+        log().info("updated teamInvites from {} to {}", uuid, teamInvites);
+    }
+
+    public static void changeTeamID(@NotNull UUID uuid, @Nullable String teamID) {
+        players().updateOne(byUuid(uuid), set("teamID", teamID));
+        log().info("updated teamID from {} to {}", uuid, teamID);
+    }
+
+
+    /* money: reads return 0 for unknown players, mutations log exactly one line */
+
+    public static int getMoney(@NotNull UUID uuid) {
+        Document document = players().find(byUuid(uuid)).projection(include("money")).first();
+        return document == null ? 0 : asInt(document.get("money"));
+    }
+
+    public static int getMoney(@NotNull Player player) {
+        return getMoney(player.getUniqueId());
+    }
+
+    /** Adds delta (may be negative) without any balance check. false if the player has no document. */
+    public static boolean addMoney(@NotNull UUID uuid, int delta) {
+        Document updated = players().findOneAndUpdate(byUuid(uuid), inc("money", delta), RETURN_MONEY_AFTER);
+        if (updated == null) {
+            log().warn("money {} {} failed: player not found", uuid, signed(delta));
+            return false;
         }
-        filter = eq("uuid", getPlayer().getUniqueId().toString());
-        return (playerCollection.find(filter).first() != null);
-    }
-
-
-    public boolean changeTeamInvite() {
-        Bson filter = eq("uuid", getUuid());
-        Document document = playerCollection.find(filter).first();
-        if (document == null) return false;
-
-        boolean newValue = !document.getBoolean("teamInvites");
-        Document updatedDocument = new Document("$set", new Document("teamInvites", newValue));
-        playerCollection.updateOne(filter, updatedDocument);
-        Bukkit.getConsoleSender().sendMessage(Main.getChatPrefix() + "updated teamInvites from " + getPlayer().getUniqueId() + " to " + newValue);
-        return newValue;
-    }
-
-    public boolean changeTeamID(String id) {
-        Bson filter = eq("uuid", getUuid());
-        Document document = playerCollection.find(filter).first();
-        if (document == null) return false;
-        ;
-        Document updatedDocument = new Document("$set", new Document("teamID", id));
-        playerCollection.updateOne(filter, updatedDocument);
-        Bukkit.getConsoleSender().sendMessage(Main.getChatPrefix() + "updated teamID from " + getPlayer().getUniqueId() + " to " + id);
+        log().info("money {} {} -> {}", uuid, signed(delta), updated.get("money"));
         return true;
     }
 
-
-    public int getMoney() {
-        Bson filter = eq("uuid", getUuid());
-        Document document = playerCollection.find(filter).first();
-        int money = document.getInteger("money");
-        Bukkit.getConsoleSender().sendMessage(Main.getChatPrefix() + "get money from " + getPlayer().getUniqueId() + "(" + money + ")");
-        return money;
+    public static boolean addMoney(@NotNull Player player, int delta) {
+        return addMoney(player.getUniqueId(), delta);
     }
 
-    public boolean updateMoney(int money) {
-        Bson filter = eq("uuid", getUuid());
-        Document updatedDocument = new Document("$set", new Document("money", money));
-        playerCollection.updateOne(filter, updatedDocument);
-        Bukkit.getConsoleSender().sendMessage(Main.getChatPrefix() + "updated money from " + getPlayer().getUniqueId() + " to " + money);
-        return false;
+    /** Withdraws amount only if the balance is at least amount (same as the former 'money < amount' checks). */
+    public static boolean tryWithdrawMoney(@NotNull UUID uuid, int amount) {
+        Document updated = players().findOneAndUpdate(and(byUuid(uuid), gte("money", amount)), inc("money", -amount), RETURN_MONEY_AFTER);
+        if (updated == null) return false;
+        log().info("money {} {} -> {}", uuid, signed(-amount), updated.get("money"));
+        return true;
     }
 
-
-    public boolean setJail(boolean jail, long jailEnd) {
-        Bson filter = eq("uuid", getUuid());
-        Document updatedDocument = new Document("$set", new Document("jail", jail).append("jailEnd", jailEnd));
-        playerCollection.updateOne(filter, updatedDocument);
-        Bukkit.getConsoleSender().sendMessage(Main.getChatPrefix() + "set jail for " + getPlayer().getUniqueId() + " until " + jailEnd);
-        return false;
+    public static boolean tryWithdrawMoney(@NotNull Player player, int amount) {
+        return tryWithdrawMoney(player.getUniqueId(), amount);
     }
 
-    public boolean unsetJail(long jailEnd) {
-        Bson filter = eq("uuid", getUuid());
-        Document updatedDocument = new Document("$set", new Document("jail", false).append("jailEnd", jailEnd));
-        playerCollection.updateOne(filter, updatedDocument);
-        Bukkit.getConsoleSender().sendMessage(Main.getChatPrefix() + "unset jail for " + getPlayer().getUniqueId());
-        return false;
-    }
-
-    public boolean setIsWanted(boolean isWanted) {
-        Bson filter = eq("uuid", getUuid());
-        Document updatedDocument = new Document("$set", new Document("isWanted", isWanted));
-        playerCollection.updateOne(filter, updatedDocument);
-        Bukkit.getConsoleSender().sendMessage(Main.getChatPrefix() + "set wanted for " + getPlayer().getUniqueId() + " to " + isWanted);
-        return false;
+    /** Withdraws from the sender first, then credits the receiver; the sender is refunded if the receiver is missing. */
+    public static TransferResult transferMoney(@NotNull UUID from, @NotNull UUID to, int amount) {
+        if (!tryWithdrawMoney(from, amount)) return TransferResult.INSUFFICIENT_FUNDS;
+        boolean credited;
+        try {
+            credited = addMoney(to, amount);
+        } catch (RuntimeException e) {
+            addMoney(from, amount);
+            throw e;
+        }
+        if (!credited) {
+            addMoney(from, amount);
+            return TransferResult.TARGET_NOT_FOUND;
+        }
+        return TransferResult.SUCCESS;
     }
 
 
-    public List<Document> getWantedPlayers() {
+    /* jail (new added in 2025) */
+
+    public static void setJail(@NotNull UUID uuid, boolean jail, long jailEnd) {
+        players().updateOne(byUuid(uuid), new Document("$set", new Document("jail", jail).append("jailEnd", jailEnd)));
+        log().info("set jail for {} until {}", uuid, jailEnd);
+    }
+
+    public static void unsetJail(@NotNull UUID uuid, long jailEnd) {
+        players().updateOne(byUuid(uuid), new Document("$set", new Document("jail", false).append("jailEnd", jailEnd)));
+        log().info("unset jail for {}", uuid);
+    }
+
+    public static void setIsWanted(@NotNull UUID uuid, boolean isWanted) {
+        players().updateOne(byUuid(uuid), set("isWanted", isWanted));
+        log().info("set wanted for {} to {}", uuid, isWanted);
+    }
+
+    public static List<Document> getWantedPlayers() {
         long now = System.currentTimeMillis();
 
         Bson filter = new Document("isWanted", true)
                 .append("jailEnd", new Document("$gt", now));
 
-        List<Document> membersList = playerCollection
+        return players()
                 .find(filter)
                 .sort(new Document("jailEnd", -1))
                 .into(new ArrayList<>());
-
-        return membersList;
     }
 
 
-
-    // Getter
-    private String getUuid() {
-        return uuid;
-    }
-    public Player getPlayer() {
-        return player;
-    }
-    public Document getPlayerDocument() {
-        Bson filter = eq("uuid", getPlayer().getUniqueId().toString());
-        return playerCollection.find(filter).first();
+    private static int asInt(Object value) {
+        return value instanceof Number number ? number.intValue() : 0;
     }
 
-
-
-
-
-    // currently not in usage
-    public int getCheatingKicks() {
-        Bson filter = eq("uuid", getUuid());
-        Document document = playerCollection.find(filter).first();
-        if (document == null) return 0;
-
-        int cheatingKicks = document.getInteger("cheatingKicks");
-        Bukkit.getConsoleSender().sendMessage(Main.getChatPrefix() + "get cheatingKicks from" + getPlayer().getUniqueId() + "(" + cheatingKicks + ")");
-        return cheatingKicks;
-    }
-
-    public boolean incrementCheatingKicks() {
-        Bson filter = eq("uuid", getUuid());
-        Document update = new Document("$inc", new Document("cheatingKicks", 1));
-        playerCollection.updateOne(filter, update);
-        Bukkit.getConsoleSender().sendMessage(Main.getChatPrefix() + "updated cheatingKicks from " + getPlayer().getUniqueId());
-        return false;
-    }
-
-
-    public int getLoginStreak() {
-        Bson filter = eq("uuid", getUuid());
-        Document document = playerCollection.find(filter).first();
-        int loginStreak = document.getInteger("loginStreak");
-        Bukkit.getConsoleSender().sendMessage(Main.getChatPrefix() + "get loginStreak from " + getPlayer().getUniqueId() + "(" + loginStreak + ")");
-        return loginStreak;
-    }
-
-    public void incLoginStreak() {
-        Bson filter = eq("uuid", getUuid());
-        Document updatedDocument = new Document("$inc", new Document("loginStreak", 1));
-        playerCollection.updateOne(filter, updatedDocument);
-        Bukkit.getConsoleSender().sendMessage(Main.getChatPrefix() + "increment loginStreak (" + getPlayer().getUniqueId() + ")");
-    }
-
-    public void resetLoginStreak() {
-        Bson filter = eq("uuid", getUuid());
-        Document updatedDocument = new Document("$set", new Document("loginStreak", 0));
-        playerCollection.updateOne(filter, updatedDocument);
-        Bukkit.getConsoleSender().sendMessage(Main.getChatPrefix() + "reset loginStreak (" + getPlayer().getUniqueId() + ")");
+    private static String signed(int value) {
+        return String.format("%+d", value);
     }
 
 }

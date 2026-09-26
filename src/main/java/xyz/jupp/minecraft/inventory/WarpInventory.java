@@ -12,7 +12,6 @@ import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.WarpCache;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -48,7 +47,7 @@ public class WarpInventory {
         }
 
         int[] middleRowSlots = {10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43};
-        List<String> warpPlayerUUIDs = new ArrayList<>(WarpCache.getInstance().getWarpCache().keySet());
+        List<UUID> warpPlayerUUIDs = WarpCache.getInstance().getWarpOwners();
 
         int totalWarps = warpPlayerUUIDs.size();
         int totalPages = (int) Math.ceil((double) totalWarps / WARPS_PER_PAGE);
@@ -60,12 +59,11 @@ public class WarpInventory {
         int startIndex = (page - 1) * WARPS_PER_PAGE;
         int endIndex = Math.min(startIndex + WARPS_PER_PAGE, totalWarps);
 
-        List<String> warpsOnPage = warpPlayerUUIDs.subList(startIndex, endIndex);
+        List<UUID> warpsOnPage = warpPlayerUUIDs.subList(startIndex, endIndex);
 
         // Warps auf der aktuellen Seite anzeigen
         for (int i = 0; i < warpsOnPage.size(); i++) {
-            String warpPlayerUUID = warpsOnPage.get(i);
-            UUID uuid = UUID.fromString(warpPlayerUUID);
+            UUID uuid = warpsOnPage.get(i);
             OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(uuid);
             if (offlinePlayer == null || offlinePlayer.getName() == null) continue;
 
@@ -88,7 +86,7 @@ public class WarpInventory {
             inventory.setItem(middleRowSlots[i], playerHead);
         }
 
-        boolean hasPlayerWarp = WarpCache.getInstance().getWarpCache().containsKey(player.getUniqueId().toString());
+        boolean hasPlayerWarp = WarpCache.getInstance().hasWarp(player.getUniqueId());
         if (hasPlayerWarp) {
             inventory.setItem(45, createItemStack("§4Deinen Warp löschen", Material.BARRIER));
         }

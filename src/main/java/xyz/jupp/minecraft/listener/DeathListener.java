@@ -21,6 +21,7 @@ import xyz.jupp.minecraft.cache.PlayerCacheObject;
 import xyz.jupp.minecraft.cache.TeamCacheObject;
 import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.database.PlayerCollection;
+import xyz.jupp.minecraft.database.TeamCollection;
 import xyz.jupp.minecraft.items.KeepInventoryItem;
 import xyz.jupp.minecraft.utils.JailHandler;
 import xyz.jupp.minecraft.utils.Locations;
@@ -115,15 +116,13 @@ public class DeathListener implements Listener {
 
         Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
             float deathTaxRate = ConfigManager.getManager().getDeathTax();
-            PlayerCollection playerCollection = new PlayerCollection(player);
-            int money = playerCollection.getMoney();
+            int money = PlayerCollection.getMoney(player);
 
             if (money <= 250) {
                 player.sendMessage(Main.getChatPrefix() + "Dir wurde §ckeine §fTodes-Steuer berechnet.");
             }else {
                 int tax = Math.round(money * deathTaxRate);
-                int updatedMoney = money - tax;
-                playerCollection.updateMoney(updatedMoney);
+                PlayerCollection.addMoney(player, -tax);
 
                 player.sendMessage(String.format(
                         "%sDir wurden §a%s §8(§2%.0f%%§8) §fals Todes-Steuer berechnet.",
@@ -157,13 +156,11 @@ public class DeathListener implements Listener {
                     killer.sendMessage(Main.getChatPrefix() + "§fHier deine Belohnung!");
                     killer.sendMessage(Main.getChatPrefix() + " ");
 
-                    int currentMoney = killerPlayerCacheObject.getPlayerCollection().getMoney();
-                    killerPlayerCacheObject.getPlayerCollection().updateMoney(currentMoney + 10000);
+                    PlayerCollection.addMoney(killer, 10000);
                     killer.sendMessage(Main.getChatPrefix() + "§a+" + Main.getCurrencyName(10000));
 
                     if (killerPlayerCacheObject.getTeamID() != null) {
-                        int currentTeamPoints = killerPlayerCacheObject.getTeamCacheObject().getTeamCollection().getTeamPoints();
-                        killerPlayerCacheObject.getTeamCacheObject().getTeamCollection().changeTeamPoints(currentTeamPoints + 1000);
+                        TeamCollection.addTeamPoints(killerPlayerCacheObject.getTeamID(), 1000);
                         PlayerCacheObject tmpPco;
                         for (Player p : Bukkit.getOnlinePlayers()) {
                             tmpPco = CacheHandler.getInstance().getPlayerInCache(p);
@@ -184,19 +181,20 @@ public class DeathListener implements Listener {
 
                 if (killerPlayerCacheObject.getTeamID() == null || playerCacheObject.getTeamID() == null) return;
 
-                int targetTeamPoints = killerPlayerCacheObject.getTeamCacheObject().getTeamCollection().getTeamPoints();
-                int playerTeamPoints = playerCacheObject.getTeamCacheObject().getTeamCollection().getTeamPoints();
+                TeamCacheObject killerTeam = killerPlayerCacheObject.getTeamCacheObject();
+                TeamCacheObject playerTeam = playerCacheObject.getTeamCacheObject();
+                if (killerTeam == null || playerTeam == null) return;
 
-                killerPlayerCacheObject.getTeamCacheObject().getTeamCollection().changeTeamPoints(targetTeamPoints + killCost);
+                // a kill inside the own team only costs the points (the credit was always overwritten before)
+                if (!killerTeam.getTeamID().equals(playerTeam.getTeamID())) {
+                    TeamCollection.addTeamPoints(killerTeam.getTeamID(), killCost);
+                }
+                // never below 0, returns the points before the kill
+                int playerTeamPoints = TeamCollection.withdrawTeamPointsFloored(playerTeam.getTeamID(), killCost);
                 int earnedPoints = killCost;
                 if (playerTeamPoints < killCost) {
-                    playerCacheObject.getTeamCacheObject().getTeamCollection().changeTeamPoints(0);
                     earnedPoints = playerTeamPoints;
-                    playerCacheObject.getTeamCacheObject().downgradeTeamLevel();
-
-
-                }else {
-                    playerCacheObject.getTeamCacheObject().getTeamCollection().changeTeamPoints(playerTeamPoints - killCost);
+                    playerTeam.downgradeTeamLevel();
                 }
 
                 PlayerCacheObject tmpPlayerCacheObject;
@@ -250,9 +248,7 @@ public class DeathListener implements Listener {
                 PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(killer);
                 if (playerCacheObject.getTeamID() == null) return;
 
-                TeamCacheObject teamCacheObject = playerCacheObject.getTeamCacheObject();
-                int teamPoints = teamCacheObject.getTeamCollection().getTeamPoints();
-                teamCacheObject.getTeamCollection().changeTeamPoints(teamPoints + 10);
+                if (!TeamCollection.addTeamPoints(playerCacheObject.getTeamID(), 10)) return;
 
                 PlayerCacheObject tmpPlayerCacheObject;
                 for (Player online : Bukkit.getOnlinePlayers()) {

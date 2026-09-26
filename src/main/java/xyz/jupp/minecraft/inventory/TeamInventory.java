@@ -31,8 +31,7 @@ public class TeamInventory {
         Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () ->{
 
             PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
-            TeamCollection teamCollection = new TeamCollection(playerCacheObject.getTeamID());
-            int teamPoints =  teamCollection.getTeamPoints();
+            int teamPoints = TeamCollection.getTeamPoints(playerCacheObject.getTeamID());
             Bukkit.getScheduler().runTask(Main.getInstance(), () -> {
                 player.closeInventory();
                 if (teamInventoryTypes.equals(TeamInventoryTypes.MAIN)) {
@@ -124,7 +123,7 @@ public class TeamInventory {
                     ));
                     continue;
                 }
-                ArrayList<String> teamVices = playerCacheObject.getTeamCacheObject().getTeamVices();
+                List<String> teamVices = playerCacheObject.getTeamCacheObject().getTeamVices();
                 if (teamVices.contains(player.getUniqueId().toString())) {
                     inventory.setItem(i, createItemStack(
                             "§fDeine Rolle: "+ playerCacheObject.getTeamColor() + "§oVize",
@@ -152,24 +151,6 @@ public class TeamInventory {
                 }
                 continue;
             }
-
-            //if (i == 4){
-            //    TeamBlockCacheObject teamBlockCacheObject = TeamBlockCache.getTeamBlock(playerCacheObject.getTeamID());
-            //    if (playerCacheObject.getTeamCacheObject().getAlreadyPurchased() > 0 && ( teamBlockCacheObject != null && teamBlockCacheObject.isActive())) {
-            //        inventory.setItem(i, createItemStack("TeamPunkte: " + playerCacheObject.getTeamColor() + teamCollection.getTeamPoints(), Material.GOLD_INGOT));
-            //    }else {
-            //        if (isOwner && (teamBlockCacheObject == null || !teamBlockCacheObject.isActive())) {
-            //            ItemStack itemStack = createItemStack(playerCacheObject.getTeamColor() + "TeamBlock", Material.BEACON);
-            //            ItemMeta itemMeta = itemStack.getItemMeta();
-            //            ArrayList<String> lores = new ArrayList<>(1);
-            //            lores.add("§fFür " + Main.getCurrencyName(2500 + (playerCacheObject.getTeamCacheObject().getAlreadyPurchased() * 2500)) + " §fkaufen?");
-            //            itemMeta.setLore(lores);
-            //            itemStack.setItemMeta(itemMeta);
-            //            inventory.setItem(i, itemStack);
-            //        }
-            //    }
-            //    continue;
-            //}
 
             if (i == 4 && (isOwner || isVice)) {
                 inventory.setItem(i, getColoredBanner(playerCacheObject.getTeamColor()));
@@ -296,7 +277,7 @@ public class TeamInventory {
         inventory.setItem(17, createItemStack("§cZurück", Material.BARRIER));
 
         List<Document> memberList = teamCacheObject.getMembersList();
-        ArrayList<String> viceList = teamCacheObject.getTeamVices();
+        List<String> viceList = teamCacheObject.getTeamVices();
         OfflinePlayer teamMember = null;
         ItemStack playerHead = null;
 

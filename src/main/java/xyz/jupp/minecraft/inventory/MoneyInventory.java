@@ -27,8 +27,7 @@ public class MoneyInventory {
     // wrapper
     public static void openInventory(@NotNull Player player, @NotNull MoneyInventoryTypes moneyInventoryType) {
         Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () ->{
-            PlayerCollection playerCollection = new PlayerCollection(player);
-            final int money = playerCollection.getMoney();
+            final int money = PlayerCollection.getMoney(player);
             Bukkit.getScheduler().runTask(Main.getInstance(), () -> {
                 player.closeInventory();
                 if (moneyInventoryType.equals(MoneyInventoryTypes.MAIN)) {

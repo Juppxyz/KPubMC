@@ -35,8 +35,7 @@ public class TeamCommand implements CommandExecutor {
                     return false;
                 }
 
-                PlayerCollection playerCollection = new PlayerCollection(player);
-                int money = playerCollection.getMoney();
+                int money = PlayerCollection.getMoney(player);
                 if (money < 2500) {
                     player.sendMessage(Main.getChatPrefix() + "Das gründen eines Teams kostet " + Main.getCurrencyName(2500) + "§f.");
                     player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);

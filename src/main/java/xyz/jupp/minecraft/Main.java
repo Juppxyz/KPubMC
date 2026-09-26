@@ -5,6 +5,7 @@ import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
+import xyz.jupp.minecraft.cache.ChunkCache;
 import xyz.jupp.minecraft.cache.WarpCache;
 import xyz.jupp.minecraft.commands.*;
 import xyz.jupp.minecraft.config.ConfigManager;
@@ -104,7 +105,6 @@ public final class Main extends JavaPlugin {
 
         // Bukkit.getPluginManager().registerEvents(new SwordListener(), this);
         // Bukkit.getPluginManager().registerEvents(new ElytraFlyListener(), this);
-        // Bukkit.getPluginManager().registerEvents(new TeamBlockListener(), this);
     }
 
     private void registerTasks() {
@@ -123,9 +123,18 @@ public final class Main extends JavaPlugin {
         Logger.console("load config..");
         ConfigManager.getManager().loadConfig();
         Logger.console("connecting to database..");
+        try {
+            MongoDB.connect();
+        } catch (RuntimeException e) {
+            getSLF4JLogger().error(e.getMessage());
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
+        Tasks.async(MongoDB.getInstance()::ensureIndexes);
         Logger.console("init warps..");
-        WarpCache.getInstance().getWarpCache();
-        MongoDB.getInstance();
+        int warps = WarpCache.getInstance().load();
+        int claimedChunks = ChunkCache.getInstance().load();
+        Logger.console("loaded " + warps + " warps and " + claimedChunks + " claimed chunks");
         registerCommands();
         registerListener();
         registerTasks();
@@ -137,6 +146,7 @@ public final class Main extends JavaPlugin {
     @Override
     public void onDisable() {
         if (afkTask != null) afkTask.cancel();
+        MongoDB.close();
     }
 
 

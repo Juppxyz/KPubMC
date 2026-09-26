@@ -83,9 +83,7 @@ public class ShopListener implements Listener {
                         player.getInventory().setItemInMainHand(null);
 
                         Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
-                            PlayerCollection playerCollection = new PlayerCollection(player);
-                            int currentMoney = playerCollection.getMoney();
-                            playerCollection.updateMoney(currentMoney + amountToDeposit);
+                            PlayerCollection.addMoney(player, amountToDeposit);
 
                             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f, 2f);
                             Bukkit.getConsoleSender().sendMessage(Main.getConsolePrefix() + "deposit from " + player.getUniqueId() + " (" + amountToDeposit + ")");
@@ -162,11 +160,9 @@ public class ShopListener implements Listener {
                 player.getInventory().setItemInMainHand(null);
 
                 Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
-                    TeamCollection teamCollection = new TeamCollection(playerCacheObject.getTeamID());
-                    int currentPoints = teamCollection.getTeamPoints();
-                    teamCollection.changeTeamPoints(currentPoints + earnedTeamPoints);
+                    if (!TeamCollection.addTeamPoints(playerCacheObject.getTeamID(), earnedTeamPoints)) return;
                     player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f, 2f);
-                    Bukkit.getConsoleSender().sendMessage(Main.getConsolePrefix() + "add teampoints from " + currentPoints + " to " +  (currentPoints + earnedTeamPoints) + "(" + player.getUniqueId() + ")");
+                    Bukkit.getConsoleSender().sendMessage(Main.getConsolePrefix() + "add teampoints +" + earnedTeamPoints + " (" + player.getUniqueId() + ")");
 
                     PlayerCacheObject tmpPlayerCacheObject;
                     for (Player online : Bukkit.getOnlinePlayers()) {
@@ -233,25 +229,28 @@ public class ShopListener implements Listener {
                         if (matcher.find()) price = Integer.parseInt(matcher.group(1));
                     }
                     if (price < 1) return;
-                    PlayerCollection playerCollection = new PlayerCollection(player);
 
                     if (displayName.equals("§5§oZufall")) {
-                        int money = playerCollection.getMoney();
+                        int money = PlayerCollection.getMoney(player);
                         if ( money < price) {
                             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
                             return;
                         }
                         Random random = new Random();
-                        int randomIndex = random.nextInt(ConfigManager.getShopItems().size());
-                        ShopItem shopItem = ConfigManager.getShopItems().get(randomIndex);
-                        ItemStack itemStack = createNewItem(Material.getMaterial(shopItem.getMaterial()), shopItem.getName());
-                        itemStack.setAmount(shopItem.getAmount());
-                        playerCollection.updateMoney(money - price);
-                        playerCollection.getPlayer().getInventory().addItem(itemStack);
+                        List<ShopItem> shopItems = ConfigManager.getShopItems();
+                        int randomIndex = random.nextInt(shopItems.size());
+                        ShopItem shopItem = shopItems.get(randomIndex);
+                        ItemStack itemStack = createNewItem(Material.getMaterial(shopItem.material()), shopItem.name());
+                        itemStack.setAmount(shopItem.amount());
+                        if (!PlayerCollection.tryWithdrawMoney(player, price)) {
+                            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
+                            return;
+                        }
+                        player.getInventory().addItem(itemStack);
                         player.sendMessage(Main.getChatPrefix() + "§c-" + price + " " + Main.getCurrencyName());
                         player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f,2f);
                         player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f,2f);
-                        Logger.console(Main.getConsolePrefix() + "player §a" + playerCollection.getPlayer().getUniqueId() + " §fhas §abought §f" + shopItem.getMaterial() + " for §a" + price);
+                        Logger.console(Main.getConsolePrefix() + "player §a" + player.getUniqueId() + " §fhas §abought §f" + shopItem.material() + " for §a" + price);
                         return;
                     }
 
@@ -259,7 +258,7 @@ public class ShopListener implements Listener {
                     int amount = clickedItem.getAmount();
                     @Nullable List<String> lore = clickedItem.getItemMeta().getLore();
                     if (sell && ((lore.size() > 1 && lore.get(1) != null) && lore.get(1).startsWith("§fVerkaufen"))) {
-                        if (sellItems(playerCollection, clickedItem.getType(), amount, price / 2)) {
+                        if (sellItems(player, clickedItem.getType(), amount, price / 2)) {
                             player.playSound(player.getLocation(), Sound.BLOCK_LAVA_POP, 2f,2f);
                             player.sendMessage(Main.getChatPrefix() + String.format("Du hast §e%d §6%s §fverkauft.", amount, clickedItem.getType().name()));
                         }else {
@@ -268,7 +267,7 @@ public class ShopListener implements Listener {
                         return;
                     }
 
-                    if (buyItems(playerCollection, clickedItem.getType(), displayName, amount, price)) {
+                    if (buyItems(player, clickedItem.getType(), displayName, amount, price)) {
                         player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f,2f);
                     }else {
                         player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
@@ -316,14 +315,10 @@ public class ShopListener implements Listener {
                     double tax = cost + (ConfigManager.getManager().getTradeTax() * cost);
                     cost = Math.toIntExact(Math.round(tax));
 
-                    PlayerCollection playerCollection = new PlayerCollection(player);
-                    int money = playerCollection.getMoney();
-
-                    if (money < cost) {
+                    if (!PlayerCollection.tryWithdrawMoney(player, cost)) {
                         player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
                         player.sendMessage(Main.getChatPrefix() + "§cDu hast leider nicht genügend Geld.");
                     }else  {
-                        playerCollection.updateMoney(money - cost);
                         player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f,2f);
                         String itemName = clickedItem.getItemMeta().getDisplayName().split(" ")[0];
                         player.getInventory().addItem(new ItemStack(gettingMaterial, 1));
@@ -340,17 +335,14 @@ public class ShopListener implements Listener {
                 Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
                     if (event.getCurrentItem() == null || !event.getCurrentItem().getType().equals(BlackMarketHandler.getCurrentBlackMarketItem().getType())) return;
 
-                    PlayerCollection playerCollection = new PlayerCollection(player);
-                    int money = playerCollection.getMoney();
                     int costs = BlackMarketHandler.getCurrentCosts().get();
 
-                    if (money < costs) {
+                    if (!PlayerCollection.tryWithdrawMoney(player, costs)) {
                         player.playSound(player, Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
                         player.sendMessage(Main.getBlackMarketDealerVillagerName() + " §7» §f§oPuh, dafür will ich mehr Schillinge als du hast, verzieh dich!");
                         return;
                     }
 
-                    playerCollection.updateMoney(money - costs);
                     player.getInventory().addItem(BlackMarketHandler.getCurrentBlackMarketItem());
                     player.sendMessage(Main.getChatPrefix() + "§c-%d%s".formatted(BlackMarketHandler.getCurrentCosts().get(), Main.getCurrencyName()));
                     player.sendMessage(Main.getBlackMarketDealerVillagerName() + " §7» §f§oBesuche mich gerne bald wieder! Viel Spaß damit.");
@@ -369,8 +361,8 @@ public class ShopListener implements Listener {
     }
 
 
-    private boolean sellItems(PlayerCollection playerCollection, Material material, int amount, int price) {
-        Inventory inventory = playerCollection.getPlayer().getInventory();
+    private boolean sellItems(Player player, Material material, int amount, int price) {
+        Inventory inventory = player.getInventory();
         int foundIndex = -1;
         for (int i = 0; i < 46; i++) {
             ItemStack itemStack = inventory.getItem(i);
@@ -386,23 +378,21 @@ public class ShopListener implements Listener {
         ItemMeta meta = foundItem.getItemMeta();
         if (meta != null && "§5Bargeld".equals(meta.getDisplayName())) return false;
         foundItem.setAmount(foundItem.getAmount() - amount);
-        playerCollection.updateMoney(playerCollection.getMoney() + price);
-        playerCollection.getPlayer().sendMessage(Main.getChatPrefix() + "§a" + Main.getCurrencyName(price));
-        Logger.console(Main.getConsolePrefix() + "player §a" + playerCollection.getPlayer().getUniqueId() + " §fhas §6sold §f" + material.name() + " for §a" + price);
+        PlayerCollection.addMoney(player, price);
+        player.sendMessage(Main.getChatPrefix() + "§a" + Main.getCurrencyName(price));
+        Logger.console(Main.getConsolePrefix() + "player §a" + player.getUniqueId() + " §fhas §6sold §f" + material.name() + " for §a" + price);
         return true;
     }
 
 
-    private boolean buyItems(PlayerCollection playerCollection, Material material, String name, int amount, int price) {
-        int money = playerCollection.getMoney();
-        if (money < price) return false;
+    private boolean buyItems(Player player, Material material, String name, int amount, int price) {
+        if (!PlayerCollection.tryWithdrawMoney(player, price)) return false;
 
         ItemStack itemStack = createNewItem(material, name);
         itemStack.setAmount(amount);
-        playerCollection.updateMoney(money - price);
-        playerCollection.getPlayer().sendMessage(Main.getChatPrefix() + "§c-" + price + " Schilling");
-        playerCollection.getPlayer().getInventory().addItem(itemStack);
-        Logger.console(Main.getConsolePrefix() + "player §a" + playerCollection.getPlayer().getUniqueId() + " §fhas §abought §f" + material.name() + " for §a" + price);
+        player.sendMessage(Main.getChatPrefix() + "§c-" + price + " Schilling");
+        player.getInventory().addItem(itemStack);
+        Logger.console(Main.getConsolePrefix() + "player §a" + player.getUniqueId() + " §fhas §abought §f" + material.name() + " for §a" + price);
         return true;
     }
 

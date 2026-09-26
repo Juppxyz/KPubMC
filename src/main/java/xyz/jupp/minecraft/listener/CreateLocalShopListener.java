@@ -90,8 +90,7 @@ public class CreateLocalShopListener implements Listener {
             }
 
             Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
-                PlayerCollection playerCollection = new PlayerCollection(player);
-                int currentMoney = playerCollection.getMoney();
+                int currentMoney = PlayerCollection.getMoney(player);
 
                 if (currentMoney <= 0) {
                     player.sendMessage(Main.getChatPrefix() + "§cDein Konto ist derzeit leider leer.");
@@ -132,21 +131,27 @@ public class CreateLocalShopListener implements Listener {
                     return;
                 }
 
+                // pay first, so the goods are only taken out of the chest for a covered purchase
+                if (!PlayerCollection.tryWithdrawMoney(player, sellPrice)) {
+                    player.sendMessage(Main.getChatPrefix() + "§cDein Konto ist aktuell leider nicht ausreichend gedeckt.");
+                    player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 1f);
+                    return;
+                }
+
                 boolean successfullyRemoved = removeItems(chest, shopItem, amount);
                 if (!successfullyRemoved) {
+                    PlayerCollection.addMoney(player, sellPrice);
                     player.sendMessage(Main.getChatPrefix() + "§fDer Shop von §6" + secondLine + " §fist aktuell nicht ausreichend gefüllt.");
                     player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 1f);
                     return;
                 }
 
-                PlayerCollection targetCollection = new PlayerCollection(offlinePlayer.getPlayer());
-                int targetMoney = targetCollection.getMoney();
-                targetCollection.updateMoney(targetMoney + sellPrice);
+                // by uuid, the shop owner may be offline
+                PlayerCollection.addMoney(offlinePlayer.getUniqueId(), sellPrice);
 
-                playerCollection.updateMoney(updatedMoney);
                 ItemStack itemStack = new ItemStack(shopItem, amount);
                 player.getInventory().addItem(itemStack);
-                Logger.console(String.format("%s bought %s(%d) from %s", player.getName(), shopItem.name(), amount, offlinePlayer.getPlayer().getName()));
+                Logger.console(String.format("%s bought %s(%d) from %s", player.getName(), shopItem.name(), amount, offlinePlayer.getName()));
 
                 player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_TRADE, 1f, 1f);
                 player.sendMessage(Main.getChatPrefix() + "Du hast §6" + amount + " " + shopItem.name() + " §fvon §a" + offlinePlayer.getName() + " §ferworben.");

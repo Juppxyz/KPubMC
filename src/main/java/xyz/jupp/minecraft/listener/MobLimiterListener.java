@@ -33,7 +33,7 @@ public class MobLimiterListener implements Listener {
     private static final long WITHER_SKELETON_LIFESPAN_TICKS = 600L;
 
     private boolean isProtected(Location location) {
-        ChunkCacheObject chunkCacheObject = ChunkCache.getInstance().getChunkObject(location.getWorld().getName(), location.getChunk().getX(), location.getChunk().getZ());
+        ChunkCacheObject chunkCacheObject = ChunkCache.getInstance().getClaim(location);
         if (chunkCacheObject == null) return false;
 
         TeamCacheObject teamCacheObject = CacheHandler.getInstance().getTeamCacheObject(chunkCacheObject.getTeamID());

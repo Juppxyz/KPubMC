@@ -111,10 +111,7 @@ public class MoneyInventoryListener implements Listener {
                     }
 
                     Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
-                        PlayerCollection playerCollection = new PlayerCollection(player);
-                        int playerMoney = playerCollection.getMoney();
-
-                        if (playerMoney < selectedAmount) {
+                        if (!PlayerCollection.tryWithdrawMoney(player, selectedAmount)) {
                             player.sendMessage(Main.getChatPrefix() + "Du hast nicht genügend " + Main.getCurrencyName() + "§f.");
                             return;
                         }
@@ -140,7 +137,6 @@ public class MoneyInventoryListener implements Listener {
                         }
 
                         Bukkit.getConsoleSender().sendMessage(Main.getConsolePrefix() + "withdraw from " + player.getUniqueId() + " (" + selectedAmount + " before tax, " + netAmount + " after tax)");
-                        playerCollection.updateMoney(playerMoney - selectedAmount);
 
                         Bukkit.getScheduler().runTask(Main.getInstance(), () -> {
                             for (ItemStack stack : cashStacks) {
@@ -170,32 +166,20 @@ public class MoneyInventoryListener implements Listener {
                     if (targetPlayer != null) {
                         // Offload database operations to async task
                         Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
-                            PlayerCollection playerCollection = new PlayerCollection(player);
-                            PlayerCollection targetCollection = new PlayerCollection(targetPlayer);
-                            int playerMoney = playerCollection.getMoney();
-                            int targetMoney = targetCollection.getMoney();
+                            // withdraw from the sender first, the receiver is only credited on success
+                            PlayerCollection.TransferResult result = PlayerCollection.transferMoney(player.getUniqueId(), targetPlayer.getUniqueId(), selectedAmount);
 
-                            int newPlayerMoney = playerMoney - selectedAmount;
-                            int newTargetMoney = targetMoney + selectedAmount;
-
-                            if (newPlayerMoney < 0) {
+                            if (result == PlayerCollection.TransferResult.INSUFFICIENT_FUNDS) {
                                 // Insufficient funds, notify player on main thread
                                 Bukkit.getScheduler().runTask(Main.getInstance(), () -> {
                                     player.sendMessage(Main.getChatPrefix() + "Du hast nicht genügend " + Main.getCurrencyName() + "§f.");
                                 });
                                 return;
                             }
+                            if (result != PlayerCollection.TransferResult.SUCCESS) return;
 
-                            // Update money in the database
-                            playerCollection.updateMoney(newPlayerMoney);
-                            targetCollection.updateMoney(newTargetMoney);
-
-                            // Log transfer
-                            Bukkit.getConsoleSender().sendMessage("### Transfer Log ###");
+                            // Log transfer (the balances are logged by PlayerCollection)
                             Bukkit.getConsoleSender().sendMessage("Transfer from §a" + player.getName() + " §fto §a" + targetPlayer.getName() + " §c" + selectedAmount);
-                            Bukkit.getConsoleSender().sendMessage(player.getName() + " §a" + playerMoney + " -> " + newPlayerMoney);
-                            Bukkit.getConsoleSender().sendMessage(targetPlayer.getName() + " §a" + targetMoney + " -> " + newTargetMoney);
-                            Bukkit.getConsoleSender().sendMessage("####################");
 
                             // Notify players on main thread
                             Bukkit.getScheduler().runTask(Main.getInstance(), () -> {
@@ -217,11 +201,10 @@ public class MoneyInventoryListener implements Listener {
     }
 
     private String calculateNewAmount(String currentAmount, int addedAmount, Player player) {
-        PlayerCollection playerCollection = new PlayerCollection(player);
         int cAmount = Integer.parseInt(currentAmount);
         int sum = cAmount + addedAmount;
 
-        if (sum < 0 || sum > playerCollection.getMoney()) {
+        if (sum < 0 || sum > PlayerCollection.getMoney(player)) {
             player.playSound(player.getLocation(), Sound.BLOCK_LAVA_POP, 2f, 2f);
             return currentAmount;
         }
