@@ -1,6 +1,5 @@
 package xyz.jupp.minecraft.inventory;
 
-import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
@@ -11,6 +10,8 @@ import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.config.ShopItem;
+import xyz.jupp.minecraft.utils.Tasks;
+import xyz.jupp.minecraft.utils.Text;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -19,101 +20,65 @@ import static xyz.jupp.minecraft.utils.ItemStackUtil.createItemStack;
 
 public class ShopInventory {
 
-    public enum ShopInventoryTypes { MAIN }
-
-    public static void openInventory(@NotNull Player player, @NotNull ShopInventoryTypes shopInventoryTypes) {
-        Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () ->{
-            Bukkit.getScheduler().runTask(Main.getInstance(), () -> {
-                player.closeInventory();
-                if (shopInventoryTypes.equals(ShopInventoryTypes.MAIN)) {
-                    player.openInventory(createNewMainShopInventory(player));
-                    player.playSound(player.getLocation(), Sound.BLOCK_SHULKER_BOX_OPEN, 2f, 2f);
-                }
-            });
+    public static void openInventory(@NotNull Player player) {
+        Tasks.sync(() -> {
+            player.closeInventory();
+            player.openInventory(createNewMainShopInventory());
+            player.playSound(player.getLocation(), Sound.BLOCK_SHULKER_BOX_OPEN, 2f, 2f);
         });
     }
 
 
-    private static Inventory createNewMainShopInventory(Player player) {
-        boolean isReducedPrice = false;
-
-        Inventory inventory = Bukkit.createInventory(player, 36, isReducedPrice ? Main.getShopVillagerName()+ " §8(§aRabatte!§8)" : Main.getShopVillagerName());
+    private static Inventory createNewMainShopInventory() {
+        Inventory inventory = Menu.create(Menu.Type.SHOP, 36, Main.getShopVillagerName());
         List<ShopItem> shopItems = ConfigManager.getShopItems();
-        int allPrices = 0;
+        float tradeTax = ConfigManager.getManager().getTradeTax();
+
+        ItemStack grayPane = createItemStack("§7---", Material.GRAY_STAINED_GLASS_PANE);
         for (int i = 0; i < 36; i++) {
-            if ((i == 17) || (i == 26) || (i == 18) || (i==0)) inventory.setItem(i, createItemStack("§7---", Material.GRAY_STAINED_GLASS_PANE));
-            if (i >26 || (i>0 && i <10)) inventory.setItem(i, createItemStack("§7---", Material.GRAY_STAINED_GLASS_PANE));
+            if (i < 10 || i == 17 || i == 18 || i >= 26) inventory.setItem(i, grayPane);
         }
 
+        int allPrices = 0;
         int tmpInvIndex = 11;
-        for (int i = 0; i < shopItems.size(); i++) {
+        for (ShopItem shopItem : shopItems) {
             if (tmpInvIndex == 16) tmpInvIndex = 20;
             if (tmpInvIndex > 24) break;
-            allPrices += shopItems.get(i).price();
-            ShopItem shopItem = shopItems.get(i);
-            int price = shopItem.price();
+            allPrices += shopItem.price();
 
-            float tradeTax = ConfigManager.getManager().getTradeTax();
+            int price = shopItem.price();
             if (tradeTax != 0.0) {
                 price = Math.round(price + (tradeTax*price));
             }
-
-            if (isReducedPrice) {
-                float discount = price - (shopItem.price() * 0.2f);
-                price = Math.round(discount);
-            }
-            inventory.setItem(tmpInvIndex, createNewShopItem(
-                    shopItem.name(),
-                    shopItem.material(),
-                    price,
-                    shopItem.sell(),
-                    shopItem.amount(),
-                    shopItem.description(), isReducedPrice)
-            );
+            inventory.setItem(tmpInvIndex, createNewShopItem(shopItem, price));
             tmpInvIndex++;
         }
 
-        ItemStack itemStack = new ItemStack(Material.EXPERIENCE_BOTTLE);
-        ItemMeta itemMeta = itemStack.getItemMeta();
-        List<String> lore = new ArrayList<>(1);
         int price = (int) Math.round((allPrices / shopItems.size()) * 0.80);
-        lore.add("§fPreis: " + Main.getCurrencyName(price));
-        itemMeta.setLore(lore);
-        itemMeta.setDisplayName("§5§oZufall");
-        itemStack.setItemMeta(itemMeta);
-        inventory.setItem(31, itemStack);
-
-        ItemStack itemStackTaxInfo = new ItemStack(Material.BOOK);
-        ItemMeta itemMetaTaxInfo = itemStackTaxInfo.getItemMeta();
-        itemMetaTaxInfo.setDisplayName("§fSteuersatz: §a" + Math.round(ConfigManager.getManager().getTradeTax()*100) + "%");
-        itemStackTaxInfo.setItemMeta(itemMetaTaxInfo);
-        inventory.setItem(27, itemStackTaxInfo);
+        inventory.setItem(31, createItemStack("§5§oZufall", Material.EXPERIENCE_BOTTLE, new String[]{"§fPreis: " + Main.getCurrencyName(price)}));
+        inventory.setItem(27, createItemStack("§fSteuersatz: §a" + Math.round(tradeTax*100) + "%", Material.BOOK));
 
         return inventory;
     }
 
 
-    private static ItemStack createNewShopItem(@NotNull String name, @NotNull String materialName, int price, boolean sell, int amount, String description, boolean isReduced) {
-        ItemStack itemStack = null;
-        Material material = Material.matchMaterial(materialName);
-        if (material == null){
-            itemStack = new ItemStack(Material.BARRIER);
-            itemStack.getItemMeta().setDisplayName("§4§lFehler!");
-            itemStack.setItemMeta(itemStack.getItemMeta());
-            return itemStack;
-        }
-        itemStack = new ItemStack(material);
+    private static ItemStack createNewShopItem(@NotNull ShopItem shopItem, int price) {
+        Material material = Material.matchMaterial(shopItem.material());
+        // unknown material in the config: a barrier without a name
+        if (material == null) return new ItemStack(Material.BARRIER);
+
+        ItemStack itemStack = new ItemStack(material);
         ItemMeta itemMeta = itemStack.getItemMeta();
-        itemStack.setAmount(amount);
-        itemMeta.setDisplayName(name);
+        itemStack.setAmount(shopItem.amount());
+        itemMeta.customName(Text.of(shopItem.name()));
 
         List<String> lores = new ArrayList<>(3);
-        lores.add(String.format("§fPreis: %s", Main.getCurrencyName(price)));
-        if (sell) lores.add(String.format("§fVerkaufen: %s", (isReduced ? Main.getCurrencyName((int) Math.round(((price/2)*0.2) + (price/2))) : Main.getCurrencyName(price/2))));
-        if (!description.equals("")) {
-            lores.add(description);
+        lores.add("§fPreis: " + Main.getCurrencyName(price));
+        if (shopItem.sell()) lores.add("§fVerkaufen: " + Main.getCurrencyName(price/2));
+        if (!shopItem.description().isEmpty()) {
+            lores.add(shopItem.description());
         }
-        itemMeta.setLore(lores);
+        itemMeta.lore(Text.lore(lores));
 
         itemStack.setItemMeta(itemMeta);
         return itemStack;

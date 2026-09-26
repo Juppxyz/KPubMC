@@ -3,7 +3,9 @@ package xyz.jupp.minecraft.listener;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.Sound;
-import org.bukkit.entity.*;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageEvent;
@@ -12,12 +14,9 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.inventory.Inventory;
-import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.slf4j.LoggerFactory;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.PlayerCacheObject;
@@ -26,361 +25,367 @@ import xyz.jupp.minecraft.config.ShopItem;
 import xyz.jupp.minecraft.database.PlayerCollection;
 import xyz.jupp.minecraft.database.TeamCollection;
 import xyz.jupp.minecraft.inventory.JewelerInventory;
+import xyz.jupp.minecraft.inventory.MainThread;
+import xyz.jupp.minecraft.inventory.Menu;
 import xyz.jupp.minecraft.inventory.ShopInventory;
 import xyz.jupp.minecraft.utils.BlackMarketHandler;
 import xyz.jupp.minecraft.utils.Logger;
 import xyz.jupp.minecraft.utils.RedeemableItems;
+import xyz.jupp.minecraft.utils.Tasks;
+import xyz.jupp.minecraft.utils.Text;
 
 import java.util.List;
-import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class ShopListener implements Listener {
-    private static final org.slf4j.Logger log = LoggerFactory.getLogger(ShopListener.class);
 
-    //@EventHandler
-    //public void onInteractWithShopChest(PlayerInteractEvent event) {
-    //    if (!(event.getAction().equals(Action.LEFT_CLICK_BLOCK) || event.getAction().equals(Action.RIGHT_CLICK_BLOCK))) return;
-    //    if (!(event.getClickedBlock() != null && event.getClickedBlock().getType().equals(Material.RESPAWN_ANCHOR))) return;
-    //    event.setCancelled(true);
-    //    Player player = event.getPlayer();
-    //    ShopInventory.openInventory(player, ShopInventory.ShopInventoryTypes.MAIN);
-    //}
+    // price in the first lore line of a shop item
+    private static final Pattern PRICE_PATTERN = Pattern.compile("§fPreis: §a(\\d+) Schilling");
 
 
     @EventHandler
     public void onInteractWithShopVillager(PlayerInteractEntityEvent event) {
         Entity interactedEntity = event.getRightClicked();
+        EntityType entityType = interactedEntity.getType();
 
-        if (interactedEntity.getType().equals(EntityType.VILLAGER)) {
-            if (interactedEntity.isCustomNameVisible() && interactedEntity.getCustomName().equals(Main.getShopVillagerName())) {
+        if (entityType == EntityType.VILLAGER) {
+            String villagerName = visibleName(interactedEntity);
+            if (Main.getShopVillagerName().equals(villagerName)) {
                 event.setCancelled(true);
-                Player player = event.getPlayer();
-                ShopInventory.openInventory(player, ShopInventory.ShopInventoryTypes.MAIN);
+                ShopInventory.openInventory(event.getPlayer());
                 return;
             }
 
-            if (interactedEntity.isCustomNameVisible() && interactedEntity.getCustomName().equals(Main.getFinanceVillagerFredName())) {
+            if (Main.getFinanceVillagerFredName().equals(villagerName)) {
                 event.setCancelled(true);
-                Player player = event.getPlayer();
-                ItemStack itemStack = player.getInventory().getItemInMainHand();
-
-                if (itemStack == null || itemStack.getType() == Material.AIR) {
-                    player.sendMessage(Main.getChatPrefix() + "§fDu hast kein Bargeld in der Hand, das du einzahlen kannst.");
-                    return;
-                }
-
-                // Überprüfen, ob es sich um Smaragde handelt
-                if (itemStack.getType() == Material.EMERALD) {
-                    ItemMeta itemMeta = itemStack.getItemMeta();
-
-                    if (itemMeta != null && itemMeta.hasDisplayName() && itemMeta.getDisplayName().equals(Main.getCurrencyName(10))) {
-                        int stackSize = itemStack.getAmount();
-                        int amountToDeposit = stackSize * 10; // Jeder Emerald entspricht 10 Schilling
-
-                        // Stack aus der Hand entfernen
-                        player.getInventory().setItemInMainHand(null);
-
-                        Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
-                            PlayerCollection.addMoney(player, amountToDeposit);
-
-                            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f, 2f);
-                            Bukkit.getConsoleSender().sendMessage(Main.getConsolePrefix() + "deposit from " + player.getUniqueId() + " (" + amountToDeposit + ")");
-                            player.sendMessage(Main.getChatPrefix() + "§fDu hast " + Main.getCurrencyName(amountToDeposit) + " §ferfolgreich auf dein Konto eingezahlt.");
-                        });
-                        return;
-                    }
-                }
-
-                // Wenn keine gültigen Smaragde in der Hand sind
-                player.sendMessage(Main.getChatPrefix() + "§fDu kannst nur gültiges §5Bargeld §feinzahlen.");
+                depositCash(event.getPlayer());
                 return;
             }
 
-            if (interactedEntity.isCustomNameVisible() && interactedEntity.getCustomName().equals(Main.getJewelerVillagerName())) {
+            if (Main.getJewelerVillagerName().equals(villagerName)) {
                 event.setCancelled(true);
-                Player player = event.getPlayer();
-                JewelerInventory.openInventory(player, JewelerInventory.JewelerInventoryType.MAIN);
+                JewelerInventory.openInventory(event.getPlayer());
                 return;
             }
         }
 
-        if (interactedEntity.getType().equals(EntityType.VINDICATOR)) {
-            if (interactedEntity.getCustomName().equals(Main.getBlackMarketDealerVillagerName())) {
+        if (entityType == EntityType.VINDICATOR) {
+            if (Main.getBlackMarketDealerVillagerName().equals(Text.legacyOrNull(interactedEntity.customName()))) {
                 event.setCancelled(true);
-                Player player = event.getPlayer();
-                boolean isMarketOpen = BlackMarketHandler.isOpen();
-                if (!isMarketOpen) {
-                    player.playSound(player, Sound.BLOCK_ENDER_CHEST_CLOSE, 2f, 2f);
-                    player.sendMessage(Main.getBlackMarketDealerVillagerName() + " §7» §f§oIch kann dir leider gerade nix anbieten. Komm später wieder.");
-                    return;
-                }
-
-                Inventory blackMarketInventory = Bukkit.createInventory(player, InventoryType.DISPENSER, "§0§oMarkt des " + Main.getBlackMarketDealerVillagerName());
-                for (int i = 0; i < blackMarketInventory.getSize(); i++) {
-                    if (i == 4) {
-                        blackMarketInventory.setItem(i, BlackMarketHandler.getCurrentBlackMarketItem());
-                        continue;
-                    }
-                    blackMarketInventory.setItem(i, createNewItem(Material.BLACK_STAINED_GLASS, "§8---"));
-                }
-
-                player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.4f, 1.2f);
-                player.playSound(player.getLocation(), Sound.BLOCK_ENCHANTMENT_TABLE_USE, 0.7f, 0.8f);
-                player.openInventory(blackMarketInventory);
-                return;
+                openBlackMarket(event.getPlayer());
             }
             return;
         }
 
-        if (interactedEntity.getType().equals(EntityType.WANDERING_TRADER)) {
-            if (interactedEntity.isCustomNameVisible() && interactedEntity.getCustomName().equals(Main.getTeamPointsDealerVillagerName())) {
-                event.setCancelled(true);
-                Player player = event.getPlayer();
-                PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
-                if (playerCacheObject.getTeamID() == null) {
-                    player.sendMessage(Main.getChatPrefix() + "§fNur Mitglieder eines Teams können Items gegen Punkte tauschen.");
-                    player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 1f, 1f);
-                    return;
-                }
+        if (entityType == EntityType.WANDERING_TRADER && Main.getTeamPointsDealerVillagerName().equals(visibleName(interactedEntity))) {
+            event.setCancelled(true);
+            redeemForTeamPoints(event.getPlayer());
+        }
+    }
 
-                ItemStack itemStack = player.getInventory().getItemInMainHand();
-                int teamPoints = RedeemableItems.getPoints(itemStack.getType());
+    // the custom name as legacy text, null if there is none or it is not visible
+    private static @Nullable String visibleName(Entity entity) {
+        return entity.isCustomNameVisible() ? Text.legacyOrNull(entity.customName()) : null;
+    }
 
-                if (itemStack == null || itemStack.getType() == Material.AIR || teamPoints == -1) {
-                    player.sendMessage(Main.getChatPrefix() + "§cDu hast nix in der Hand, was du eintauschen kannst!");
-                    player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 1f, 1f);
-                    return;
-                }
 
-                int amountOfItems = itemStack.getAmount();
-                int earnedTeamPoints = amountOfItems * teamPoints;
+    // Basil: cash in the main hand goes to the account
+    private static void depositCash(Player player) {
+        ItemStack itemStack = player.getInventory().getItemInMainHand();
 
-                player.getInventory().setItemInMainHand(null);
-
-                Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
-                    if (!TeamCollection.addTeamPoints(playerCacheObject.getTeamID(), earnedTeamPoints)) return;
-                    player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f, 2f);
-                    Bukkit.getConsoleSender().sendMessage(Main.getConsolePrefix() + "add teampoints +" + earnedTeamPoints + " (" + player.getUniqueId() + ")");
-
-                    PlayerCacheObject tmpPlayerCacheObject;
-                    for (Player online : Bukkit.getOnlinePlayers()) {
-                        tmpPlayerCacheObject = CacheHandler.getInstance().getPlayerInCache(online);
-                        if (tmpPlayerCacheObject.getTeamID() == null) continue;
-                        if (tmpPlayerCacheObject.getTeamID().equals(playerCacheObject.getTeamID())) {
-                            online.sendMessage(Main.getChatPrefix() + playerCacheObject.getTeamColor() + player.getName() + " §fhat §a+" + earnedTeamPoints + " Team-Punkte §fbeim Händler eingetauscht!");
-                            online.playSound(online.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.4f, 0.2f);
-                        }
-                    }
-
-                });
-
-            }
-
+        if (itemStack.getType() == Material.AIR) {
+            player.sendMessage(Main.getChatPrefix() + "§fDu hast kein Bargeld in der Hand, das du einzahlen kannst.");
+            return;
         }
 
+        // Überprüfen, ob es sich um Smaragde handelt
+        if (itemStack.getType() == Material.EMERALD) {
+            ItemMeta itemMeta = itemStack.getItemMeta();
+
+            if (itemMeta != null && Main.getCurrencyName(10).equals(Text.legacy(itemMeta.customName()))) {
+                int amountToDeposit = itemStack.getAmount() * 10; // Jeder Emerald entspricht 10 Schilling
+
+                // Stack aus der Hand entfernen
+                player.getInventory().setItemInMainHand(null);
+
+                Tasks.async(() -> {
+                    PlayerCollection.addMoney(player, amountToDeposit);
+                    Logger.console("deposit from " + player.getUniqueId() + " (" + amountToDeposit + ")");
+                    MainThread.run(() -> {
+                        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f, 2f);
+                        player.sendMessage(Main.getChatPrefix() + "§fDu hast " + Main.getCurrencyName(amountToDeposit) + " §ferfolgreich auf dein Konto eingezahlt.");
+                    });
+                });
+                return;
+            }
+        }
+
+        // Wenn keine gültigen Smaragde in der Hand sind
+        player.sendMessage(Main.getChatPrefix() + "§fDu kannst nur gültiges §5Bargeld §feinzahlen.");
+    }
+
+
+    private static void openBlackMarket(Player player) {
+        if (!BlackMarketHandler.isOpen()) {
+            player.playSound(player, Sound.BLOCK_ENDER_CHEST_CLOSE, 2f, 2f);
+            player.sendMessage(Main.getBlackMarketDealerVillagerName() + " §7» §f§oIch kann dir leider gerade nix anbieten. Komm später wieder.");
+            return;
+        }
+
+        Inventory blackMarketInventory = Menu.create(Menu.Type.BLACK_MARKET, InventoryType.DISPENSER, "§0§oMarkt des " + Main.getBlackMarketDealerVillagerName());
+        ItemStack glass = new ItemStack(Material.BLACK_STAINED_GLASS);
+        for (int i = 0; i < blackMarketInventory.getSize(); i++) {
+            blackMarketInventory.setItem(i, i == 4 ? BlackMarketHandler.getCurrentBlackMarketItem() : glass);
+        }
+
+        player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.4f, 1.2f);
+        player.playSound(player.getLocation(), Sound.BLOCK_ENCHANTMENT_TABLE_USE, 0.7f, 0.8f);
+        player.openInventory(blackMarketInventory);
+    }
+
+
+    // Nomad: the items in the main hand become team points
+    private static void redeemForTeamPoints(Player player) {
+        PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
+        String teamID = playerCacheObject.getTeamID();
+        if (teamID == null) {
+            player.sendMessage(Main.getChatPrefix() + "§fNur Mitglieder eines Teams können Items gegen Punkte tauschen.");
+            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 1f, 1f);
+            return;
+        }
+
+        ItemStack itemStack = player.getInventory().getItemInMainHand();
+        int teamPoints = RedeemableItems.getPoints(itemStack.getType());
+
+        if (itemStack.getType() == Material.AIR || teamPoints == -1) {
+            player.sendMessage(Main.getChatPrefix() + "§cDu hast nix in der Hand, was du eintauschen kannst!");
+            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 1f, 1f);
+            return;
+        }
+
+        int earnedTeamPoints = itemStack.getAmount() * teamPoints;
+
+        player.getInventory().setItemInMainHand(null);
+
+        Tasks.async(() -> {
+            if (!TeamCollection.addTeamPoints(teamID, earnedTeamPoints)) return;
+            Logger.console("add teampoints +" + earnedTeamPoints + " (" + player.getUniqueId() + ")");
+
+            MainThread.run(() -> {
+                player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f, 2f);
+                for (Player online : Bukkit.getOnlinePlayers()) {
+                    if (teamID.equals(CacheHandler.getInstance().getPlayerInCache(online).getTeamID())) {
+                        online.sendMessage(Main.getChatPrefix() + playerCacheObject.getTeamColor() + player.getName() + " §fhat §a+" + earnedTeamPoints + " Team-Punkte §fbeim Händler eingetauscht!");
+                        online.playSound(online.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.4f, 0.2f);
+                    }
+                }
+            });
+        });
     }
 
 
     @EventHandler
     public void onDamage(EntityDamageEvent event) {
-        if (event.getEntity().getType().equals(EntityType.VILLAGER)) {
-            Villager villager = (Villager) event.getEntity();
-            if (villager.isCustomNameVisible() && villager.getCustomName().equals(Main.getShopVillagerName())) event.setCancelled(true);
-            if (villager.isCustomNameVisible() && villager.getCustomName().equals(Main.getFinanceVillagerFredName())) event.setCancelled(true);
-            if (villager.isCustomNameVisible() && villager.getCustomName().equals(Main.getJewelerVillagerName())) event.setCancelled(true);
+        Entity entity = event.getEntity();
+        EntityType entityType = entity.getType();
+        if (entityType == EntityType.VILLAGER) {
+            String villagerName = visibleName(entity);
+            if (Main.getShopVillagerName().equals(villagerName)
+                    || Main.getFinanceVillagerFredName().equals(villagerName)
+                    || Main.getJewelerVillagerName().equals(villagerName)) event.setCancelled(true);
             return;
         }
-        if (event.getEntity().getType().equals(EntityType.VINDICATOR)) {
-            Vindicator vindicator = (Vindicator) event.getEntity();
-            if (vindicator.getCustomName() != null && vindicator.getCustomName().equals(Main.getBlackMarketDealerVillagerName())) event.setCancelled(true);
+        if (entityType == EntityType.VINDICATOR) {
+            if (Main.getBlackMarketDealerVillagerName().equals(Text.legacyOrNull(entity.customName()))) event.setCancelled(true);
             return;
         }
-        if (event.getEntity().getType().equals(EntityType.WANDERING_TRADER)) {
-            WanderingTrader wTrader = (WanderingTrader) event.getEntity();
-            if (wTrader.isCustomNameVisible() && wTrader.getCustomName().equals(Main.getTeamPointsDealerVillagerName())) event.setCancelled(true);
-            return;
+        if (entityType == EntityType.WANDERING_TRADER) {
+            if (Main.getTeamPointsDealerVillagerName().equals(visibleName(entity))) event.setCancelled(true);
         }
-
     }
 
 
     @EventHandler
     public void onClick(InventoryClickEvent event) {
-        @NotNull InventoryView inventory = event.getView();
-        String title = inventory.getTitle();
-        HumanEntity entity = event.getWhoClicked();
-        if (entity instanceof Player) {
-            Player player = (Player) entity;
+        if (!(event.getWhoClicked() instanceof Player player)) return;
+        Menu menu = Menu.of(event.getInventory());
+        if (menu == null) return;
 
-            if (title.contains(Main.getShopVillagerName())) {
-                event.setCancelled(true);
-                // the click is evaluated on the main thread (sold stacks are taken here), only the bookings run async
-                ItemStack clickedItem = event.getCurrentItem();
-                if (clickedItem == null || clickedItem.getItemMeta() == null) return;
-                String displayName = clickedItem.getItemMeta().getDisplayName();
-                if (displayName.equals("§7---")) return;
-                int parsedPrice = 0;
-                if ((clickedItem.getItemMeta().getLore() != null) && !clickedItem.getItemMeta().getLore().isEmpty()){
-                    String loreLine = clickedItem.getItemMeta().getLore().get(0);
-                    Pattern pattern = Pattern.compile("§fPreis: §a(\\d+) Schilling");
-                    Matcher matcher = pattern.matcher(loreLine);
-                    if (matcher.find()) parsedPrice = Integer.parseInt(matcher.group(1));
-                }
-                if (parsedPrice < 1) return;
-                int price = parsedPrice;
-
-                if (displayName.equals("§5§oZufall")) {
-                    Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
-                        int money = PlayerCollection.getMoney(player);
-                        if ( money < price) {
-                            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
-                            return;
-                        }
-                        Random random = new Random();
-                        List<ShopItem> shopItems = ConfigManager.getShopItems();
-                        int randomIndex = random.nextInt(shopItems.size());
-                        ShopItem shopItem = shopItems.get(randomIndex);
-                        ItemStack itemStack = createNewItem(Material.getMaterial(shopItem.material()), shopItem.name());
-                        itemStack.setAmount(shopItem.amount());
-                        if (!PlayerCollection.tryWithdrawMoney(player, price)) {
-                            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
-                            return;
-                        }
-                        player.getInventory().addItem(itemStack);
-                        player.sendMessage(Main.getChatPrefix() + "§c-" + price + " " + Main.getCurrencyName());
-                        player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f,2f);
-                        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f,2f);
-                        Logger.console(Main.getConsolePrefix() + "player §a" + player.getUniqueId() + " §fhas §abought §f" + shopItem.material() + " for §a" + price);
-                    });
-                    return;
-                }
-
-                boolean sell = event.getClick().equals(ClickType.RIGHT);
-                int amount = clickedItem.getAmount();
-                Material material = clickedItem.getType();
-                @Nullable List<String> lore = clickedItem.getItemMeta().getLore();
-                if (sell && ((lore.size() > 1 && lore.get(1) != null) && lore.get(1).startsWith("§fVerkaufen"))) {
-                    // taken synchronously, so fast clicks cannot sell the same stack twice
-                    if (!takeItemsToSell(player, material, amount)) {
-                        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
-                        return;
-                    }
-                    int sellPrice = price / 2;
-                    Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
-                        PlayerCollection.addMoney(player, sellPrice);
-                        player.sendMessage(Main.getChatPrefix() + "§a" + Main.getCurrencyName(sellPrice));
-                        Logger.console(Main.getConsolePrefix() + "player §a" + player.getUniqueId() + " §fhas §6sold §f" + material.name() + " for §a" + sellPrice);
-                        player.playSound(player.getLocation(), Sound.BLOCK_LAVA_POP, 2f,2f);
-                        player.sendMessage(Main.getChatPrefix() + String.format("Du hast §e%d §6%s §fverkauft.", amount, material.name()));
-                    });
-                    return;
-                }
-
-                Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
-                    if (buyItems(player, material, displayName, amount, price)) {
-                        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f,2f);
-                    }else {
-                        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
-                    }
-                    player.updateInventory();
-                });
-            }
-
-            if (title.contains("§8Tresen des %s's".formatted(Main.getJewelerVillagerName()))) {
-                event.setCancelled(true);
-                Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
-                    ItemStack clickedItem = event.getCurrentItem();
-                    if (clickedItem == null) return;
-                    String displayName = clickedItem.getItemMeta().getDisplayName();
-                    if (displayName.equals("§7---")) return;
-
-                    int cost = 0;
-                    Material gettingMaterial = null;
-
-                    if (displayName.startsWith("§aSmaragd")){
-                        cost = 50;
-                        gettingMaterial = Material.EMERALD;
-                    }else if (displayName.startsWith("§eGold")) {
-                        cost = 100;
-                        gettingMaterial = Material.GOLD_INGOT;
-                    }else if (displayName.startsWith("§bDiamant")) {
-                        cost = 250;
-                        gettingMaterial = Material.DIAMOND;
-                    }else if (displayName.startsWith("§8Netherite")) {
-                        cost = 1000;
-                        gettingMaterial = Material.NETHERITE_INGOT;
-                    }else if (displayName.startsWith("§5Amethyst")) {
-                        cost = 200;
-                        gettingMaterial = Material.AMETHYST_SHARD;
-                    }else if (displayName.startsWith("§6Harz")) {
-                        cost = 300;
-                        gettingMaterial = Material.RESIN_CLUMP;
-                    }else if (displayName.startsWith("§9Lapislazuli")) {
-                        cost = 50;
-                        gettingMaterial = Material.LAPIS_LAZULI;
-                    }
-                    if (gettingMaterial == null) return;
-
-                    // tax
-                    double tax = cost + (ConfigManager.getManager().getTradeTax() * cost);
-                    cost = Math.toIntExact(Math.round(tax));
-
-                    if (!PlayerCollection.tryWithdrawMoney(player, cost)) {
-                        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
-                        player.sendMessage(Main.getChatPrefix() + "§cDu hast leider nicht genügend Geld.");
-                    }else  {
-                        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f,2f);
-                        String itemName = clickedItem.getItemMeta().getDisplayName().split(" ")[0];
-                        player.getInventory().addItem(new ItemStack(gettingMaterial, 1));
-                        player.sendMessage(Main.getChatPrefix() + "§fDu hast erfolgreich " + itemName + " §fgekauft!");
-                        player.sendMessage(Main.getChatPrefix() + "§c-" + cost + " Schilling");
-                    }
-                    return;
-                });
-                return;
-            }
-
-            if (title.contains("§0§oMarkt des " + Main.getBlackMarketDealerVillagerName())) {
-                event.setCancelled(true);
-                Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
-                    if (event.getCurrentItem() == null || !event.getCurrentItem().getType().equals(BlackMarketHandler.getCurrentBlackMarketItem().getType())) return;
-
-                    int costs = BlackMarketHandler.getCurrentCosts().get();
-
-                    if (!PlayerCollection.tryWithdrawMoney(player, costs)) {
-                        player.playSound(player, Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
-                        player.sendMessage(Main.getBlackMarketDealerVillagerName() + " §7» §f§oPuh, dafür will ich mehr Schillinge als du hast, verzieh dich!");
-                        return;
-                    }
-
-                    player.getInventory().addItem(BlackMarketHandler.getCurrentBlackMarketItem());
-                    player.sendMessage(Main.getChatPrefix() + "§c-%d%s".formatted(BlackMarketHandler.getCurrentCosts().get(), Main.getCurrencyName()));
-                    player.sendMessage(Main.getBlackMarketDealerVillagerName() + " §7» §f§oBesuche mich gerne bald wieder! Viel Spaß damit.");
-                    player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.4f,0.2f);
-                    player.playSound(player.getLocation(), Sound.ENTITY_ITEM_PICKUP, 2f,2f);
-
-                    Bukkit.getScheduler().runTask(Main.getInstance(), () -> {
-                        player.closeInventory();
-                        BlackMarketHandler.forceReroll();
-                    });
-                });
-                return;
-            }
-
+        switch (menu.getType()) {
+            case SHOP -> onShopClick(event, player);
+            case JEWELER -> onJewelerClick(event, player);
+            case BLACK_MARKET -> onBlackMarketClick(event, player);
+            default -> {}
         }
     }
 
 
+    // the click is evaluated on the main thread (sold stacks are taken here), only the bookings run async
+    private static void onShopClick(InventoryClickEvent event, Player player) {
+        event.setCancelled(true);
+        ItemStack clickedItem = event.getCurrentItem();
+        if (clickedItem == null) return;
+        ItemMeta clickedMeta = clickedItem.getItemMeta();
+        if (clickedMeta == null) return;
+        String displayName = Text.legacy(clickedMeta.customName());
+        if (displayName.equals("§7---")) return;
+
+        List<String> lore = Text.legacyLore(clickedMeta.lore());
+        int parsedPrice = 0;
+        if (lore != null && !lore.isEmpty()) {
+            Matcher matcher = PRICE_PATTERN.matcher(lore.get(0));
+            if (matcher.find()) parsedPrice = Integer.parseInt(matcher.group(1));
+        }
+        if (parsedPrice < 1) return;
+        int price = parsedPrice;
+
+        if (displayName.equals("§5§oZufall")) {
+            buyRandomItem(player, price);
+            return;
+        }
+
+        int amount = clickedItem.getAmount();
+        Material material = clickedItem.getType();
+        if (event.getClick() == ClickType.RIGHT && lore.size() > 1 && lore.get(1).startsWith("§fVerkaufen")) {
+            // taken synchronously, so fast clicks cannot sell the same stack twice
+            if (!takeItemsToSell(player, material, amount)) {
+                player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
+                return;
+            }
+            int sellPrice = price / 2;
+            Tasks.async(() -> {
+                PlayerCollection.addMoney(player, sellPrice);
+                Logger.console("player §a" + player.getUniqueId() + " §fhas §6sold §f" + material.name() + " for §a" + sellPrice);
+                MainThread.run(() -> {
+                    player.sendMessage(Main.getChatPrefix() + "§a" + Main.getCurrencyName(sellPrice));
+                    player.playSound(player.getLocation(), Sound.BLOCK_LAVA_POP, 2f,2f);
+                    player.sendMessage(Main.getChatPrefix() + String.format("Du hast §e%d §6%s §fverkauft.", amount, material.name()));
+                });
+            });
+            return;
+        }
+
+        Tasks.async(() -> {
+            if (!PlayerCollection.tryWithdrawMoney(player, price)) {
+                MainThread.run(() -> {
+                    player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
+                    player.updateInventory();
+                });
+                return;
+            }
+            MainThread.deliverOrRefund(player.getUniqueId(), price, () -> {
+                player.sendMessage(Main.getChatPrefix() + "§c-" + price + " Schilling");
+                player.getInventory().addItem(new ItemStack(material, amount));
+                Logger.console("player §a" + player.getUniqueId() + " §fhas §abought §f" + material.name() + " for §a" + price);
+                player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f,2f);
+                player.updateInventory();
+            });
+        });
+    }
+
+
+    private static void buyRandomItem(Player player, int price) {
+        Tasks.async(() -> {
+            List<ShopItem> shopItems = ConfigManager.getShopItems();
+            ShopItem shopItem = shopItems.isEmpty() ? null : shopItems.get(ThreadLocalRandom.current().nextInt(shopItems.size()));
+            Material material = shopItem == null ? null : Material.getMaterial(shopItem.material());
+            if (material == null) {
+                // no usable item in the config: nothing is bought, as before (exception after the balance check)
+                if (PlayerCollection.getMoney(player) < price) MainThread.run(() -> player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f));
+                return;
+            }
+
+            if (!PlayerCollection.tryWithdrawMoney(player, price)) {
+                MainThread.run(() -> player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f));
+                return;
+            }
+            MainThread.deliverOrRefund(player.getUniqueId(), price, () -> {
+                player.getInventory().addItem(new ItemStack(material, shopItem.amount()));
+                player.sendMessage(Main.getChatPrefix() + "§c-" + price + " " + Main.getCurrencyName());
+                player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f,2f);
+                player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f,2f);
+                Logger.console("player §a" + player.getUniqueId() + " §fhas §abought §f" + shopItem.material() + " for §a" + price);
+            });
+        });
+    }
+
+
+    private static void onJewelerClick(InventoryClickEvent event, Player player) {
+        event.setCancelled(true);
+        ItemStack clickedItem = event.getCurrentItem();
+        if (clickedItem == null) return;
+        ItemMeta clickedMeta = clickedItem.getItemMeta();
+        if (clickedMeta == null) return;
+        String displayName = Text.legacy(clickedMeta.customName());
+
+        JewelerInventory.Offer offer = JewelerInventory.Offer.byItemName(displayName);
+        if (offer == null) return;
+
+        // tax
+        double tax = offer.getPrice() + (ConfigManager.getManager().getTradeTax() * offer.getPrice());
+        int cost = Math.toIntExact(Math.round(tax));
+        String itemName = displayName.split(" ")[0];
+        Material material = offer.getMaterial();
+
+        Tasks.async(() -> {
+            if (!PlayerCollection.tryWithdrawMoney(player, cost)) {
+                MainThread.run(() -> {
+                    player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
+                    player.sendMessage(Main.getChatPrefix() + "§cDu hast leider nicht genügend Geld.");
+                });
+                return;
+            }
+            MainThread.deliverOrRefund(player.getUniqueId(), cost, () -> {
+                player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f,2f);
+                player.getInventory().addItem(new ItemStack(material, 1));
+                player.sendMessage(Main.getChatPrefix() + "§fDu hast erfolgreich " + itemName + " §fgekauft!");
+                player.sendMessage(Main.getChatPrefix() + "§c-" + cost + " Schilling");
+            });
+        });
+    }
+
+
+    // item and price are taken at the click, so a reroll in between cannot change what is paid or given
+    private static void onBlackMarketClick(InventoryClickEvent event, Player player) {
+        event.setCancelled(true);
+        ItemStack clickedItem = event.getCurrentItem();
+        ItemStack offeredItem = BlackMarketHandler.getCurrentBlackMarketItem();
+        if (clickedItem == null || offeredItem == null || clickedItem.getType() != offeredItem.getType()) return;
+
+        int costs = BlackMarketHandler.getCurrentCosts().get();
+
+        Tasks.async(() -> {
+            if (!PlayerCollection.tryWithdrawMoney(player, costs)) {
+                MainThread.run(() -> {
+                    player.playSound(player, Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
+                    player.sendMessage(Main.getBlackMarketDealerVillagerName() + " §7» §f§oPuh, dafür will ich mehr Schillinge als du hast, verzieh dich!");
+                });
+                return;
+            }
+
+            MainThread.deliverOrRefund(player.getUniqueId(), costs, () -> {
+                player.getInventory().addItem(offeredItem);
+                player.sendMessage(Main.getChatPrefix() + "§c-%d%s".formatted(costs, Main.getCurrencyName()));
+                player.sendMessage(Main.getBlackMarketDealerVillagerName() + " §7» §f§oBesuche mich gerne bald wieder! Viel Spaß damit.");
+                player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.4f,0.2f);
+                player.playSound(player.getLocation(), Sound.ENTITY_ITEM_PICKUP, 2f,2f);
+                player.closeInventory();
+                BlackMarketHandler.forceReroll();
+            });
+        });
+    }
+
+
     // main thread only: removes the sold amount from the first matching stack, the credit is booked by the caller
-    private boolean takeItemsToSell(Player player, Material material, int amount) {
+    private static boolean takeItemsToSell(Player player, Material material, int amount) {
         Inventory inventory = player.getInventory();
         int foundIndex = -1;
         for (int i = 0; i < 46; i++) {
             ItemStack itemStack = inventory.getItem(i);
-            if (itemStack == null || itemStack.getType() == null || itemStack.getType().equals(Material.AIR)) continue;
-            if (itemStack.getType().equals(material) && (itemStack.getAmount() >= amount)) {
+            if (itemStack == null || itemStack.getType() == Material.AIR) continue;
+            if (itemStack.getType() == material && (itemStack.getAmount() >= amount)) {
                 foundIndex = i;
                 break;
             }
@@ -389,28 +394,9 @@ public class ShopListener implements Listener {
         ItemStack foundItem = inventory.getItem(foundIndex);
         if (foundItem == null) return false;
         ItemMeta meta = foundItem.getItemMeta();
-        if (meta != null && "§5Bargeld".equals(meta.getDisplayName())) return false;
+        if (meta != null && "§5Bargeld".equals(Text.legacy(meta.customName()))) return false;
         foundItem.setAmount(foundItem.getAmount() - amount);
         return true;
     }
-
-
-    private boolean buyItems(Player player, Material material, String name, int amount, int price) {
-        if (!PlayerCollection.tryWithdrawMoney(player, price)) return false;
-
-        ItemStack itemStack = createNewItem(material, name);
-        itemStack.setAmount(amount);
-        player.sendMessage(Main.getChatPrefix() + "§c-" + price + " Schilling");
-        player.getInventory().addItem(itemStack);
-        Logger.console(Main.getConsolePrefix() + "player §a" + player.getUniqueId() + " §fhas §abought §f" + material.name() + " for §a" + price);
-        return true;
-    }
-
-    @NotNull
-    private static ItemStack createNewItem(Material material, String name) {
-        ItemStack itemStack = new ItemStack(material);
-        return itemStack;
-    }
-
 
 }

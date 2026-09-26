@@ -8,13 +8,15 @@ import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
-import xyz.jupp.minecraft.cache.*;
-import xyz.jupp.minecraft.config.ConfigManager;
+import xyz.jupp.minecraft.cache.CacheHandler;
+import xyz.jupp.minecraft.cache.PlayerCacheObject;
+import xyz.jupp.minecraft.cache.TeamCacheObject;
 import xyz.jupp.minecraft.database.TeamCollection;
+import xyz.jupp.minecraft.utils.Tasks;
+import xyz.jupp.minecraft.utils.Text;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -28,237 +30,179 @@ public class TeamInventory {
 
 
     public static void openInventory(@NotNull Player player, @NotNull TeamInventoryTypes teamInventoryTypes) {
-        Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () ->{
-
+        Tasks.async(() -> {
             PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
             int teamPoints = TeamCollection.getTeamPoints(playerCacheObject.getTeamID());
-            Bukkit.getScheduler().runTask(Main.getInstance(), () -> {
+            MainThread.run(() -> {
                 player.closeInventory();
-                if (teamInventoryTypes.equals(TeamInventoryTypes.MAIN)) {
-                    player.openInventory(createMainTeamInventory(player, playerCacheObject, teamPoints));
-                    player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f, 2f);
-                }
+                TeamCacheObject team = playerCacheObject.getTeamCacheObject();
+                // a team that cannot be loaded opened nothing before either (exception)
+                if (!teamInventoryTypes.equals(TeamInventoryTypes.MAIN) || team == null) return;
+                player.openInventory(createMainTeamInventory(player, playerCacheObject.getTeamColor(), team, teamPoints));
+                player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f, 2f);
             });
         });
     }
 
 
     public static void openInventory(@NotNull Player player, @NotNull TeamInventoryTypes teamInventoryTypes, @NotNull String addition) {
-        Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () ->{
-            Bukkit.getScheduler().runTask(Main.getInstance(), () -> {
-                player.closeInventory();
-                if (teamInventoryTypes.equals(TeamInventoryTypes.CREATE)) {
-                    player.openInventory(createNewTeamInventory(player, addition));
-                    player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f, 2f);
-                }
-            });
+        Tasks.sync(() -> {
+            player.closeInventory();
+            if (teamInventoryTypes.equals(TeamInventoryTypes.CREATE)) {
+                player.openInventory(createNewTeamInventory(addition));
+                player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f, 2f);
+            }
         });
     }
 
 
     public static void openInventory(@NotNull TeamInventoryTypes teamInventoryTypes, @NotNull PlayerCacheObject playerCacheObject) {
-        Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () ->{
-            Bukkit.getScheduler().runTask(Main.getInstance(), () -> {
-                playerCacheObject.getPlayer().closeInventory();
-                playerCacheObject.getPlayer().playSound(playerCacheObject.getPlayer().getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f, 2f);
-                if (teamInventoryTypes.equals(TeamInventoryTypes.SETTINGS)) {
-                    playerCacheObject.getPlayer().openInventory(createTeamRoleInventory(playerCacheObject));
-                }else if (teamInventoryTypes.equals(TeamInventoryTypes.INVITE)){
-                    playerCacheObject.getPlayer().openInventory(createTeamInvitesInventory(playerCacheObject));
-                }
-            });
+        Tasks.sync(() -> {
+            Player player = playerCacheObject.getPlayer();
+            if (player == null) return;
+            player.closeInventory();
+            player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f, 2f);
+            TeamCacheObject team = playerCacheObject.getTeamCacheObject();
+            // a team that cannot be loaded opened no role menu before either (exception)
+            if (teamInventoryTypes.equals(TeamInventoryTypes.SETTINGS) && team != null) {
+                player.openInventory(createTeamRoleInventory(playerCacheObject.getTeamColor(), team));
+            }else if (teamInventoryTypes.equals(TeamInventoryTypes.INVITE)){
+                player.openInventory(createTeamInvitesInventory(playerCacheObject.getTeamColor()));
+            }
         });
     }
 
 
     public static void openSettingsInventory(@NotNull Player player, @NotNull PlayerCacheObject playerCacheObject) {
-        Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
-            Bukkit.getScheduler().runTask(Main.getInstance(), () -> {
-                playerCacheObject.getPlayer().closeInventory();
-                playerCacheObject.getPlayer().playSound(playerCacheObject.getPlayer().getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f, 2f);
-                player.openInventory(createAreaSettingsInventory(player, playerCacheObject));
-            });
+        Tasks.sync(() -> {
+            Player cachedPlayer = playerCacheObject.getPlayer();
+            if (cachedPlayer == null) return;
+            cachedPlayer.closeInventory();
+            cachedPlayer.playSound(cachedPlayer.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f, 2f);
+            TeamCacheObject team = playerCacheObject.getTeamCacheObject();
+            // a team that cannot be loaded opened nothing before either (exception)
+            if (team == null) return;
+            player.openInventory(createAreaSettingsInventory(playerCacheObject.getTeamColor(), team));
         });
     }
 
 
-    private static Inventory createNewTeamInventory(Player player, String teamName) {
-        Inventory inventory = Bukkit.createInventory(player, 27, "§aTeam erstellen");
+    private static Inventory createNewTeamInventory(String teamName) {
+        Inventory inventory = Menu.create(Menu.Type.TEAM_CREATE, 27, "§aTeam erstellen");
+        ItemStack grayPane = createItemStack("§7---", Material.GRAY_STAINED_GLASS_PANE);
         for (int i = 0; i < 27; i++) {
-            inventory.setItem(i, createItemStack("§7---", Material.GRAY_STAINED_GLASS_PANE));
-            if (i == 0) inventory.setItem(i, createItemStack("§a" + teamName, Material.PAPER));
-            if (i == 2) inventory.setItem(i, createItemStack("§4Rot", Material.RED_WOOL));
-            if (i == 3) inventory.setItem(i, createItemStack("§cHell Rot", Material.RED_TERRACOTTA));
-            if (i == 4) inventory.setItem(i, createItemStack("§6Orange/Gold", Material.ORANGE_WOOL));
-            if (i == 5) inventory.setItem(i, createItemStack("§eGelb", Material.YELLOW_WOOL));
-            if (i == 6) inventory.setItem(i, createItemStack("§2Dunkel Grün", Material.GREEN_WOOL));
-            if (i == 11) inventory.setItem(i, createItemStack("§bAqua", Material.LIGHT_BLUE_WOOL));
-            if (i == 12) inventory.setItem(i, createItemStack("§3Dunkel Aqua", Material.CYAN_WOOL));
-            if (i == 13) inventory.setItem(i, createItemStack("§1Dunkel Blau", Material.BLUE_WOOL));
-            if (i == 14) inventory.setItem(i, createItemStack("§9Blau", Material.BLUE_WOOL));
-            if (i == 15) inventory.setItem(i, createItemStack("§dHelles Pink", Material.PINK_WOOL));
-            if (i == 20) inventory.setItem(i, createItemStack("§5Lila", Material.PURPLE_WOOL));
-            if (i == 21) inventory.setItem(i, createItemStack("§fWeiß", Material.WHITE_WOOL));
-            if (i == 22) inventory.setItem(i, createItemStack("§7Grau", Material.LIGHT_GRAY_WOOL));
-            if (i == 23) inventory.setItem(i, createItemStack("§8Dunkel Grau", Material.GRAY_WOOL));
-            if (i == 24) inventory.setItem(i, createItemStack("§0Schwarz", Material.BLACK_WOOL));
-            if (i == 26) inventory.setItem(i, createItemStack("§a§lTeam gründen", Material.NETHER_STAR));
+            inventory.setItem(i, grayPane);
         }
+        inventory.setItem(0, createItemStack("§a" + teamName, Material.PAPER));
+        inventory.setItem(2, createItemStack("§4Rot", Material.RED_WOOL));
+        inventory.setItem(3, createItemStack("§cHell Rot", Material.RED_TERRACOTTA));
+        inventory.setItem(4, createItemStack("§6Orange/Gold", Material.ORANGE_WOOL));
+        inventory.setItem(5, createItemStack("§eGelb", Material.YELLOW_WOOL));
+        inventory.setItem(6, createItemStack("§2Dunkel Grün", Material.GREEN_WOOL));
+        inventory.setItem(11, createItemStack("§bAqua", Material.LIGHT_BLUE_WOOL));
+        inventory.setItem(12, createItemStack("§3Dunkel Aqua", Material.CYAN_WOOL));
+        inventory.setItem(13, createItemStack("§1Dunkel Blau", Material.BLUE_WOOL));
+        inventory.setItem(14, createItemStack("§9Blau", Material.BLUE_WOOL));
+        inventory.setItem(15, createItemStack("§dHelles Pink", Material.PINK_WOOL));
+        inventory.setItem(20, createItemStack("§5Lila", Material.PURPLE_WOOL));
+        inventory.setItem(21, createItemStack("§fWeiß", Material.WHITE_WOOL));
+        inventory.setItem(22, createItemStack("§7Grau", Material.LIGHT_GRAY_WOOL));
+        inventory.setItem(23, createItemStack("§8Dunkel Grau", Material.GRAY_WOOL));
+        inventory.setItem(24, createItemStack("§0Schwarz", Material.BLACK_WOOL));
+        inventory.setItem(26, createItemStack("§a§lTeam gründen", Material.NETHER_STAR));
         return inventory;
     }
 
 
-    private static Inventory createMainTeamInventory(Player player, PlayerCacheObject playerCacheObject, int teamPoints) {
-        Inventory inventory = Bukkit.createInventory(player, 9, playerCacheObject.getTeamColor() +"§nTeam-Menü");
-        boolean isOwner = playerCacheObject.getTeamCacheObject().getTeamOwner().equals(player.getUniqueId().toString());
-        boolean isVice =  playerCacheObject.getTeamCacheObject().getTeamVices().contains(player.getUniqueId().toString());
+    private static Inventory createMainTeamInventory(Player player, String teamColor, TeamCacheObject team, int teamPoints) {
+        Inventory inventory = Menu.create(Menu.Type.TEAM_MAIN, 9, teamColor + "§nTeam-Menü");
+        boolean isOwner = team.getTeamOwner().equals(player.getUniqueId().toString());
+        boolean isVice = team.getTeamVices().contains(player.getUniqueId().toString());
 
+        ItemStack grayPane = createItemStack("§7---", Material.GRAY_STAINED_GLASS_PANE);
         for (int i = 0; i < 9; i++) {
-            inventory.setItem(i, createItemStack( "§7---", Material.GRAY_STAINED_GLASS_PANE));
-            if (i == 0) {
-                if (playerCacheObject.getTeamCacheObject().getTeamOwner().equals(player.getUniqueId().toString())) {
-                    inventory.setItem(i, createItemStack(
-                            "Deine Rolle: "+ playerCacheObject.getTeamColor() + "§lBoss",
-                            Material.DIAMOND_SWORD
-                    ));
-                    continue;
-                }
-                List<String> teamVices = playerCacheObject.getTeamCacheObject().getTeamVices();
-                if (teamVices.contains(player.getUniqueId().toString())) {
-                    inventory.setItem(i, createItemStack(
-                            "§fDeine Rolle: "+ playerCacheObject.getTeamColor() + "§oVize",
-                            Material.GOLDEN_SWORD
-                    ));
-                    continue;
-                }
-                inventory.setItem(i, createItemStack(
-                        "§fDeine Rolle: "+ playerCacheObject.getTeamColor() + "Mitglied",
-                        Material.GOLDEN_SWORD
-                ));
-                continue;
-            }
-            if (i == 1) {
-                inventory.setItem(i, createItemStack("§fTeam-Punkte: " + playerCacheObject.getTeamColor() + teamPoints, Material.GOLD_INGOT));
-                continue;
-            }
-            if (i == 2) {
-                inventory.setItem(i, getTeamUpgradeItem(playerCacheObject));
-                continue;
-            }
-            if (i == 3) {
-                if (isOwner || isVice) {
-                    inventory.setItem(i, createItemStack(playerCacheObject.getTeamColor() + "Mitglied hinzufügen", Material.PAPER));
-                }
-                continue;
-            }
-
-            if (i == 4 && (isOwner || isVice)) {
-                inventory.setItem(i, getColoredBanner(playerCacheObject.getTeamColor()));
-                continue;
-            }
-
-            if(i==5 && isOwner) {
-                ItemStack itemStack = createItemStack( playerCacheObject.getTeamColor() + "Gebiets-Manager", Material.COMPARATOR);
-                inventory.setItem(i, itemStack);
-                continue;
-            }
-            if(i==6) {
-                if (playerCacheObject.getTeamCacheObject().getMembersList().size() > 1) {
-                    inventory.setItem(i, createItemStack( playerCacheObject.getTeamColor() + "Rollen", Material.GOLDEN_HELMET));
-                }
-                continue;
-            }
-            if (i==7 && !isOwner) inventory.setItem(i, createItemStack( playerCacheObject.getTeamColor() + "§4Team verlassen", Material.DARK_OAK_DOOR));
-            if (i==8) inventory.setItem(i, createItemStack( playerCacheObject.getTeamColor() + "§cBye", Material.BARRIER));
-
+            inventory.setItem(i, grayPane);
         }
+
+        if (isOwner) {
+            inventory.setItem(0, createItemStack("Deine Rolle: " + teamColor + "§lBoss", Material.DIAMOND_SWORD));
+        } else if (isVice) {
+            inventory.setItem(0, createItemStack("§fDeine Rolle: " + teamColor + "§oVize", Material.GOLDEN_SWORD));
+        } else {
+            inventory.setItem(0, createItemStack("§fDeine Rolle: " + teamColor + "Mitglied", Material.GOLDEN_SWORD));
+        }
+        inventory.setItem(1, createItemStack("§fTeam-Punkte: " + teamColor + teamPoints, Material.GOLD_INGOT));
+        inventory.setItem(2, getTeamUpgradeItem(teamColor, team));
+        if (isOwner || isVice) {
+            inventory.setItem(3, createItemStack(teamColor + "Mitglied hinzufügen", Material.PAPER));
+            inventory.setItem(4, getColoredBanner(teamColor));
+        }
+        if (isOwner) inventory.setItem(5, createItemStack(teamColor + "Gebiets-Manager", Material.COMPARATOR));
+        if (team.getMembersList().size() > 1) inventory.setItem(6, createItemStack(teamColor + "Rollen", Material.GOLDEN_HELMET));
+        if (!isOwner) inventory.setItem(7, createItemStack(teamColor + "§4Team verlassen", Material.DARK_OAK_DOOR));
+        inventory.setItem(8, createItemStack(teamColor + "§cBye", Material.BARRIER));
         return inventory;
     }
 
 
-    private static Inventory createAreaSettingsInventory(Player player, PlayerCacheObject playerCacheObject) {
-        Inventory inventory = Bukkit.createInventory(player, 9, playerCacheObject.getTeamColor() +"§nGebiets-Manager");
+    private static Inventory createAreaSettingsInventory(String teamColor, TeamCacheObject team) {
+        Inventory inventory = Menu.create(Menu.Type.TEAM_AREA, 9, teamColor + "§nGebiets-Manager");
         String on = "§a§lAN";
         String off = "§c§lAUS";
-        TeamCacheObject teamCacheObject = playerCacheObject.getTeamCacheObject();
-        String pvp = teamCacheObject.isZoneOptionPvP() ? on : off;
-        String mobGriefing = teamCacheObject.isZoneOptionMobDamage() ? on : off;
-        String interaction = teamCacheObject.isZoneOptionInteract() ? on : off;
+        String pvp = team.isZoneOptionPvP() ? on : off;
+        String mobGriefing = team.isZoneOptionMobDamage() ? on : off;
+        String interaction = team.isZoneOptionInteract() ? on : off;
 
-        int teamLevel = playerCacheObject.getTeamCacheObject().getLevel();
+        int teamLevel = team.getLevel();
 
+        ItemStack grayPane = createItemStack("§8---", Material.GRAY_STAINED_GLASS_PANE);
         for (int i = 0; i < 9; i++) {
-            inventory.setItem(i, createItemStack("§8---", Material.GRAY_STAINED_GLASS_PANE));
-            if (i == 2) inventory.setItem(i, createItemStack("§fMobGriefing §8- " + mobGriefing, teamLevel>=2 ? Material.CREEPER_HEAD : Material.BARRIER));
-            if (i == 4) inventory.setItem(i, createItemStack("§fPVP §8- " + pvp, teamLevel>=3 ? Material.GOLDEN_SWORD : Material.BARRIER));
-            if (i == 6) inventory.setItem(i, createItemStack("§fInteraktionen §8- " + interaction, teamLevel>=5 ? Material.LEVER : Material.BARRIER));
-            if (i == 8) inventory.setItem(i, createItemStack("§cZurück", Material.OAK_DOOR));
+            inventory.setItem(i, grayPane);
         }
+        inventory.setItem(2, createItemStack("§fMobGriefing §8- " + mobGriefing, teamLevel>=2 ? Material.CREEPER_HEAD : Material.BARRIER));
+        inventory.setItem(4, createItemStack("§fPVP §8- " + pvp, teamLevel>=3 ? Material.GOLDEN_SWORD : Material.BARRIER));
+        inventory.setItem(6, createItemStack("§fInteraktionen §8- " + interaction, teamLevel>=5 ? Material.LEVER : Material.BARRIER));
+        inventory.setItem(8, createItemStack("§cZurück", Material.OAK_DOOR));
         return inventory;
     }
 
-    private static @NotNull ItemStack getTeamUpgradeItem(PlayerCacheObject playerCacheObject) {
-        TeamCacheObject team = playerCacheObject.getTeamCacheObject();
-        ItemStack itemStack = new ItemStack(Material.NETHER_STAR, 1);
-        ItemMeta itemMeta = itemStack.getItemMeta();
-
+    private static @NotNull ItemStack getTeamUpgradeItem(String teamColor, TeamCacheObject team) {
         int currentLevel = team.getLevel();
         int upgradeCost = currentLevel==1 ? 5000 : (currentLevel * Main.getTeamLevelMultiple());
         List<String> lore = new ArrayList<>();
-        lore.add("§fAktuelles Level: " + playerCacheObject.getTeamColor() + currentLevel);
+        lore.add("§fAktuelles Level: " + teamColor + currentLevel);
 
+        String itemName;
         if (currentLevel >= 5) {
-            itemMeta.setDisplayName(playerCacheObject.getTeamColor() + "§lMax-Level Team");
+            itemName = teamColor + "§lMax-Level Team";
         }else {
-            itemMeta.setDisplayName(playerCacheObject.getTeamColor() + "§lTeam-Upgrade");
+            itemName = teamColor + "§lTeam-Upgrade";
             lore.add("");
-            lore.add("§fUpgrade für " + playerCacheObject.getTeamColor() + upgradeCost + " §fTeam-Punkte");
+            lore.add("§fUpgrade für " + teamColor + upgradeCost + " §fTeam-Punkte");
         }
-
-        itemMeta.setLore(lore);
-        itemStack.setItemMeta(itemMeta);
-        return itemStack;
+        return createItemStack(itemName, Material.NETHER_STAR, lore.toArray(new String[0]));
     }
 
 
-    private static @NotNull ItemStack getTeamPointsTradeItem(PlayerCacheObject playerCacheObject) {
-        ItemStack itemStack = new ItemStack(Material.EMERALD, 1);
-        ItemMeta itemMeta = itemStack.getItemMeta();
-        itemMeta.setDisplayName(playerCacheObject.getTeamColor() + "Team-Punkte kaufen");
-        List<String> lore = new ArrayList<>();
-
-        lore.add("§9Linksklick§8: §f" + Main.getCurrencyName(100) + " §ffür 1000 TeamPunkte eintauschen");
-        lore.add("§2Rechtsklick§8: §f" + Main.getCurrencyName(1000) + " §ffür 10000 TeamPunkte eintauschen");
-        lore.add(" ");
-        lore.add("§c-" + (ConfigManager.getManager().getTradeTax()*100) + "% Steuer");
-        itemMeta.setLore(lore);
-        itemStack.setItemMeta(itemMeta);
-        return itemStack;
-    }
-
-
-    private static Inventory createTeamInvitesInventory(PlayerCacheObject playerCacheObject) {
-        Inventory inventory = Bukkit.createInventory(playerCacheObject.getPlayer(), 18, playerCacheObject.getTeamColor() + "§nNeues Mitglied");
+    private static Inventory createTeamInvitesInventory(String teamColor) {
+        Inventory inventory = Menu.create(Menu.Type.TEAM_INVITE, 18, teamColor + "§nNeues Mitglied");
         inventory.setItem(0, createItemStack("§7---", Material.GRAY_STAINED_GLASS_PANE));
         inventory.setItem(8, createItemStack("§7---", Material.GRAY_STAINED_GLASS_PANE));
         inventory.setItem(9, createItemStack("§7---", Material.GRAY_STAINED_GLASS_PANE));
         inventory.setItem(17, createItemStack("§cZurück", Material.BARRIER));
 
-        PlayerCacheObject tmpPlayerCacheObject = null;
-        ItemStack playerHead = null;
         int itemSlot = 0;
         for (Player player : Bukkit.getOnlinePlayers()) {
-            tmpPlayerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
+            PlayerCacheObject tmpPlayerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
             if (tmpPlayerCacheObject.isTeamInvites() && tmpPlayerCacheObject.getTeamID() == null) {
                 itemSlot++;
                 if (itemSlot>15)break;
                 if (itemSlot==8) itemSlot = 10;
 
-                playerHead = new ItemStack(Material.PLAYER_HEAD);
+                ItemStack playerHead = new ItemStack(Material.PLAYER_HEAD);
                 SkullMeta playerHeadMeta = (SkullMeta) playerHead.getItemMeta();
-                playerHeadMeta.setOwningPlayer(Bukkit.getOfflinePlayer(player.getName()));
-                String displayName = player.getName();
-                playerHeadMeta.setDisplayName("§a" + displayName);
+                playerHeadMeta.setOwningPlayer(player);
+                playerHeadMeta.customName(Text.of("§a" + player.getName()));
                 playerHead.setItemMeta(playerHeadMeta);
                 inventory.setItem(itemSlot, playerHead);
             }
@@ -267,9 +211,8 @@ public class TeamInventory {
     }
 
 
-    private static Inventory createTeamRoleInventory(PlayerCacheObject playerCacheObject) {
-        Inventory inventory = Bukkit.createInventory(playerCacheObject.getPlayer(), 18, playerCacheObject.getTeamColor() + "§nTeam-Rollen");
-        TeamCacheObject teamCacheObject = playerCacheObject.getTeamCacheObject();
+    private static Inventory createTeamRoleInventory(String teamColor, TeamCacheObject teamCacheObject) {
+        Inventory inventory = Menu.create(Menu.Type.TEAM_ROLES, 18, teamColor + "§nTeam-Rollen");
 
         inventory.setItem(0, createItemStack("§7---", Material.GRAY_STAINED_GLASS_PANE));
         inventory.setItem(8, createItemStack("§7---", Material.GRAY_STAINED_GLASS_PANE));
@@ -278,27 +221,24 @@ public class TeamInventory {
 
         List<Document> memberList = teamCacheObject.getMembersList();
         List<String> viceList = teamCacheObject.getTeamVices();
-        OfflinePlayer teamMember = null;
-        ItemStack playerHead = null;
-
-        ArrayList<String> lores = new ArrayList<>(3);
-        lores.add("§fSteuerung (Maus):");
-        lores.add("§aLinks  §8- §fRolle verändern");
-        lores.add("§cRechts §8- §fSpieler kicken");
+        List<String> lores = List.of(
+                "§fSteuerung (Maus):",
+                "§aLinks  §8- §fRolle verändern",
+                "§cRechts §8- §fSpieler kicken"
+        );
 
         int itemSlot = 0;
         for (int i = 0; i < memberList.size(); i++) {
-            teamMember = Bukkit.getOfflinePlayer(UUID.fromString(memberList.get(i).getString("uuid")));
+            OfflinePlayer teamMember = Bukkit.getOfflinePlayer(UUID.fromString(memberList.get(i).getString("uuid")));
             if (teamCacheObject.getTeamOwner().equals(teamMember.getUniqueId().toString())) continue;
             itemSlot++;
             if (i == 8) itemSlot = 10;
-            playerHead = new ItemStack(Material.PLAYER_HEAD);
+            ItemStack playerHead = new ItemStack(Material.PLAYER_HEAD);
             SkullMeta playerHeadMeta = (SkullMeta) playerHead.getItemMeta();
             playerHeadMeta.setOwningPlayer(teamMember);
-            String role = viceList.contains(teamMember.getUniqueId().toString()) ? String.format("§f(%s§oVize§f) ", playerCacheObject.getTeamColor()) : "§f";
-            String displayName = role + teamMember.getName();
-            playerHeadMeta.setDisplayName(displayName);
-            playerHeadMeta.setLore(lores);
+            String role = viceList.contains(teamMember.getUniqueId().toString()) ? String.format("§f(%s§oVize§f) ", teamColor) : "§f";
+            playerHeadMeta.customName(Text.of(role + teamMember.getName()));
+            playerHeadMeta.lore(Text.lore(lores));
             playerHead.setItemMeta(playerHeadMeta);
             inventory.setItem(itemSlot, playerHead);
         }
@@ -307,28 +247,24 @@ public class TeamInventory {
 
 
     private static ItemStack getColoredBanner(@NotNull String teamColor) {
-        Material material;
-
-        switch (teamColor) {
-            case "§0": material = Material.BLACK_BANNER; break;
-            case "§1": material = Material.BLUE_BANNER; break;
-            case "§2": material = Material.GREEN_BANNER; break;
-            case "§3": material = Material.CYAN_BANNER; break;
-            case "§4": material = Material.RED_BANNER; break;
-            case "§5": material = Material.PURPLE_BANNER; break;
-            case "§6": material = Material.BROWN_BANNER; break;
-            case "§7": material = Material.LIGHT_GRAY_BANNER; break;
-            case "§8": material = Material.GRAY_BANNER; break;
-            case "§9": material = Material.BLUE_BANNER; break;
-            case "§a": material = Material.LIME_BANNER; break;
-            case "§b": material = Material.LIGHT_BLUE_BANNER; break;
-            case "§c": material = Material.RED_BANNER; break;
-            case "§d": material = Material.MAGENTA_BANNER; break;
-            case "§e": material = Material.YELLOW_BANNER; break;
-            case "§f": material = Material.WHITE_BANNER; break;
-            default: material = Material.WHITE_BANNER; break;
-        }
-
+        Material material = switch (teamColor) {
+            case "§0" -> Material.BLACK_BANNER;
+            case "§1" -> Material.BLUE_BANNER;
+            case "§2" -> Material.GREEN_BANNER;
+            case "§3" -> Material.CYAN_BANNER;
+            case "§4" -> Material.RED_BANNER;
+            case "§5" -> Material.PURPLE_BANNER;
+            case "§6" -> Material.BROWN_BANNER;
+            case "§7" -> Material.LIGHT_GRAY_BANNER;
+            case "§8" -> Material.GRAY_BANNER;
+            case "§9" -> Material.BLUE_BANNER;
+            case "§a" -> Material.LIME_BANNER;
+            case "§b" -> Material.LIGHT_BLUE_BANNER;
+            case "§c" -> Material.RED_BANNER;
+            case "§d" -> Material.MAGENTA_BANNER;
+            case "§e" -> Material.YELLOW_BANNER;
+            default -> Material.WHITE_BANNER;
+        };
         return createItemStack(teamColor + "Aktuellen Chunk beanspruchen §f(§c-200 Team-Punkte§f)", material);
     }
 
