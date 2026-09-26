@@ -7,6 +7,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.InventoryView;
+import org.bukkit.inventory.ItemFactory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.jetbrains.annotations.NotNull;
@@ -229,8 +230,14 @@ public class TeamInventoryListener implements Listener {
                     Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
                         Location currentLocation = player.getLocation();
 
+                        if (player.getWorld().getEnvironment().equals(World.Environment.THE_END)) {
+                            player.sendMessage(Main.getChatPrefix() + "§cDu kannst keine Chunks im End beanspruchen.");
+                            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
+                            return;
+                        }
+
                         if (Locations.isLocationASpawn(currentLocation)) {
-                            player.sendMessage(Main.getChatPrefix() + "§fDu kannst keinen Spawn-Bereich beanspruchen.");
+                            player.sendMessage(Main.getChatPrefix() + "§cDu kannst keinen Spawn-Bereich beanspruchen.");
                             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
                             return;
                         }

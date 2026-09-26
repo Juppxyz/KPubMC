@@ -116,6 +116,14 @@ public final class JailHandler {
 
         long now = System.currentTimeMillis();
 
+        if (!pco.isWanted() && pco.isJail() && !isInJailArea(player.getLocation()) ) {
+            Bukkit.getScheduler().runTask(Main.getInstance(), () -> {
+                player.sendMessage(Main.getChatPrefix() + "Du wurdest verhaftet und deswegen ins Gefägnis teleportiert.");
+                player.teleport(Locations.getJailSpawn());
+            });
+            return;
+        }
+
         if (pco.isWanted()) {
             long jailEnd = pco.getJailEnd();
             if (jailEnd > 0 && now >= jailEnd) {

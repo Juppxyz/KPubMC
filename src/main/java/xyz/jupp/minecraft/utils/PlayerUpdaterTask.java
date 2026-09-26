@@ -6,10 +6,12 @@ import org.bukkit.World;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
+import org.bukkit.scheduler.BukkitTask;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.PlayerCacheObject;
 
+import java.util.Collection;
 import java.util.Random;
 
 import static xyz.jupp.minecraft.utils.Locations.isLocationASpawn;
@@ -18,6 +20,7 @@ import static xyz.jupp.minecraft.utils.MobEvent.createMobEvent;
 
 public class PlayerUpdaterTask implements TaskHandler.Tasks {
 
+    private int serverEmptyCheck = 0;
 
     @Override
     public boolean startTask() {
@@ -29,7 +32,21 @@ public class PlayerUpdaterTask implements TaskHandler.Tasks {
 
             Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
                 TabListUtil.updateTabForAll();
-                for (Player player : Bukkit.getOnlinePlayers()) {
+                Collection<? extends Player> onlinePlayers = Bukkit.getOnlinePlayers();
+
+                if (onlinePlayers.isEmpty()) {
+                    // 6 Stunden
+                    if (serverEmptyCheck >= 72) {
+                        Bukkit.shutdown();
+                    }
+                    serverEmptyCheck++;
+                    Bukkit.getConsoleSender().sendMessage(Main.getConsolePrefix() + "increased emptyServerCheck to " + serverEmptyCheck);
+                }else {
+                    serverEmptyCheck = 0;
+                    Bukkit.getConsoleSender().sendMessage(Main.getConsolePrefix() + "reset emptyServerCheck");
+                }
+
+                for (Player player : onlinePlayers) {
                     PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
                     playerCacheObject.updatePlayer();
 

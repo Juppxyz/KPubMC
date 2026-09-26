@@ -90,7 +90,7 @@ def build_prompt(current_config: Dict[str, Any]) -> str:
         "  - anderes 'material' als in der bisherigen Konfiguration UND\n"
         "  - anderer 'name' (falls gesetzt) UND\n"
         "  - anderer 'price'.\n"
-        "- Du darfst maximal 3 Items aus der bisherigen Konfiguration inhaltlich sehr ähnlich lassen.\n"
+        "- Du darfst maximal 2 Items aus der bisherigen Konfiguration inhaltlich sehr ähnlich lassen.\n"
         "- Wenn ein Item verkauft werden kann (sell = true), ist der Verkaufspreis immer die Hälfte des Kaufpreises, "
         "auf ganze Zahlen gerundet.\n"
         "- Verboten im Shop: Bedrock, Drachen-Ei, Command-Blöcke, Barrieren.\n"
@@ -102,7 +102,7 @@ def build_prompt(current_config: Dict[str, Any]) -> str:
         "Teuer sollen nur wirklich wertvolle Items sein.\n"
         "- Beispiel: Smaragdblöcke sind relativ leicht zu bekommen, eine Elytra ist dagegen deutlich wertvoller.\n"
         "- Nur wertvolle Items bekommen einen eigenen, kreativen Namen unter 'name'. "
-        "- Hinweis, diese Items müssen mindestens den markierten Preis haben: 1 Diamant = 200, 1 Emeralds = 50 , Hartz = 500, Gold = 100, Amethyst = 200, Netherite = 1000, Lapislazuli = 50"
+        "- Hinweis, diese Items müssen mindestens den markierten Preis haben: 1 Diamant = 200, 1 Emeralds = 50 , 1 Hartz = 500, 1 Gold = 100, 1 Amethyst = 200, 1 Netherite = 1000, 1 Lapislazuli = 50"
         "Dieser Name soll stilvoll und nerdig/geekig sein, aber nicht cringy oder zwanghaft gesetzt sein.\n"
         "- 'Viel Geld' ist in diesem Kontext alles bei etwa 20000.\n\n"
         "Zusätzliche Rotations-Info:\n"
@@ -119,7 +119,7 @@ def build_prompt(current_config: Dict[str, Any]) -> str:
 
 def create_client() -> OpenAI:
     #No, that's not the real key, you little...
-    api_key = "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"
+    api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         print("[!] Umgebungsvariable OPENAI_API_KEY ist nicht gesetzt.")
         print("    Setze sie z.B. mit: export OPENAI_API_KEY='sk-...' (Linux) oder in Windows-Umgebungsvariablen.")

@@ -41,9 +41,9 @@ public class WarpCollection {
         Location location = player.getLocation();
 
         // Erstellen eines Dokuments mit den zu aktualisierenden Feldern
-        Document updatedFields = new Document("x", player.getLocation().getBlockX());
+        Document updatedFields = new Document("x", player.getLocation().getBlockX() + 0.5D);
         updatedFields.append("y", player.getLocation().getBlockY() + 0.5D);
-        updatedFields.append("z", player.getLocation().getBlockZ());
+        updatedFields.append("z", player.getLocation().getBlockZ() + 0.5D);
         updatedFields.append("world", player.getLocation().getWorld().getName());
         Document updateOperation = new Document("$set", updatedFields);
         warpsCollection.findOneAndUpdate(eq("uuid", player.getUniqueId().toString()), updateOperation);

@@ -4,15 +4,13 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitTask;
 import xyz.jupp.minecraft.cache.WarpCache;
 import xyz.jupp.minecraft.commands.*;
 import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.database.MongoDB;
 import xyz.jupp.minecraft.listener.*;
-import xyz.jupp.minecraft.utils.JailHandler;
-import xyz.jupp.minecraft.utils.Locations;
-import xyz.jupp.minecraft.utils.Logger;
-import xyz.jupp.minecraft.utils.PlayerUpdaterTask;
+import xyz.jupp.minecraft.utils.*;
 
 public final class Main extends JavaPlugin {
 
@@ -35,6 +33,8 @@ public final class Main extends JavaPlugin {
 
     // for static Access
     private static Main instance;
+
+    private BukkitTask afkTask;
 
     private void registerCommands() {
         Bukkit.getConsoleSender().sendMessage("register commands..");
@@ -97,10 +97,14 @@ public final class Main extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new EnderDragonListener(), this);
         Bukkit.getPluginManager().registerEvents(new SpawnListener(), this);
         Bukkit.getPluginManager().registerEvents(new TeamAreaListener(), this);
+        Bukkit.getPluginManager().registerEvents(new AntiBugListener(), this);
 
-        //Bukkit.getPluginManager().registerEvents(new SwordListener(), this);
-        //Bukkit.getPluginManager().registerEvents(new ElytraFlyListener(), this);
-        //Bukkit.getPluginManager().registerEvents(new TeamBlockListener(), this);
+        // afk
+        Bukkit.getPluginManager().registerEvents(new AfkListener(), this);
+
+        // Bukkit.getPluginManager().registerEvents(new SwordListener(), this);
+        // Bukkit.getPluginManager().registerEvents(new ElytraFlyListener(), this);
+        // Bukkit.getPluginManager().registerEvents(new TeamBlockListener(), this);
     }
 
     private void registerTasks() {
@@ -113,6 +117,8 @@ public final class Main extends JavaPlugin {
     @Override
     public void onEnable() {
         instance = this;
+        afkTask = AfkHelper.tickKickTask().runTaskTimer(this, 20L, 20L);
+
         Logger.console("running kpub-system..");
         Logger.console("load config..");
         ConfigManager.getManager().loadConfig();
@@ -126,12 +132,11 @@ public final class Main extends JavaPlugin {
 
         JailHandler.initJails(Locations.getJailCorner1(), Locations.getJailCorner2());
         JailHandler.startJailWatcherTask();
-
     }
 
     @Override
     public void onDisable() {
-        // Plugin shutdown logic
+        if (afkTask != null) afkTask.cancel();
     }
 
 
@@ -159,4 +164,6 @@ public final class Main extends JavaPlugin {
     public static String getIsWantedPrefix() {
         return isWantedPrefix;
     }
+
+
 }
