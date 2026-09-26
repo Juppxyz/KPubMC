@@ -1,6 +1,5 @@
 package xyz.jupp.minecraft.commands;
 
-import org.bson.Document;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.Sound;
@@ -10,12 +9,11 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
-import xyz.jupp.minecraft.database.PlayerCollection;
+import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.utils.Tasks;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 public class WantedCommand implements CommandExecutor {
 
@@ -46,11 +44,10 @@ public class WantedCommand implements CommandExecutor {
     // blocking (database, names of offline players); empty if nobody is wanted
     private static List<String> loadWantedLines() {
         List<String> lines = new ArrayList<>();
-        for (Document wantedPlayer : PlayerCollection.getWantedPlayers()) {
-            String uuid = wantedPlayer.getString("uuid");
-            OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(UUID.fromString(uuid));
+        for (PlayerRepository.PlayerData wantedPlayer : PlayerRepository.getWantedPlayers()) {
+            OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(wantedPlayer.uuid());
 
-            long diffMillis = wantedPlayer.getLong("jailEnd") - System.currentTimeMillis();
+            long diffMillis = wantedPlayer.jailEnd() - System.currentTimeMillis();
             double diffHours = diffMillis / (1000d * 60d * 60d);
 
             lines.add("§fName§8: §c" + offlinePlayer.getName());

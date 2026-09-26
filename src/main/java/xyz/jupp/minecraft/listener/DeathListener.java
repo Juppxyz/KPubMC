@@ -18,8 +18,8 @@ import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.PlayerCacheObject;
 import xyz.jupp.minecraft.cache.TeamCacheObject;
 import xyz.jupp.minecraft.config.ConfigManager;
-import xyz.jupp.minecraft.database.PlayerCollection;
-import xyz.jupp.minecraft.database.TeamCollection;
+import xyz.jupp.minecraft.database.PlayerRepository;
+import xyz.jupp.minecraft.database.TeamRepository;
 import xyz.jupp.minecraft.items.KeepInventoryItem;
 import xyz.jupp.minecraft.utils.JailHandler;
 import xyz.jupp.minecraft.utils.Locations;
@@ -148,14 +148,14 @@ public class DeathListener implements Listener {
     // worker thread
     private static void chargeDeathTax(Player player) {
         float deathTaxRate = ConfigManager.getManager().getDeathTax();
-        int money = PlayerCollection.getMoney(player);
+        int money = PlayerRepository.getMoney(player);
 
         String message;
         if (money <= 250) {
             message = Main.getChatPrefix() + "Dir wurde §ckeine §fTodes-Steuer berechnet.";
         } else {
             int tax = Math.round(money * deathTaxRate);
-            PlayerCollection.addMoney(player, -tax);
+            PlayerRepository.addMoney(player, -tax);
 
             message = String.format(
                     "%sDir wurden §a%s §8(§2%.0f%%§8) §fals Todes-Steuer berechnet.",
@@ -194,11 +194,11 @@ public class DeathListener implements Listener {
         });
         if (alreadyCollected) return;
 
-        PlayerCollection.addMoney(killer, 10000);
+        PlayerRepository.addMoney(killer, 10000);
         sync(() -> killer.sendMessage(Main.getChatPrefix() + "§a+" + Main.getCurrencyName(10000)));
 
         if (killerTeamID != null) {
-            TeamCollection.addTeamPoints(killerTeamID, 1000);
+            TeamRepository.addTeamPoints(killerTeamID, 1000);
             sync(() -> forEachOnlineTeamMember(killerTeamID, p -> {
                 p.playSound(p.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1, 1);
                 p.playSound(p.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 1, 1);
@@ -225,10 +225,10 @@ public class DeathListener implements Listener {
 
         // a kill inside the own team only costs the points (the credit was always overwritten before)
         if (!killerTeam.getTeamID().equals(playerTeam.getTeamID())) {
-            TeamCollection.addTeamPoints(killerTeam.getTeamID(), killCost);
+            TeamRepository.addTeamPoints(killerTeam.getTeamID(), killCost);
         }
         // never below 0, returns the points before the kill
-        int playerTeamPoints = TeamCollection.withdrawTeamPointsFloored(playerTeam.getTeamID(), killCost);
+        int playerTeamPoints = TeamRepository.withdrawTeamPointsFloored(playerTeam.getTeamID(), killCost);
         int earnedPoints = killCost;
         if (playerTeamPoints < killCost) {
             earnedPoints = playerTeamPoints;

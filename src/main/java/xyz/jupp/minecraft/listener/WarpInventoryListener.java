@@ -16,7 +16,7 @@ import org.bukkit.persistence.PersistentDataType;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.WarpCache;
 import xyz.jupp.minecraft.cache.WarpCacheObject;
-import xyz.jupp.minecraft.database.PlayerCollection;
+import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.inventory.MainThread;
 import xyz.jupp.minecraft.inventory.Menu;
 import xyz.jupp.minecraft.inventory.WarpInventory;
@@ -96,7 +96,7 @@ public class WarpInventoryListener implements Listener {
     // the warp caches read the player's position themselves, so they are called on the worker as before
     private static void createWarp(Player player) {
         Tasks.async(() -> {
-            if (!PlayerCollection.tryWithdrawMoney(player, 5000)) {
+            if (!PlayerRepository.tryWithdrawMoney(player, 5000)) {
                 MainThread.run(() -> {
                     player.sendMessage(Main.getChatPrefix() + "Der erste Kauf eines Warps kostet " + Main.getCurrencyName(5000) + "§f.");
                     player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
@@ -117,7 +117,7 @@ public class WarpInventoryListener implements Listener {
 
     private static void updateWarp(Player player) {
         Tasks.async(() -> {
-            if (!PlayerCollection.tryWithdrawMoney(player, 500)) {
+            if (!PlayerRepository.tryWithdrawMoney(player, 500)) {
                 MainThread.run(() -> {
                     player.sendMessage(Main.getChatPrefix() + "Das aktualisieren deines Warps kostet " + Main.getCurrencyName(500) + "§f.");
                     player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
@@ -144,7 +144,7 @@ public class WarpInventoryListener implements Listener {
         }
 
         Tasks.async(() -> {
-            if (!PlayerCollection.tryWithdrawMoney(player, 200)) {
+            if (!PlayerRepository.tryWithdrawMoney(player, 200)) {
                 MainThread.run(() -> {
                     player.sendMessage(Main.getChatPrefix() + "§fDas Teleportieren zu deinem Warp kostet "
                             + Main.getCurrencyName(200) + "§f.");
@@ -169,7 +169,7 @@ public class WarpInventoryListener implements Listener {
         String ownerUuidStr = isWarpHead ? clickedMeta.getPersistentDataContainer().get(WARP_OWNER_KEY, PersistentDataType.STRING) : null;
 
         Tasks.async(() -> {
-            if (PlayerCollection.getMoney(player) < 200) {
+            if (PlayerRepository.getMoney(player) < 200) {
                 notifyWarpError(player, "§fDas teleportieren zu einem Warp kostet " + Main.getCurrencyName(200) + "§f.");
                 return;
             }
@@ -194,7 +194,7 @@ public class WarpInventoryListener implements Listener {
                 return;
             }
 
-            if (!PlayerCollection.tryWithdrawMoney(player, 200)) {
+            if (!PlayerRepository.tryWithdrawMoney(player, 200)) {
                 notifyWarpError(player, "§fDas teleportieren zu einem Warp kostet " + Main.getCurrencyName(200) + "§f.");
                 return;
             }

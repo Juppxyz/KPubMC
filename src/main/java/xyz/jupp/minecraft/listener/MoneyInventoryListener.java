@@ -18,7 +18,7 @@ import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.PlayerCacheObject;
 import xyz.jupp.minecraft.config.ConfigManager;
-import xyz.jupp.minecraft.database.PlayerCollection;
+import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.inventory.MainThread;
 import xyz.jupp.minecraft.inventory.Menu;
 import xyz.jupp.minecraft.inventory.MoneyInventory;
@@ -84,7 +84,7 @@ public class MoneyInventoryListener implements Listener {
         if (addedAmount != 0) {
             Inventory top = view.getTopInventory();
             Tasks.async(() -> {
-                int money = PlayerCollection.getMoney(player);
+                int money = PlayerRepository.getMoney(player);
                 MainThread.run(() -> changeAmount(player, top, addedAmount, money));
             });
             return;
@@ -165,7 +165,7 @@ public class MoneyInventoryListener implements Listener {
     // withdrawn async, the cash is handed out on the main thread
     private static void withdrawCash(Player player, int selectedAmount) {
         Tasks.async(() -> {
-            if (!PlayerCollection.tryWithdrawMoney(player, selectedAmount)) {
+            if (!PlayerRepository.tryWithdrawMoney(player, selectedAmount)) {
                 MainThread.run(() -> player.sendMessage(Main.getChatPrefix() + "Du hast nicht genügend " + Main.getCurrencyName() + "§f."));
                 return;
             }
@@ -193,16 +193,16 @@ public class MoneyInventoryListener implements Listener {
     // withdraw from the sender first, the receiver is only credited on success
     private static void transfer(Player player, Player targetPlayer, int selectedAmount, InventoryView view) {
         Tasks.async(() -> {
-            PlayerCollection.TransferResult result = PlayerCollection.transferMoney(player.getUniqueId(), targetPlayer.getUniqueId(), selectedAmount);
+            PlayerRepository.TransferResult result = PlayerRepository.transferMoney(player.getUniqueId(), targetPlayer.getUniqueId(), selectedAmount);
 
-            if (result == PlayerCollection.TransferResult.INSUFFICIENT_FUNDS) {
+            if (result == PlayerRepository.TransferResult.INSUFFICIENT_FUNDS) {
                 MainThread.run(() -> player.sendMessage(Main.getChatPrefix() + "Du hast nicht genügend " + Main.getCurrencyName() + "§f."));
                 return;
             }
-            if (result != PlayerCollection.TransferResult.SUCCESS) return;
+            if (result != PlayerRepository.TransferResult.SUCCESS) return;
 
             MainThread.run(() -> {
-                // the balances are logged by PlayerCollection
+                // the balances are logged by PlayerRepository
                 Bukkit.getConsoleSender().sendMessage("Transfer from §a" + player.getName() + " §fto §a" + targetPlayer.getName() + " §c" + selectedAmount);
 
                 PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);

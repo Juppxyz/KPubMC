@@ -9,7 +9,7 @@ import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.PlayerCacheObject;
-import xyz.jupp.minecraft.database.PlayerCollection;
+import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.inventory.TeamInventory;
 import xyz.jupp.minecraft.utils.Tasks;
 
@@ -36,7 +36,7 @@ public class TeamCommand implements CommandExecutor {
                 }
 
                 String teamName = args[1];
-                Tasks.supplyAsync(() -> PlayerCollection.getMoney(player), money -> {
+                Tasks.supplyAsync(() -> PlayerRepository.getMoney(player), money -> {
                     if (money < 2500) {
                         player.sendMessage(Main.getChatPrefix() + "Das gründen eines Teams kostet " + Main.getCurrencyName(2500) + "§f.");
                         player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);

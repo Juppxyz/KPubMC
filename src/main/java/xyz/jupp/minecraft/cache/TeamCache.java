@@ -1,10 +1,10 @@
 package xyz.jupp.minecraft.cache;
 
-import com.mongodb.MongoException;
-import org.bson.Document;
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
-import xyz.jupp.minecraft.database.TeamCollection;
+import xyz.jupp.minecraft.database.DatabaseException;
+import xyz.jupp.minecraft.database.TeamRepository;
+import xyz.jupp.minecraft.database.TeamRepository.TeamData;
 
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -14,7 +14,7 @@ final class TeamCache {
     private TeamCache() {}
 
     private static final ConcurrentHashMap<String, TeamCacheObject> teamCacheMap = new ConcurrentHashMap<>();
-    // team ids without (valid) document, so claims of deleted/broken teams do not query the database on every event
+    // team ids without a row, so claims of deleted/broken teams do not query the database on every event
     private static final Set<String> unknownTeamIDs = ConcurrentHashMap.newKeySet();
 
     static @Nullable TeamCacheObject getTeam(@Nullable String teamID) {
@@ -23,28 +23,21 @@ final class TeamCache {
         if (cached != null) return cached;
         if (unknownTeamIDs.contains(teamID)) return null;
 
-        Document document;
+        TeamData data;
         try {
-            document = TeamCollection.getTeamDocument(teamID);
-        } catch (MongoException e) {
+            data = TeamRepository.getTeam(teamID);
+        } catch (DatabaseException e) {
             // not cached, the next access tries again
             Main.getInstance().getSLF4JLogger().warn("Could not load team {}: {}", teamID, e.getMessage());
             return null;
         }
-        if (document == null) {
+        if (data == null) {
             unknownTeamIDs.add(teamID);
             Main.getInstance().getSLF4JLogger().warn("The team with id {} doesn't exist", teamID);
             return null;
         }
 
-        TeamCacheObject loaded;
-        try {
-            loaded = new TeamCacheObject(teamID, document);
-        } catch (RuntimeException e) {
-            unknownTeamIDs.add(teamID);
-            Main.getInstance().getSLF4JLogger().warn("The team document {} is incomplete and is ignored: {}", teamID, e.toString());
-            return null;
-        }
+        TeamCacheObject loaded = new TeamCacheObject(data);
         TeamCacheObject previous = teamCacheMap.putIfAbsent(teamID, loaded);
         return previous != null ? previous : loaded;
     }

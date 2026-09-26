@@ -7,7 +7,7 @@ import xyz.jupp.minecraft.cache.ChunkCache;
 import xyz.jupp.minecraft.cache.WarpCache;
 import xyz.jupp.minecraft.commands.*;
 import xyz.jupp.minecraft.config.ConfigManager;
-import xyz.jupp.minecraft.database.MongoDB;
+import xyz.jupp.minecraft.database.Database;
 import xyz.jupp.minecraft.listener.*;
 import xyz.jupp.minecraft.utils.*;
 
@@ -103,13 +103,12 @@ public final class Main extends JavaPlugin {
         ConfigManager.getManager().loadConfig();
         Logger.console("connecting to database..");
         try {
-            MongoDB.connect();
+            Database.connect();
         } catch (RuntimeException e) {
             getSLF4JLogger().error(e.getMessage());
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
-        Tasks.async(MongoDB.getInstance()::ensureIndexes);
         Logger.console("init warps..");
         int warps = WarpCache.getInstance().load();
         int claimedChunks = ChunkCache.getInstance().load();
@@ -128,7 +127,7 @@ public final class Main extends JavaPlugin {
     public void onDisable() {
         getServer().getScheduler().cancelTasks(this);
         awaitRunningWorkers(5_000L);
-        MongoDB.close();
+        Database.close();
     }
 
     private void awaitRunningWorkers(long timeoutMillis) {

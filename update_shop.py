@@ -78,7 +78,7 @@ def build_prompt(current_config: Dict[str, Any]) -> str:
     old_items = current_config.get("shopItems", [])
     old_materials = [item.get("material") for item in old_items if isinstance(item, dict)]
     # the database credentials must never be sent to OpenAI
-    prompt_config = {key: value for key, value in current_config.items() if key != "mongoConnectionString"}
+    prompt_config = {key: value for key, value in current_config.items() if key != "databaseUrl"}
 
     return (
         "Du wirkst als Konfigurations-Generator für einen kleinen Minecraft-Ingame-Shop. "

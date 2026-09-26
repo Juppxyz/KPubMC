@@ -1,12 +1,10 @@
 package xyz.jupp.minecraft.cache;
 
-import org.bson.Document;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import xyz.jupp.minecraft.Main;
-import xyz.jupp.minecraft.database.WarpCollection;
+import xyz.jupp.minecraft.database.WarpRepository;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -30,18 +28,8 @@ public class WarpCache {
     // blocking, called once in onEnable
     public int load() {
         Map<UUID, WarpCacheObject> loaded = new HashMap<>();
-        for (Document document : WarpCollection.getAllWarps()) {
-            try {
-                WarpCacheObject warpCacheObject = new WarpCacheObject(
-                        document.getDouble("x"),
-                        document.getDouble("y"),
-                        document.getDouble("z"),
-                        document.getString("world")
-                );
-                loaded.put(UUID.fromString(document.getString("uuid")), warpCacheObject);
-            } catch (RuntimeException e) {
-                Main.getInstance().getSLF4JLogger().warn("Skipping invalid warp document {}: {}", document.get("_id"), e.toString());
-            }
+        for (WarpRepository.WarpData warp : WarpRepository.getAll()) {
+            loaded.put(warp.owner(), new WarpCacheObject(warp.x(), warp.y(), warp.z(), warp.world()));
         }
         warpCache.clear();
         warpCache.putAll(loaded);
@@ -68,21 +56,21 @@ public class WarpCache {
     public void addNewPlayerWarp(@NotNull Player player) {
         WarpCacheObject warpCacheObject = createWarpCacheObject(player);
         if (!warpCache.containsKey(player.getUniqueId())) {
-            WarpCollection.createNewPlayerWarp(player);
+            WarpRepository.createNewPlayerWarp(player);
             warpCache.putIfAbsent(player.getUniqueId(), warpCacheObject);
         }
     }
 
     public void removePlayerWarp(@NotNull Player player) {
         if (warpCache.containsKey(player.getUniqueId())) {
-            WarpCollection.removePlayerWarp(player);
+            WarpRepository.removePlayerWarp(player);
             warpCache.remove(player.getUniqueId());
         }
     }
 
     public void updatePlayerWarp(@NotNull Player player) {
         if (warpCache.containsKey(player.getUniqueId())) {
-            WarpCollection.updatePlayerWarp(player);
+            WarpRepository.updatePlayerWarp(player);
 
             WarpCacheObject warpCacheObject = createWarpCacheObject(player);
             warpCache.computeIfPresent(player.getUniqueId(), (owner, oldWarp) -> warpCacheObject);

@@ -7,7 +7,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerPortalEvent;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.config.ConfigManager;
-import xyz.jupp.minecraft.database.PlayerCollection;
+import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.utils.Tasks;
 
 public class NetherTransferListener implements Listener {
@@ -21,14 +21,14 @@ public class NetherTransferListener implements Listener {
 
         // database on a worker, the message on the main thread
         Tasks.supplyAsync(() -> {
-            int money = PlayerCollection.getMoney(player);
+            int money = PlayerRepository.getMoney(player);
 
             if (money <= 100) {
                 return Main.getChatPrefix() + "Dir wurde §ckeine §fTransfer-Steuer berechnet.";
             }
 
             int tax = Math.round(money * transferTaxRate);
-            PlayerCollection.addMoney(player, -tax);
+            PlayerRepository.addMoney(player, -tax);
 
             return String.format(
                     "%sDir wurden §a%s §8(§2%.0f%%§8) §fals Transfer-Steuer berechnet.",

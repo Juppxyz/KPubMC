@@ -12,7 +12,7 @@ import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.plugin.IllegalPluginAccessException;
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
-import xyz.jupp.minecraft.database.PlayerCollection;
+import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.utils.Tasks;
 import xyz.jupp.minecraft.utils.Text;
 
@@ -32,7 +32,7 @@ public class PlayerHeadsCommand implements CommandExecutor {
 
             String targetName = args[0];
             Tasks.async(() -> {
-                if (PlayerCollection.getMoney(player) < HEAD_PRICE) {
+                if (PlayerRepository.getMoney(player) < HEAD_PRICE) {
                     Tasks.sync(() -> sendTooExpensive(player));
                     return;
                 }
@@ -40,7 +40,7 @@ public class PlayerHeadsCommand implements CommandExecutor {
                 // built here, the owner lookup by name may block
                 ItemStack playerHead = createHead(targetName);
 
-                if (!PlayerCollection.tryWithdrawMoney(player, HEAD_PRICE)) {
+                if (!PlayerRepository.tryWithdrawMoney(player, HEAD_PRICE)) {
                     Tasks.sync(() -> sendTooExpensive(player));
                     return;
                 }
@@ -55,7 +55,7 @@ public class PlayerHeadsCommand implements CommandExecutor {
                     });
                 } catch (IllegalPluginAccessException e) {
                     // the plugin is being disabled, the head can no longer be handed out
-                    PlayerCollection.addMoney(player, HEAD_PRICE);
+                    PlayerRepository.addMoney(player, HEAD_PRICE);
                 }
             });
         }

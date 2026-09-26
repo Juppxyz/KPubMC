@@ -1,12 +1,10 @@
 package xyz.jupp.minecraft.cache;
 
-import org.bson.Document;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import xyz.jupp.minecraft.Main;
-import xyz.jupp.minecraft.database.ChunkCollection;
+import xyz.jupp.minecraft.database.ChunkRepository;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -27,25 +25,15 @@ public class ChunkCache {
     // blocking, called once in onEnable
     public int load() {
         Map<ChunkKey, ChunkCacheObject> loaded = new HashMap<>();
-        for (Document document : ChunkCollection.getAllChunksFromDatabase()) {
-            try {
-                String worldName = document.getString("worldName");
-                String teamID = document.getString("teamID");
-                int x = document.getInteger("x");
-                int z = document.getInteger("z");
-                loaded.put(new ChunkKey(worldName, x, z), new ChunkCacheObject(teamID, genChunkID(worldName, x, z)));
-            } catch (RuntimeException e) {
-                Main.getInstance().getSLF4JLogger().warn("Skipping invalid chunk document {}: {}", document.get("_id"), e.toString());
-            }
+        for (ChunkRepository.ChunkData chunk : ChunkRepository.getAll()) {
+            loaded.put(new ChunkKey(chunk.world(), chunk.x(), chunk.z()),
+                    new ChunkCacheObject(chunk.teamID()));
         }
         chunkCache.clear();
         chunkCache.putAll(loaded);
         return chunkCache.size();
     }
 
-    private static String genChunkID(String worldName, int x, int z) {
-        return worldName + ":" + x + ":" + z;
-    }
 
 
     // chunk coordinates, not block coordinates
@@ -67,17 +55,19 @@ public class ChunkCache {
 
     public boolean addChunk(@NotNull String teamID, @NotNull String worldName, int x, int z) {
         ChunkKey key = new ChunkKey(worldName, x, z);
-        ChunkCacheObject chunkCacheObject = new ChunkCacheObject(teamID, genChunkID(worldName, x, z));
+        ChunkCacheObject chunkCacheObject = new ChunkCacheObject(teamID);
         if (chunkCache.putIfAbsent(key, chunkCacheObject) != null) {
             return false;
         }
+        boolean claimed;
         try {
-            ChunkCollection.createChunkInDatabase(teamID, chunkCacheObject.getChunkID(), worldName, x, z);
+            claimed = ChunkRepository.claim(teamID, worldName, x, z);
         } catch (RuntimeException e) {
             chunkCache.remove(key, chunkCacheObject);
             throw e;
         }
-        return true;
+        if (!claimed) chunkCache.remove(key, chunkCacheObject);
+        return claimed;
     }
 
     public boolean removeChunk(@Nullable String teamID, @NotNull String worldName, int x, int z) {
@@ -86,7 +76,7 @@ public class ChunkCache {
         if (cco == null || cco.getTeamID() == null) return false;
         if (!cco.getTeamID().equals(teamID)) return false;
 
-        ChunkCollection.removeChunkInDatabase(cco.getTeamID(), cco.getChunkID());
+        ChunkRepository.release(cco.getTeamID(), worldName, x, z);
         chunkCache.remove(key, cco);
         return true;
     }

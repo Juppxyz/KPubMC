@@ -17,8 +17,8 @@ import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.ChunkCache;
 import xyz.jupp.minecraft.cache.PlayerCacheObject;
 import xyz.jupp.minecraft.cache.TeamCacheObject;
-import xyz.jupp.minecraft.database.PlayerCollection;
-import xyz.jupp.minecraft.database.TeamCollection;
+import xyz.jupp.minecraft.database.PlayerRepository;
+import xyz.jupp.minecraft.database.TeamRepository;
 import xyz.jupp.minecraft.inventory.MainThread;
 import xyz.jupp.minecraft.inventory.Menu;
 import xyz.jupp.minecraft.inventory.TeamInventory;
@@ -75,7 +75,7 @@ public class TeamInventoryListener implements Listener {
             } else {
                 String teamName = teamNameWithColor.substring(2);
                 Tasks.async(() -> {
-                    if (!PlayerCollection.tryWithdrawMoney(player, TEAM_CREATION_COST)) {
+                    if (!PlayerRepository.tryWithdrawMoney(player, TEAM_CREATION_COST)) {
                         MainThread.run(() -> {
                             player.sendMessage(Main.getChatPrefix() + "Das gründen eines Teams kostet " + Main.getCurrencyName(TEAM_CREATION_COST) + "§f.");
                             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
@@ -168,7 +168,7 @@ public class TeamInventoryListener implements Listener {
                 // second click in the still open menu after the max level was reached (the menu shows "Max-Level Team" then)
                 if (teamLevel >= 5) return;
                 int cost = teamLevel == 1 ? 5000 : (teamLevel * Main.getTeamLevelMultiple());
-                upgraded = TeamCollection.tryWithdrawTeamPoints(teamCacheObject.getTeamID(), cost);
+                upgraded = TeamRepository.tryWithdrawTeamPoints(teamCacheObject.getTeamID(), cost);
                 if (upgraded) teamCacheObject.upgradeTeamLevel();
             }
 
@@ -235,7 +235,7 @@ public class TeamInventoryListener implements Listener {
                 return;
             }
 
-            if (!TeamCollection.tryWithdrawTeamPoints(teamID, 200)) {
+            if (!TeamRepository.tryWithdrawTeamPoints(teamID, 200)) {
                 MainThread.run(() -> {
                     player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
                     player.sendMessage(Main.getChatPrefix() + "§cDein Team hat leider noch nicht genügend Punkte.");
@@ -246,7 +246,7 @@ public class TeamInventoryListener implements Listener {
             boolean isChunkClaimed = ChunkCache.getInstance().addChunk(teamID, worldName, chunkX, chunkZ);
             if (!isChunkClaimed){
                 // claimed by someone else in the meantime: give the points back
-                TeamCollection.addTeamPoints(teamID, 200);
+                TeamRepository.addTeamPoints(teamID, 200);
                 MainThread.run(() -> {
                     player.sendMessage(Main.getChatPrefix() + "§cDieser Chunk wurde bereits beansprucht.");
                     player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
@@ -336,7 +336,7 @@ public class TeamInventoryListener implements Listener {
                     if (selectedPlayerCacheObject.getTeamCacheObject() == null) return;
                     newRole = CacheHandler.getInstance().changeTeamMemberRole(selectedPlayerCacheObject);
                 }else {
-                    newRole = TeamCollection.toggleMemberRole(playerCacheObject.getTeamID(), player.getUniqueId());
+                    newRole = TeamRepository.toggleMemberRole(playerCacheObject.getTeamID(), player.getUniqueId());
                 }
                 MainThread.run(() -> showNewRole(player, selectedPlayer, clickedItem, playerCacheObject.getTeamColor(), newRole));
                 return;

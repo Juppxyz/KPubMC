@@ -1,6 +1,5 @@
 package xyz.jupp.minecraft.commands;
 
-import org.bson.Document;
 import org.bukkit.Sound;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -9,13 +8,11 @@ import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.TeamCacheObject;
-import xyz.jupp.minecraft.database.TeamCollection;
+import xyz.jupp.minecraft.database.TeamRepository;
 import xyz.jupp.minecraft.utils.Tasks;
 
 import java.util.ArrayList;
 import java.util.List;
-
-import static com.mongodb.client.model.Projections.include;
 
 public class RankingCommand implements CommandExecutor {
 
@@ -40,18 +37,16 @@ public class RankingCommand implements CommandExecutor {
     // blocking; name, colour and level come from the team cache (a team is loaded once), the points from the query.
     // The list ends at a team that cannot be loaded, as it did before.
     private static Ranking loadRanking() {
-        List<Document> documents = TeamCollection.getAllTeamDocumentsSorted()
-                .projection(include("teamID", "teamPoints"))
-                .into(new ArrayList<>());
+        List<TeamRepository.RankedTeam> teams = TeamRepository.getRanking();
 
-        List<String> lines = new ArrayList<>(documents.size());
+        List<String> lines = new ArrayList<>(teams.size());
         int position = 1;
-        for (Document document : documents) {
-            TeamCacheObject teamCacheObject = CacheHandler.getInstance().getTeamCacheObject(document.getString("teamID"));
+        for (TeamRepository.RankedTeam team : teams) {
+            TeamCacheObject teamCacheObject = CacheHandler.getInstance().getTeamCacheObject(team.teamID());
             if (teamCacheObject == null) {
                 return new Ranking(lines, false);
             }
-            lines.add(String.format("§a%d. §8- %s%s §8(§a%d§8) §8| §aLevel %d", position, teamCacheObject.getTeamColor(), teamCacheObject.getTeamName(), document.getInteger("teamPoints"), teamCacheObject.getLevel()));
+            lines.add(String.format("§a%d. §8- %s%s §8(§a%d§8) §8| §aLevel %d", position, teamCacheObject.getTeamColor(), teamCacheObject.getTeamName(), team.points(), teamCacheObject.getLevel()));
             position++;
         }
         return new Ranking(lines, true);

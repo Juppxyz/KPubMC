@@ -1,6 +1,5 @@
 package xyz.jupp.minecraft.inventory;
 
-import org.bson.Document;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
@@ -14,13 +13,12 @@ import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.PlayerCacheObject;
 import xyz.jupp.minecraft.cache.TeamCacheObject;
-import xyz.jupp.minecraft.database.TeamCollection;
+import xyz.jupp.minecraft.database.TeamRepository;
 import xyz.jupp.minecraft.utils.Tasks;
 import xyz.jupp.minecraft.utils.Text;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 import static xyz.jupp.minecraft.utils.ItemStackUtil.createItemStack;
 
@@ -32,7 +30,7 @@ public class TeamInventory {
     public static void openInventory(@NotNull Player player, @NotNull TeamInventoryTypes teamInventoryTypes) {
         Tasks.async(() -> {
             PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
-            int teamPoints = TeamCollection.getTeamPoints(playerCacheObject.getTeamID());
+            int teamPoints = TeamRepository.getTeamPoints(playerCacheObject.getTeamID());
             MainThread.run(() -> {
                 player.closeInventory();
                 TeamCacheObject team = playerCacheObject.getTeamCacheObject();
@@ -219,7 +217,7 @@ public class TeamInventory {
         inventory.setItem(9, createItemStack("§7---", Material.GRAY_STAINED_GLASS_PANE));
         inventory.setItem(17, createItemStack("§cZurück", Material.BARRIER));
 
-        List<Document> memberList = teamCacheObject.getMembersList();
+        List<TeamRepository.TeamMember> memberList = teamCacheObject.getMembersList();
         List<String> viceList = teamCacheObject.getTeamVices();
         List<String> lores = List.of(
                 "§fSteuerung (Maus):",
@@ -229,7 +227,7 @@ public class TeamInventory {
 
         int itemSlot = 0;
         for (int i = 0; i < memberList.size(); i++) {
-            OfflinePlayer teamMember = Bukkit.getOfflinePlayer(UUID.fromString(memberList.get(i).getString("uuid")));
+            OfflinePlayer teamMember = Bukkit.getOfflinePlayer(memberList.get(i).uuid());
             if (teamCacheObject.getTeamOwner().equals(teamMember.getUniqueId().toString())) continue;
             itemSlot++;
             if (i == 8) itemSlot = 10;

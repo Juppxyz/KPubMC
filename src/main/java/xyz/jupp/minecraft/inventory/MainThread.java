@@ -2,7 +2,7 @@ package xyz.jupp.minecraft.inventory;
 
 import org.bukkit.plugin.IllegalPluginAccessException;
 import org.jetbrains.annotations.NotNull;
-import xyz.jupp.minecraft.database.PlayerCollection;
+import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.utils.Tasks;
 
 import java.util.UUID;
@@ -26,7 +26,7 @@ public final class MainThread {
 
     // after a successful withdrawal on a worker: the delivery runs on the main thread, the amount is refunded if it cannot run anymore
     public static void deliverOrRefund(@NotNull UUID payer, int amount, @NotNull Runnable delivery) {
-        if (!run(delivery)) PlayerCollection.addMoney(payer, amount);
+        if (!run(delivery)) PlayerRepository.addMoney(payer, amount);
     }
 
 }
