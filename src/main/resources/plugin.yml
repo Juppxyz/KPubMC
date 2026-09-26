@@ -1,7 +1,7 @@
 name: KPubMC
-version: 'v2.0.0'
+version: '${project.version}'
 main: xyz.jupp.minecraft.Main
-api-version: '1.21'
+api-version: '26.3'
 description: "Offizielles Plugin für den KlotzscherPub Minecraft Server. (2025)"
 
 commands:

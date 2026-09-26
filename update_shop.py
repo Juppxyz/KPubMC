@@ -118,7 +118,6 @@ def build_prompt(current_config: Dict[str, Any]) -> str:
 
 
 def create_client() -> OpenAI:
-    #No, that's not the real key, you little...
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         print("[!] Umgebungsvariable OPENAI_API_KEY ist nicht gesetzt.")
