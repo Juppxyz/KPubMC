@@ -1,6 +1,5 @@
 package xyz.jupp.minecraft.commands;
 
-import org.bukkit.Sound;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -15,28 +14,19 @@ public class CreateBankierCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(@NotNull CommandSender commandSender, @NotNull Command command, @NotNull String s, @NotNull String[] args) {
-        if (commandSender instanceof Player) {
-            Player player = (Player) commandSender;
+        if (commandSender instanceof Player player) {
             if (!PermissionsUtil.isPlayerAdmin(player)){
                 PermissionsUtil.sendNoPermMsg(player);
                 return false;
             }
 
-            Villager villager = (Villager) player.getLocation().getWorld().spawnEntity(player.getLocation(), EntityType.VILLAGER);
-            villager.setCustomName(Main.getFinanceVillagerFredName());
-            villager.setCustomNameVisible(true);
-            villager.setInvulnerable(true);
-            villager.setAI(false);
-            villager.setGravity(false);
-            villager.setCollidable(false);
+            Villager villager = NpcSpawner.spawn(player, EntityType.VILLAGER, Villager.class, Main.getFinanceVillagerFredName(), true);
             villager.setProfession(Villager.Profession.LIBRARIAN);
             villager.setGlowing(true);
 
-            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f,2f);
-            player.sendMessage(Main.getChatPrefix() + "Der " + Main.getFinanceVillagerFredName() + " §fwurde §aerfolgreich §ferstellt.");
+            NpcSpawner.confirm(player, "Der " + Main.getFinanceVillagerFredName() + " §fwurde §aerfolgreich §ferstellt.");
         }
         return false;
     }
-
 
 }

@@ -10,8 +10,8 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
-import xyz.jupp.minecraft.cache.PlayerCacheObject;
 import xyz.jupp.minecraft.utils.JailHandler;
+import xyz.jupp.minecraft.utils.Tasks;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -20,6 +20,8 @@ import java.util.List;
 public class JailCommand implements CommandExecutor, TabCompleter {
 
     private static final String PREFIX = Main.getChatPrefix();
+    private static final List<String> SUBCOMMANDS = List.of("jail", "unjail", "wanted");
+    private static final List<String> WANTED_MODES = List.of("on", "off", "toggle");
 
     @Override
     public boolean onCommand(@NotNull CommandSender sender,
@@ -37,36 +39,21 @@ public class JailCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
-            String sub = args[0].toLowerCase();
-            switch (sub) {
-                case "jail":
-                    handleJail(sender, label, args);
-                    return;
-                case "unjail":
-                    handleUnjail(sender, label, args);
-                    return;
-                case "wanted":
-                    handleWanted(sender, label, args);
-                    return;
-                default:
-                    sendHelp(sender, label);
-                    return;
+        // next tick, so the answers still follow the usage line Bukkit sends for 'return false';
+        // only the JailHandler calls (database writes) run async
+        Tasks.sync(() -> {
+            switch (args[0].toLowerCase()) {
+                case "jail" -> handleJail(sender, label, args);
+                case "unjail" -> handleUnjail(sender, label, args);
+                case "wanted" -> handleWanted(sender, label, args);
+                default -> sendHelp(sender, label);
             }
         });
         return false;
     }
 
-    /* ==========================
-     * Subcommand: /justice jail <Player> <Hours> <Reason...>
-     * ========================== */
-
+    // /bestrafung jail <Spieler> <Stunden> <Grund...>
     private void handleJail(CommandSender sender, String label, String[] args) {
-        if (!sender.isOp()) {
-            sender.sendMessage(PREFIX + "§cDu darfst niemanden einsperren.");
-            return;
-        }
-
         if (args.length < 4) {
             sender.sendMessage(PREFIX + "§fNutze: §e/" + label + " jail <Spieler> <Stunden> <Grund...>");
             return;
@@ -92,21 +79,14 @@ public class JailCommand implements CommandExecutor, TabCompleter {
 
         String reason = String.join(" ", Arrays.copyOfRange(args, 3, args.length));
 
-        JailHandler.jailPlayer(target, hours, reason);
-
-        sender.sendMessage(PREFIX + "§a" + target.getName() + " §fwurde für §e" + hours + "§f Stunde(n) inhaftiert. Grund: §7" + reason);
+        Tasks.async(() -> {
+            JailHandler.jailPlayer(target, hours, reason);
+            Tasks.sync(() -> sender.sendMessage(PREFIX + "§a" + target.getName() + " §fwurde für §e" + hours + "§f Stunde(n) inhaftiert. Grund: §7" + reason));
+        });
     }
 
-    /* ==========================
-     * Subcommand: /justice unjail <Player>
-     * ========================== */
-
+    // /bestrafung unjail <Spieler>
     private void handleUnjail(CommandSender sender, String label, String[] args) {
-        if (!sender.isOp()) {
-            sender.sendMessage(PREFIX + "§cDu darfst niemanden entlassen.");
-            return;
-        }
-
         if (args.length < 2) {
             sender.sendMessage(PREFIX + "§fNutze: §e/" + label + " unjail <Spieler>");
             return;
@@ -118,20 +98,14 @@ public class JailCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
-        JailHandler.releasePlayer(target);
-        sender.sendMessage(PREFIX + "§a" + target.getName() + " §fwurde aus dem Gefängnis entlassen.");
+        Tasks.async(() -> {
+            JailHandler.releasePlayer(target);
+            Tasks.sync(() -> sender.sendMessage(PREFIX + "§a" + target.getName() + " §fwurde aus dem Gefängnis entlassen."));
+        });
     }
 
-    /* ==========================
-     * Subcommand: /justice wanted <Player> <on|off|toggle>
-     * ========================== */
-
+    // /bestrafung wanted <Spieler> <on|off|toggle>
     private void handleWanted(CommandSender sender, String label, String[] args) {
-        if (!sender.isOp()) {
-            sender.sendMessage(PREFIX + "§cDu darfst Wanted-Status nicht ändern.");
-            return;
-        }
-
         if (args.length < 3) {
             sender.sendMessage(PREFIX + "§fNutze: §e/" + label + " wanted <Spieler> <on|off|toggle>");
             return;
@@ -147,37 +121,30 @@ public class JailCommand implements CommandExecutor, TabCompleter {
         boolean newState;
 
         switch (mode) {
-            case "on":
-                newState = true;
-                break;
-            case "off":
-                newState = false;
-                break;
-            case "toggle":
-                newState = !JailHandler.isPlayerWanted(target);
-                break;
-            default:
+            case "on" -> newState = true;
+            case "off" -> newState = false;
+            case "toggle" -> newState = !JailHandler.isPlayerWanted(target);
+            default -> {
                 sender.sendMessage(PREFIX + "§cUnbekannter Modus: §f" + mode + " §7(§fon|off|toggle§7)");
                 return;
+            }
         }
 
-        JailHandler.setPlayerWanted(target, newState);
-        PlayerCacheObject tco = CacheHandler.getInstance().getPlayerInCache(target);
+        Tasks.async(() -> {
+            JailHandler.setPlayerWanted(target, newState);
 
-        if (newState) {
-            JailHandler.playerWantedBroadcast(target, "Manuelle Fahndung");
-            sender.sendMessage(PREFIX + "§a" + target.getName() + " §fist nun §4§lGESUCHT§f.");
-        } else {
-            sender.sendMessage(PREFIX + "§a" + target.getName() + " §fist nicht länger §4§lGESUCHT§f.");
-            tco.unsetJail(false);
-        }
+            if (newState) {
+                Tasks.sync(() -> {
+                    JailHandler.playerWantedBroadcast(target, "Manuelle Fahndung");
+                    sender.sendMessage(PREFIX + "§a" + target.getName() + " §fist nun §4§lGESUCHT§f.");
+                });
+            } else {
+                Tasks.sync(() -> sender.sendMessage(PREFIX + "§a" + target.getName() + " §fist nicht länger §4§lGESUCHT§f."));
+                CacheHandler.getInstance().getPlayerInCache(target).unsetJail(false);
+            }
+        });
     }
 
-
-
-    /* ==========================
-     * Hilfe
-     * ========================== */
 
     private void sendHelp(CommandSender sender, String label) {
         sender.sendMessage("§8§m------------§r §6Bestrafung §8§m------------");
@@ -187,9 +154,6 @@ public class JailCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage("§8§m--------------------------------------");
     }
 
-    /* ==========================
-     * Tab-Completion
-     * ========================== */
 
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender,
@@ -197,24 +161,12 @@ public class JailCommand implements CommandExecutor, TabCompleter {
                                                 @NotNull String alias,
                                                 @NotNull String[] args) {
 
-        List<String> completions = new ArrayList<>();
-
         if (args.length == 1) {
-            List<String> base = new ArrayList<>();
-            base.add("jail");
-            base.add("unjail");
-            base.add("wanted");
-
-            String current = args[0].toLowerCase();
-            for (String s : base) {
-                if (s.startsWith(current)) {
-                    completions.add(s);
-                }
-            }
-            return completions;
+            return startingWith(SUBCOMMANDS, args[0]);
         }
 
         if (args.length == 2) {
+            List<String> completions = new ArrayList<>();
             String current = args[1].toLowerCase();
             for (Player p : Bukkit.getOnlinePlayers()) {
                 if (p.getName().toLowerCase().startsWith(current)) {
@@ -224,18 +176,21 @@ public class JailCommand implements CommandExecutor, TabCompleter {
             return completions;
         }
 
-        // /justice wanted <Spieler> <on|off|toggle>
         if (args.length == 3 && args[0].equalsIgnoreCase("wanted")) {
-            List<String> base = Arrays.asList("on", "off", "toggle");
-            String current = args[2].toLowerCase();
-            for (String s : base) {
-                if (s.startsWith(current)) {
-                    completions.add(s);
-                }
-            }
-            return completions;
+            return startingWith(WANTED_MODES, args[2]);
         }
 
+        return new ArrayList<>();
+    }
+
+    private static List<String> startingWith(List<String> options, String input) {
+        List<String> completions = new ArrayList<>();
+        String current = input.toLowerCase();
+        for (String option : options) {
+            if (option.startsWith(current)) {
+                completions.add(option);
+            }
+        }
         return completions;
     }
 }

@@ -10,6 +10,7 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
+import xyz.jupp.minecraft.utils.Text;
 
 public class CreateDummyEntityCommand implements CommandExecutor {
 
@@ -39,7 +40,14 @@ public class CreateDummyEntityCommand implements CommandExecutor {
         }
 
         Location location = player.getLocation();
-        Entity entity = player.getWorld().spawnEntity(location, entityType);
+        Entity entity;
+        try {
+            entity = player.getWorld().spawnEntity(location, entityType);
+        } catch (IllegalArgumentException ex) {
+            // types like PLAYER or UNKNOWN cannot be spawned
+            player.sendMessage(Main.getChatPrefix() + "§cUnbekannter EntityType: §f" + args[0]);
+            return true;
+        }
 
         boolean jumping = false;
         boolean sneaking = false;
@@ -52,9 +60,7 @@ public class CreateDummyEntityCommand implements CommandExecutor {
             if (arg.equalsIgnoreCase("sneaking")) {
                 sneaking = true;
             }
-            if (arg.equalsIgnoreCase("customname")
-                    || arg.equalsIgnoreCase("customName")
-                    || arg.equalsIgnoreCase("name")) {
+            if (arg.equalsIgnoreCase("customname") || arg.equalsIgnoreCase("name")) {
                 customName = true;
             }
         }
@@ -73,7 +79,7 @@ public class CreateDummyEntityCommand implements CommandExecutor {
             }
             if (customName) {
                 living.setCustomNameVisible(true);
-                living.setCustomName(args[args.length - 1]);
+                living.customName(Text.entityName(args[args.length - 1]));
             }
         } else {
             player.sendMessage(Main.getChatPrefix() + "§cDieser Entity-Typ hat keine AI.");

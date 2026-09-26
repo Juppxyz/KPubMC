@@ -9,6 +9,7 @@ import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.utils.PermissionsUtil;
+import xyz.jupp.minecraft.utils.Text;
 
 import java.util.ArrayList;
 import java.util.UUID;
@@ -19,9 +20,10 @@ public class SpecCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
-        if (sender instanceof Player) {
-            Player player = (Player) sender;
+        if (sender instanceof Player player) {
             if (PermissionsUtil.isPlayerAdmin(player)) {
+                // hide/show without plugin key on purpose: JoinQuitListener hides with the plugin key,
+                // the plugin overloads would change who sees the admin after leaving the spec mode
                 if (!specMode.contains(player.getUniqueId())){
                     for (Player online: Bukkit.getOnlinePlayers()){
                         online.hidePlayer(player);
@@ -29,7 +31,7 @@ public class SpecCommand implements CommandExecutor {
                     player.sendMessage(Main.getChatPrefix() + "§fDein SpectatorMode ist nun: §aAN");
                     player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f,2f);
                     specMode.add(player.getUniqueId());
-                    Bukkit.broadcastMessage("§8[§c-§8] §a" + player.getPlayerListName() + " §fhat den Server verlassen.");
+                    Bukkit.broadcast(Text.section("§8[§c-§8] §a" + Text.legacy(player.playerListName()) + " §fhat den Server verlassen."));
                 }else {
                     for (Player online: Bukkit.getOnlinePlayers()){
                         online.showPlayer(player);
@@ -37,7 +39,7 @@ public class SpecCommand implements CommandExecutor {
                     player.sendMessage(Main.getChatPrefix() + "§fDein SpectatorMode ist nun: §aAUS");
                     player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f,2f);
                     specMode.remove(player.getUniqueId());
-                    Bukkit.broadcastMessage(String.format("§8[§a+§8] %s §fhat den Server betreten.", player.getPlayerListName()));
+                    Bukkit.broadcast(Text.section(String.format("§8[§a+§8] %s §fhat den Server betreten.", Text.legacy(player.playerListName()))));
                 }
             }
         }

@@ -1,6 +1,5 @@
 package xyz.jupp.minecraft.commands;
 
-import org.bukkit.Sound;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -15,26 +14,17 @@ public class CreateBlackMarketDealerCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(@NotNull CommandSender commandSender, @NotNull Command command, @NotNull String s, @NotNull String[] args) {
-        if (commandSender instanceof Player) {
-            Player player = (Player) commandSender;
+        if (commandSender instanceof Player player) {
             if (!PermissionsUtil.isPlayerAdmin(player)){
                 PermissionsUtil.sendNoPermMsg(player);
                 return false;
             }
 
-            Vindicator vindicator = (Vindicator) player.getLocation().getWorld().spawnEntity(player.getLocation(), EntityType.VINDICATOR);
-            vindicator.setCustomName(Main.getBlackMarketDealerVillagerName());
-            vindicator.setCustomNameVisible(false);
-            vindicator.setInvulnerable(true);
-            vindicator.setAI(false);
-            vindicator.setGravity(false);
-            vindicator.setCollidable(false);
+            NpcSpawner.spawn(player, EntityType.VINDICATOR, Vindicator.class, Main.getBlackMarketDealerVillagerName(), false);
 
-            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f,2f);
-            player.sendMessage(Main.getChatPrefix() + "Der " + Main.getBlackMarketDealerVillagerName() + " §fwurde §aerfolgreich §ferstellt.");
+            NpcSpawner.confirm(player, "Der " + Main.getBlackMarketDealerVillagerName() + " §fwurde §aerfolgreich §ferstellt.");
         }
         return false;
     }
-
 
 }

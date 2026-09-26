@@ -11,14 +11,14 @@ import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.PlayerCacheObject;
 import xyz.jupp.minecraft.database.PlayerCollection;
 import xyz.jupp.minecraft.inventory.TeamInventory;
+import xyz.jupp.minecraft.utils.Tasks;
 
 
 public class TeamCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(@NotNull CommandSender commandSender, @NotNull Command command, @NotNull String s, @NotNull String[] args) {
-        if (commandSender instanceof Player) {
-            Player player = (Player)commandSender;
+        if (commandSender instanceof Player player) {
             PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
 
             // open create new Team Inventory
@@ -35,14 +35,16 @@ public class TeamCommand implements CommandExecutor {
                     return false;
                 }
 
-                int money = PlayerCollection.getMoney(player);
-                if (money < 2500) {
-                    player.sendMessage(Main.getChatPrefix() + "Das gründen eines Teams kostet " + Main.getCurrencyName(2500) + "§f.");
-                    player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
-                    return false;
-                }
+                String teamName = args[1];
+                Tasks.supplyAsync(() -> PlayerCollection.getMoney(player), money -> {
+                    if (money < 2500) {
+                        player.sendMessage(Main.getChatPrefix() + "Das gründen eines Teams kostet " + Main.getCurrencyName(2500) + "§f.");
+                        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
+                        return;
+                    }
 
-                TeamInventory.openInventory(player, TeamInventory.TeamInventoryTypes.CREATE, args[1]);
+                    TeamInventory.openInventory(player, TeamInventory.TeamInventoryTypes.CREATE, teamName);
+                });
                 return false;
             }
 

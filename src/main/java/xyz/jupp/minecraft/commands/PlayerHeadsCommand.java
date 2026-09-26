@@ -2,7 +2,6 @@ package xyz.jupp.minecraft.commands;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
-import org.bukkit.OfflinePlayer;
 import org.bukkit.Sound;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -10,58 +9,70 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.SkullMeta;
+import org.bukkit.plugin.IllegalPluginAccessException;
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.database.PlayerCollection;
+import xyz.jupp.minecraft.utils.Tasks;
+import xyz.jupp.minecraft.utils.Text;
 
 public class PlayerHeadsCommand implements CommandExecutor {
 
+    private static final int HEAD_PRICE = 100;
+
     @Override
     public boolean onCommand(@NotNull CommandSender commandSender, @NotNull Command command, @NotNull String s, @NotNull String[] args) {
-        if (commandSender instanceof Player) {
-            Player player = (Player) commandSender;
+        if (commandSender instanceof Player player) {
 
             if (args.length == 0) {
-                player.sendMessage(Main.getChatPrefix() + "Bitte nutze: §a/head <Name> §f(" + Main.getCurrencyName(100) + "§f)");
+                player.sendMessage(Main.getChatPrefix() + "Bitte nutze: §a/head <Name> §f(" + Main.getCurrencyName(HEAD_PRICE) + "§f)");
                 player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
                 return false;
             }
 
-            Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
-                int money = PlayerCollection.getMoney(player);
-
-                if (money < 100) {
-                    player.sendMessage(Main.getChatPrefix() + "Ein §aCustomHead §fkostet " + Main.getCurrencyName(100) + "§f.");
-                    player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
+            String targetName = args[0];
+            Tasks.async(() -> {
+                if (PlayerCollection.getMoney(player) < HEAD_PRICE) {
+                    Tasks.sync(() -> sendTooExpensive(player));
                     return;
                 }
 
-                String targetName = args[0];
-                ItemStack playerHead = new ItemStack(Material.PLAYER_HEAD);
-                SkullMeta playerHeadMeta = (SkullMeta) playerHead.getItemMeta();
-                OfflinePlayer target = Bukkit.getOfflinePlayer(targetName);
-                if (target == null) {
-                    player.sendMessage(Main.getChatPrefix() + "§cDer angegebene Spieler konnte nicht gefunden werden.");
-                    player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
+                // built here, the owner lookup by name may block
+                ItemStack playerHead = createHead(targetName);
+
+                if (!PlayerCollection.tryWithdrawMoney(player, HEAD_PRICE)) {
+                    Tasks.sync(() -> sendTooExpensive(player));
                     return;
                 }
-                playerHeadMeta.setOwningPlayer(target);
-                playerHeadMeta.setDisplayName("§a" + targetName);
-                playerHead.setItemMeta(playerHeadMeta);
 
-                if (!PlayerCollection.tryWithdrawMoney(player, 100)) {
-                    player.sendMessage(Main.getChatPrefix() + "Ein §aCustomHead §fkostet " + Main.getCurrencyName(100) + "§f.");
-                    player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
-                    return;
+                try {
+                    Tasks.sync(() -> {
+                        player.getInventory().addItem(playerHead);
+
+                        player.sendMessage(Main.getChatPrefix() + "Du hast den Kopf von §a" + targetName + " §fgekauft.");
+                        player.sendMessage(Main.getChatPrefix() + "§c-" + HEAD_PRICE + " " + Main.getCurrencyName());
+                        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f,2f);
+                    });
+                } catch (IllegalPluginAccessException e) {
+                    // the plugin is being disabled, the head can no longer be handed out
+                    PlayerCollection.addMoney(player, HEAD_PRICE);
                 }
-                player.getInventory().addItem(playerHead);
-
-                player.sendMessage(Main.getChatPrefix() + "Du hast den Kopf von §a" + targetName + " §fgekauft.");
-                player.sendMessage(Main.getChatPrefix() + "§c-100 " + Main.getCurrencyName());
-                player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f,2f);
-
             });
         }
         return false;
+    }
+
+    private static ItemStack createHead(@NotNull String targetName) {
+        ItemStack playerHead = new ItemStack(Material.PLAYER_HEAD);
+        SkullMeta playerHeadMeta = (SkullMeta) playerHead.getItemMeta();
+        playerHeadMeta.setOwningPlayer(Bukkit.getOfflinePlayer(targetName));
+        playerHeadMeta.customName(Text.of("§a" + targetName));
+        playerHead.setItemMeta(playerHeadMeta);
+        return playerHead;
+    }
+
+    private static void sendTooExpensive(@NotNull Player player) {
+        player.sendMessage(Main.getChatPrefix() + "Ein §aCustomHead §fkostet " + Main.getCurrencyName(HEAD_PRICE) + "§f.");
+        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
     }
 }

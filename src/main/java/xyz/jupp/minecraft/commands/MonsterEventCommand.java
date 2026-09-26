@@ -14,7 +14,7 @@ public class MonsterEventCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(@NotNull CommandSender commandSender, @NotNull Command command, @NotNull String s, @NotNull String @NotNull [] args) {
-        if ((commandSender instanceof Player) && (args.length == 1)) {
+        if (commandSender instanceof Player && args.length == 1) {
             if (!commandSender.isOp()) return false;
             Player targetPlayer = Bukkit.getPlayer(args[0]);
             if (targetPlayer == null) return false;
