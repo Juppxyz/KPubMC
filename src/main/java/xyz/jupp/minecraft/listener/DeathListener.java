@@ -1,20 +1,20 @@
 package xyz.jupp.minecraft.listener;
 
-import net.kyori.adventure.text.Component;
-import org.bukkit.*;
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.Sound;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
-import org.bukkit.scoreboard.Team;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.PlayerCacheObject;
@@ -25,33 +25,64 @@ import xyz.jupp.minecraft.database.TeamCollection;
 import xyz.jupp.minecraft.items.KeepInventoryItem;
 import xyz.jupp.minecraft.utils.JailHandler;
 import xyz.jupp.minecraft.utils.Locations;
+import xyz.jupp.minecraft.utils.Tasks;
+import xyz.jupp.minecraft.utils.Text;
 
-import java.util.Objects;
+import java.util.function.Consumer;
 
 
+// The database work after a death runs on a worker thread, everything that touches players runs on the main thread.
 public class DeathListener implements Listener {
 
-    private final static Location corner1 = new Location(Bukkit.getWorld("world_MCWinter"), 150144.0D, 290.0D, 150218.0D);
-    private final static Location corner2 = new Location(Bukkit.getWorld("world_MCWinter"), 150106.0D, 220.0D, 150257.0D);
+    private static final String ARENA_WORLD = "world_MCWinter";
+    private static final double ARENA_MIN_X = 150106.0D;
+    private static final double ARENA_MAX_X = 150144.0D;
+    private static final double ARENA_MIN_Y = 220.0D;
+    private static final double ARENA_MAX_Y = 290.0D;
+    private static final double ARENA_MIN_Z = 150218.0D;
+    private static final double ARENA_MAX_Z = 150257.0D;
     private final static int killCost = 250;
 
+    private static final String MONSTER_EVENT_NAME = "§c§lMonster-Event";
+    // the listener is created in onEnable, so the plugin instance exists here
+    private static final KeepInventoryItem KEEP_INVENTORY_ITEM = new KeepInventoryItem();
+    private static final String KEEP_INVENTORY_PLAIN_NAME = Text.strip(KEEP_INVENTORY_ITEM.getItemName());
+
     private static boolean isPlayerInArena(Player player) {
-        if (!player.getLocation().getWorld().getName().equals("world_MCWinter")) {
+        Location location = player.getLocation();
+        if (!location.getWorld().getName().equals(ARENA_WORLD)) {
             return false;
         }
-        Location playerLocation = player.getLocation();
-        double minX = Math.min(corner1.getX(), corner2.getX());
-        double maxX = Math.max(corner1.getX(), corner2.getX());
-        double minY = Math.min(corner1.getY(), corner2.getY());
-        double maxY = Math.max(corner1.getY(), corner2.getY());
-        double minZ = Math.min(corner1.getZ(), corner2.getZ());
-        double maxZ = Math.max(corner1.getZ(), corner2.getZ());
+        double x = location.getX();
+        double y = location.getY();
+        double z = location.getZ();
+        return (x >= ARENA_MIN_X && x <= ARENA_MAX_X) && (y >= ARENA_MIN_Y && y <= ARENA_MAX_Y) && (z >= ARENA_MIN_Z && z <= ARENA_MAX_Z);
+    }
 
-        double playerX = playerLocation.getX();
-        double playerY = playerLocation.getY();
-        double playerZ = playerLocation.getZ();
+    private static void keepInventory(PlayerDeathEvent event) {
+        event.setKeepInventory(true);
+        event.setKeepLevel(true);
+        event.getDrops().clear();
+        event.setDroppedExp(0);
+    }
 
-        return (playerX >= minX && playerX <= maxX) && (playerY >= minY && playerY <= maxY) && (playerZ >= minZ && playerZ <= maxZ);
+    private static boolean isKeepInventoryItem(ItemMeta meta) {
+        return meta.getPersistentDataContainer().has(KEEP_INVENTORY_ITEM.getKey(), PersistentDataType.BYTE)
+                || (meta.hasCustomName() && Text.strip(Text.legacy(meta.customName())).equalsIgnoreCase(KEEP_INVENTORY_PLAIN_NAME));
+    }
+
+    // from a worker: a death during /stop still finishes its database work, only the main-thread part is dropped
+    private static void sync(Runnable task) {
+        if (Main.getInstance().isEnabled()) Tasks.sync(task);
+    }
+
+    // main thread only
+    private static void forEachOnlineTeamMember(String teamID, Consumer<Player> action) {
+        for (Player online : Bukkit.getOnlinePlayers()) {
+            if (teamID.equals(CacheHandler.getInstance().getPlayerInCache(online).getTeamID())) {
+                action.accept(online);
+            }
+        }
     }
 
 
@@ -63,10 +94,7 @@ public class DeathListener implements Listener {
 
         if (isPlayerInArena(player)) {
             event.setShowDeathMessages(false);
-            event.setKeepInventory(true);
-            event.setKeepLevel(true);
-            event.getDrops().clear();
-            event.setDroppedExp(0);
+            keepInventory(event);
 
             String msg;
             if (killer != null) {
@@ -74,12 +102,10 @@ public class DeathListener implements Listener {
             } else {
                 msg = Main.getChatPrefix() + "§a" + player.getName() + " §fist in der Arena gestorben.";
             }
-            Bukkit.broadcastMessage(msg);
+            Bukkit.broadcast(Text.section(msg));
             player.sendMessage(Main.getChatPrefix() + "§aDu bist in der Arena gestorben und behältst daher deine Items und Level.");
             return;
         }
-
-        KeepInventoryItem keepInventoryItem = new KeepInventoryItem();
 
         for (ItemStack item : player.getInventory().getContents()) {
             if (item == null || item.getType() != Material.CHEST) continue;
@@ -87,24 +113,8 @@ public class DeathListener implements Listener {
             ItemMeta meta = item.getItemMeta();
             if (meta == null) continue;
 
-            if (meta.getPersistentDataContainer().has(keepInventoryItem.getKey(), PersistentDataType.BYTE)) {
-                event.setKeepInventory(true);
-                event.setKeepLevel(true);
-                event.getDrops().clear();
-                event.setDroppedExp(0);
-
-                item.setAmount(0);
-                break;
-            }
-
-            if (meta.hasDisplayName() && ChatColor.stripColor(meta.getDisplayName())
-                    .equalsIgnoreCase(ChatColor.stripColor(keepInventoryItem.getItemName()))) {
-
-                event.setKeepInventory(true);
-                event.setKeepLevel(true);
-                event.getDrops().clear();
-                event.setDroppedExp(0);
-
+            if (isKeepInventoryItem(meta)) {
+                keepInventory(event);
                 item.setAmount(0);
                 break;
             }
@@ -114,124 +124,135 @@ public class DeathListener implements Listener {
         Location deathLoc = player.getLocation();
         player.sendMessage(Main.getChatPrefix() + "§fDein Todesort » §8x: §a" + Math.round(deathLoc.getX()) + " §8y: §a" + Math.round(deathLoc.getY()) + " §8z: §a" + Math.round(deathLoc.getZ()));
 
-        Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
-            float deathTaxRate = ConfigManager.getManager().getDeathTax();
-            int money = PlayerCollection.getMoney(player);
+        // the bounty is recognised by the prefix in the tab list name
+        boolean listedAsWanted = killer != null && Text.legacy(player.playerListName()).startsWith(Main.getIsWantedPrefix());
 
-            if (money <= 250) {
-                player.sendMessage(Main.getChatPrefix() + "Dir wurde §ckeine §fTodes-Steuer berechnet.");
-            }else {
-                int tax = Math.round(money * deathTaxRate);
-                PlayerCollection.addMoney(player, -tax);
+        Tasks.async(() -> {
+            chargeDeathTax(player);
 
-                player.sendMessage(String.format(
-                        "%sDir wurden §a%s §8(§2%.0f%%§8) §fals Todes-Steuer berechnet.",
-                        Main.getChatPrefix(),
-                        Main.getCurrencyName(tax),
-                        deathTaxRate * 100
-                ));
-            }
-
-            if (killer != null) {
-                PlayerCacheObject killerPlayerCacheObject = CacheHandler.getInstance().getPlayerInCache(killer);
-                PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
-
-                if (player.getPlayerListName().startsWith(Main.getIsWantedPrefix())) {
-                    player.playSound(player.getLocation(), Sound.BLOCK_DEADBUSH_IDLE, 1, 1);
-                    playerCacheObject.setWanted(false);
-                    playerCacheObject.setJail(true, 72);
-                    Bukkit.getScheduler().runTask(Main.getInstance(), () -> {
-                        player.teleport(Locations.getJailSpawn());
-                    });
-
-                    if (killerPlayerCacheObject.getTeamID() != null &&
-                            killerPlayerCacheObject.getTeamID().equals(playerCacheObject.getTeamID())) {
-                        killer.sendMessage(Main.getChatPrefix() + "§cDu kannst keine Belohnung von deinem Teamteamkollegen eintreiben.");
-                        return;
-                    }
-
-                    killer.sendMessage(Main.getChatPrefix() + "§aDu hast den gesuchten Spieler §6" + player.getName() + " §agefunden!");
-                    if (JailHandler.getAlreadyKilledPlayer().contains(player.getUniqueId())) return;
-
-                    killer.sendMessage(Main.getChatPrefix() + "§fHier deine Belohnung!");
-                    killer.sendMessage(Main.getChatPrefix() + " ");
-
-                    PlayerCollection.addMoney(killer, 10000);
-                    killer.sendMessage(Main.getChatPrefix() + "§a+" + Main.getCurrencyName(10000));
-
-                    if (killerPlayerCacheObject.getTeamID() != null) {
-                        TeamCollection.addTeamPoints(killerPlayerCacheObject.getTeamID(), 1000);
-                        PlayerCacheObject tmpPco;
-                        for (Player p : Bukkit.getOnlinePlayers()) {
-                            tmpPco = CacheHandler.getInstance().getPlayerInCache(p);
-                            if (tmpPco.getTeamID() != null &&  tmpPco.getTeamID().equals(killerPlayerCacheObject.getTeamID())) {
-                                p.playSound(p.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1, 1);
-                                p.playSound(p.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 1, 1);
-                                p.sendMessage(Main.getChatPrefix() + "§a+1000 Team-Punkte §ffür das Eintreiben des Kopfgeldes von §a"+player.getName());
-                            }
-                        }
-                    }
-
-                    JailHandler.getAlreadyKilledPlayer().add(player.getUniqueId());
-                    player.sendMessage(Main.getChatPrefix() + "§cWenn dich das Gesetz nicht holt, §a" + Main.getCurrencyName() + "e §ctun es.");
-                    player.sendMessage(Main.getChatPrefix() + "§6Deine Haft wurde auf §c72h §6festgesetzt.");
-
-                    return;
-                }
-
-                if (killerPlayerCacheObject.getTeamID() == null || playerCacheObject.getTeamID() == null) return;
-
-                TeamCacheObject killerTeam = killerPlayerCacheObject.getTeamCacheObject();
-                TeamCacheObject playerTeam = playerCacheObject.getTeamCacheObject();
-                if (killerTeam == null || playerTeam == null) return;
-
-                // a kill inside the own team only costs the points (the credit was always overwritten before)
-                if (!killerTeam.getTeamID().equals(playerTeam.getTeamID())) {
-                    TeamCollection.addTeamPoints(killerTeam.getTeamID(), killCost);
-                }
-                // never below 0, returns the points before the kill
-                int playerTeamPoints = TeamCollection.withdrawTeamPointsFloored(playerTeam.getTeamID(), killCost);
-                int earnedPoints = killCost;
-                if (playerTeamPoints < killCost) {
-                    earnedPoints = playerTeamPoints;
-                    playerTeam.downgradeTeamLevel();
-                }
-
-                PlayerCacheObject tmpPlayerCacheObject;
-                for (Player online : Bukkit.getOnlinePlayers()) {
-                    tmpPlayerCacheObject = CacheHandler.getInstance().getPlayerInCache(online);
-                    if (tmpPlayerCacheObject.getTeamID() == null) continue;
-                    if (tmpPlayerCacheObject.getTeamID().equals(killerPlayerCacheObject.getTeamID())) {
-                        online.sendMessage(Main.getChatPrefix() + "§a+" + earnedPoints + " Team-Punkte §ffür den Kill an " + player.getDisplayName());
-                    }
-                    if (tmpPlayerCacheObject.getTeamID().equals(playerCacheObject.getTeamID())) {
-                        online.sendMessage(Main.getChatPrefix() + "§c-" + earnedPoints + " Team-Punkte §fwegen dem Tod durch " + killer.getDisplayName());
-                        if (earnedPoints < 250) {
-                            online.sendMessage(Main.getChatPrefix() + "§cEuer Team wurde ein Level herunter gestuft!");
-                            online.sendMessage(Main.getChatPrefix() + "§fAchtet in Zukunft immer auf genügend Team-Punkte!");
-                            online.sendMessage(" ");
-                            online.sendMessage("§f§oEure Optionen im Gebiets-Manager wurden zurückgesetzt.");
-                        }
-                    }
-                }
-
-            }else {
-
-                PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
-                if (playerCacheObject.isWanted()){
-                    player.playSound(player.getLocation(), Sound.BLOCK_DEADBUSH_IDLE, 1, 1);
-                    playerCacheObject.setWanted(false);
-                    playerCacheObject.setJail(true, 72);
-                    Bukkit.getScheduler().runTask(Main.getInstance(), () -> {
-                        player.teleport(Locations.getJailSpawn());
-                    });
-
+            PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
+            if (killer == null) {
+                if (!playerCacheObject.isWanted()) return;
+                jailAfterDeath(player, playerCacheObject);
+                sync(() -> {
                     player.sendMessage(Main.getChatPrefix() + "§cManchmal hat man eben einfach Unglück.");
                     player.sendMessage(Main.getChatPrefix() + "§6Deine Haft wurde auf §c72h §6festgesetzt.");
-                }
-
+                });
+                return;
             }
 
+            PlayerCacheObject killerPlayerCacheObject = CacheHandler.getInstance().getPlayerInCache(killer);
+            if (listedAsWanted) {
+                collectBounty(player, killer, playerCacheObject, killerPlayerCacheObject);
+            } else {
+                settleTeamKill(player, killer, playerCacheObject, killerPlayerCacheObject);
+            }
+        });
+    }
+
+    // worker thread
+    private static void chargeDeathTax(Player player) {
+        float deathTaxRate = ConfigManager.getManager().getDeathTax();
+        int money = PlayerCollection.getMoney(player);
+
+        String message;
+        if (money <= 250) {
+            message = Main.getChatPrefix() + "Dir wurde §ckeine §fTodes-Steuer berechnet.";
+        } else {
+            int tax = Math.round(money * deathTaxRate);
+            PlayerCollection.addMoney(player, -tax);
+
+            message = String.format(
+                    "%sDir wurden §a%s §8(§2%.0f%%§8) §fals Todes-Steuer berechnet.",
+                    Main.getChatPrefix(),
+                    Main.getCurrencyName(tax),
+                    deathTaxRate * 100
+            );
+        }
+        sync(() -> player.sendMessage(message));
+    }
+
+    // worker thread: the wanted player goes to jail for 72 h
+    private static void jailAfterDeath(Player player, PlayerCacheObject playerCacheObject) {
+        sync(() -> player.playSound(player.getLocation(), Sound.BLOCK_DEADBUSH_IDLE, 1, 1));
+        playerCacheObject.setWanted(false);
+        playerCacheObject.setJail(true, 72);
+        sync(() -> player.teleport(Locations.getJailSpawn()));
+    }
+
+    // worker thread
+    private static void collectBounty(Player player, Player killer, PlayerCacheObject playerCacheObject, PlayerCacheObject killerPlayerCacheObject) {
+        jailAfterDeath(player, playerCacheObject);
+
+        String killerTeamID = killerPlayerCacheObject.getTeamID();
+        if (killerTeamID != null && killerTeamID.equals(playerCacheObject.getTeamID())) {
+            sync(() -> killer.sendMessage(Main.getChatPrefix() + "§cDu kannst keine Belohnung von deinem Teamteamkollegen eintreiben."));
+            return;
+        }
+
+        boolean alreadyCollected = JailHandler.getAlreadyKilledPlayer().contains(player.getUniqueId());
+        sync(() -> {
+            killer.sendMessage(Main.getChatPrefix() + "§aDu hast den gesuchten Spieler §6" + player.getName() + " §agefunden!");
+            if (alreadyCollected) return;
+            killer.sendMessage(Main.getChatPrefix() + "§fHier deine Belohnung!");
+            killer.sendMessage(Main.getChatPrefix() + " ");
+        });
+        if (alreadyCollected) return;
+
+        PlayerCollection.addMoney(killer, 10000);
+        sync(() -> killer.sendMessage(Main.getChatPrefix() + "§a+" + Main.getCurrencyName(10000)));
+
+        if (killerTeamID != null) {
+            TeamCollection.addTeamPoints(killerTeamID, 1000);
+            sync(() -> forEachOnlineTeamMember(killerTeamID, p -> {
+                p.playSound(p.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1, 1);
+                p.playSound(p.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 1, 1);
+                p.sendMessage(Main.getChatPrefix() + "§a+1000 Team-Punkte §ffür das Eintreiben des Kopfgeldes von §a" + player.getName());
+            }));
+        }
+
+        JailHandler.getAlreadyKilledPlayer().add(player.getUniqueId());
+        sync(() -> {
+            player.sendMessage(Main.getChatPrefix() + "§cWenn dich das Gesetz nicht holt, §a" + Main.getCurrencyName() + "e §ctun es.");
+            player.sendMessage(Main.getChatPrefix() + "§6Deine Haft wurde auf §c72h §6festgesetzt.");
+        });
+    }
+
+    // worker thread
+    private static void settleTeamKill(Player player, Player killer, PlayerCacheObject playerCacheObject, PlayerCacheObject killerPlayerCacheObject) {
+        String killerTeamID = killerPlayerCacheObject.getTeamID();
+        String playerTeamID = playerCacheObject.getTeamID();
+        if (killerTeamID == null || playerTeamID == null) return;
+
+        TeamCacheObject killerTeam = killerPlayerCacheObject.getTeamCacheObject();
+        TeamCacheObject playerTeam = playerCacheObject.getTeamCacheObject();
+        if (killerTeam == null || playerTeam == null) return;
+
+        // a kill inside the own team only costs the points (the credit was always overwritten before)
+        if (!killerTeam.getTeamID().equals(playerTeam.getTeamID())) {
+            TeamCollection.addTeamPoints(killerTeam.getTeamID(), killCost);
+        }
+        // never below 0, returns the points before the kill
+        int playerTeamPoints = TeamCollection.withdrawTeamPointsFloored(playerTeam.getTeamID(), killCost);
+        int earnedPoints = killCost;
+        if (playerTeamPoints < killCost) {
+            earnedPoints = playerTeamPoints;
+            playerTeam.downgradeTeamLevel();
+        }
+
+        int points = earnedPoints;
+        sync(() -> {
+            forEachOnlineTeamMember(killerTeamID, online ->
+                    online.sendMessage(Main.getChatPrefix() + "§a+" + points + " Team-Punkte §ffür den Kill an " + player.getDisplayName()));
+            forEachOnlineTeamMember(playerTeamID, online -> {
+                online.sendMessage(Main.getChatPrefix() + "§c-" + points + " Team-Punkte §fwegen dem Tod durch " + killer.getDisplayName());
+                if (points < killCost) {
+                    online.sendMessage(Main.getChatPrefix() + "§cEuer Team wurde ein Level herunter gestuft!");
+                    online.sendMessage(Main.getChatPrefix() + "§fAchtet in Zukunft immer auf genügend Team-Punkte!");
+                    online.sendMessage(" ");
+                    online.sendMessage("§f§oEure Optionen im Gebiets-Manager wurden zurückgesetzt.");
+                }
+            });
         });
     }
 
@@ -242,29 +263,19 @@ public class DeathListener implements Listener {
 
         Entity entity = event.getEntity();
         if (!entity.isCustomNameVisible()) return;
-        if (entity.getCustomName() != null && entity.getCustomName().equals("§c§lMonster-Event")) {
+        if (!MONSTER_EVENT_NAME.equals(Text.legacyOrNull(entity.customName()))) return;
 
-            Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
-                PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(killer);
-                if (playerCacheObject.getTeamID() == null) return;
+        Tasks.async(() -> {
+            String teamID = CacheHandler.getInstance().getPlayerInCache(killer).getTeamID();
+            if (teamID == null) return;
 
-                if (!TeamCollection.addTeamPoints(playerCacheObject.getTeamID(), 10)) return;
+            if (!TeamCollection.addTeamPoints(teamID, 10)) return;
 
-                PlayerCacheObject tmpPlayerCacheObject;
-                for (Player online : Bukkit.getOnlinePlayers()) {
-                    tmpPlayerCacheObject = CacheHandler.getInstance().getPlayerInCache(online);
-                    if (tmpPlayerCacheObject.getTeamID() == null) continue;
-                    if (tmpPlayerCacheObject.getTeamID().equals(playerCacheObject.getTeamID())) {
-                        online.sendMessage(Main.getChatPrefix() + "§a+10 Team-Punkte");
-                        online.playSound(online.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.4f, 0.2f);
-                    }
-
-                }
-
-            });
-
-        }
-
+            sync(() -> forEachOnlineTeamMember(teamID, online -> {
+                online.sendMessage(Main.getChatPrefix() + "§a+10 Team-Punkte");
+                online.playSound(online.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.4f, 0.2f);
+            }));
+        });
     }
 
 
@@ -273,48 +284,21 @@ public class DeathListener implements Listener {
         Player player = event.getPlayer();
         PlayerCacheObject cache = CacheHandler.getInstance().getPlayerInCache(player);
 
-        if (cache == null) {
-            player.setPlayerListName(player.getName());
-            player.setDisplayName(player.getName());
-            return;
-        }
-
-        String listName;
-        String displayName;
-
-        if (cache.getTeamID() == null || cache.getTeamCacheObject() == null) {
-            listName = "§a" + player.getName();
-            displayName = listName;
-        } else {
-            var team = cache.getTeamCacheObject();
-            String color = team.getTeamColor();
-
-            if (team.getTeamOwner().equals(player.getUniqueId().toString())) {
-                listName = color + "§l" + player.getName();
-                displayName = listName;
-            } else if (team.getTeamVices().contains(player.getUniqueId().toString())) {
-                listName = color + "§o" + player.getName();
-                displayName = listName;
-            } else {
-                listName = color + player.getName();
-                displayName = listName;
-            }
-        }
+        TeamCacheObject team = cache.getTeamID() == null ? null : cache.getTeamCacheObject();
+        String name = JoinQuitListener.teamPlayerName(player, team, true);
 
         if (cache.isWanted()) {
-            listName = Main.getIsWantedPrefix() + listName.replace(Main.getInJailPrefix(), "");
-            displayName = Main.getIsWantedPrefix() + displayName.replace(Main.getInJailPrefix(), "");
+            name = Main.getIsWantedPrefix() + name;
             event.setRespawnLocation(Locations.getJailSpawn());
         } else if (cache.isJail()) {
-            listName = Main.getInJailPrefix() + listName.replace(Main.getIsWantedPrefix(), "");
-            displayName = Main.getInJailPrefix() + displayName.replace(Main.getIsWantedPrefix(), "");
+            name = Main.getInJailPrefix() + name;
             event.setRespawnLocation(Locations.getJailSpawn());
         } else if (isPlayerInArena(player)) {
             event.setRespawnLocation(Locations.getCurrentSpawn());
         }
 
-        player.setPlayerListName(listName);
-        player.setDisplayName(displayName);
+        player.playerListName(Text.listName(name, player.getName()));
+        player.setDisplayName(name);
 
     }
 

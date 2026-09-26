@@ -1,22 +1,25 @@
 package xyz.jupp.minecraft.listener;
 
-import org.bukkit.Bukkit;
+import io.papermc.paper.event.player.AsyncChatEvent;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.event.player.*;
-import xyz.jupp.minecraft.Main;
+import org.bukkit.event.player.PlayerCommandPreprocessEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerMoveEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 
-
-import static xyz.jupp.minecraft.utils.AfkHelper.*;
+import static xyz.jupp.minecraft.utils.AfkHelper.markActivity;
+import static xyz.jupp.minecraft.utils.AfkHelper.removePlayer;
 
 public class AfkListener implements Listener {
 
     @EventHandler
     public void onJoin(PlayerJoinEvent e) {
-        initPlayer(e.getPlayer());
+        markActivity(e.getPlayer());
     }
 
     @EventHandler
@@ -24,21 +27,17 @@ public class AfkListener implements Listener {
         removePlayer(e.getPlayer().getUniqueId());
     }
 
+    // only a block change counts, turning the head does not
     @EventHandler
     public void onMove(PlayerMoveEvent e) {
-        if (e.getTo() == null) return;
-
-        // Nur Blockwechsel zählt
-        if (e.getFrom().getBlockX() != e.getTo().getBlockX()
-                || e.getFrom().getBlockY() != e.getTo().getBlockY()
-                || e.getFrom().getBlockZ() != e.getTo().getBlockZ()) {
-            markActivity(e.getPlayer());
-        }
+        if (!e.hasExplicitlyChangedBlock()) return;
+        markActivity(e.getPlayer());
     }
 
+    // markActivity is thread-safe, so it runs directly on the chat thread
     @EventHandler
-    public void onChat(AsyncPlayerChatEvent e) {
-        Bukkit.getScheduler().runTask(Main.getInstance(), () -> markActivity(e.getPlayer()));
+    public void onChat(AsyncChatEvent e) {
+        markActivity(e.getPlayer());
     }
 
     @EventHandler
@@ -48,9 +47,7 @@ public class AfkListener implements Listener {
 
     @EventHandler
     public void onInteract(PlayerInteractEvent e) {
-        Action a = e.getAction();
-        if (a == Action.RIGHT_CLICK_AIR || a == Action.RIGHT_CLICK_BLOCK
-                || a == Action.LEFT_CLICK_AIR || a == Action.LEFT_CLICK_BLOCK) {
+        if (e.getAction() != Action.PHYSICAL) {
             markActivity(e.getPlayer());
         }
     }
