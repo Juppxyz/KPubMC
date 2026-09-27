@@ -56,8 +56,9 @@ public final class Treasury {
                 source.name(), amount, player);
     }
 
+    // after the commit of a booking; negative for refunds
     static void committed(long amount) {
-        if (amount > 0) balance.addAndGet(amount);
+        if (amount != 0) balance.addAndGet(amount);
     }
 
     /** Blocking: sum of the inflows since the given time per source. */

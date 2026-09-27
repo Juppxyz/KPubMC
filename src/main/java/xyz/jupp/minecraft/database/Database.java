@@ -159,7 +159,25 @@ public final class Database {
                 source     TEXT NOT NULL,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now()
             )""",
-            "CREATE TABLE IF NOT EXISTS market_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
+            "CREATE TABLE IF NOT EXISTS market_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+            // effects and services ("Effekte & Dienste" tab), priced like the goods
+            """
+            CREATE TABLE IF NOT EXISTS market_services (
+                key              TEXT PRIMARY KEY,
+                kind             TEXT    NOT NULL CHECK (kind IN ('EFFECT', 'REPAIR', 'WEATHER', 'DAY')),
+                display_name     TEXT    NOT NULL,
+                icon             TEXT    NOT NULL,
+                base_price       INTEGER NOT NULL CHECK (base_price > 0),
+                elasticity       DOUBLE PRECISION NOT NULL DEFAULT 0.05 CHECK (elasticity >= 0),
+                tax_class        TEXT    NOT NULL DEFAULT 'STANDARD',
+                effect           TEXT,
+                amplifier        INTEGER NOT NULL DEFAULT 0,
+                duration_seconds INTEGER NOT NULL DEFAULT 0,
+                max_seconds      INTEGER NOT NULL DEFAULT 0,
+                sort             INTEGER NOT NULL DEFAULT 0,
+                enabled          BOOLEAN NOT NULL DEFAULT TRUE,
+                demand           DOUBLE PRECISION NOT NULL DEFAULT 0
+            )"""
     );
 
     private static volatile HikariDataSource dataSource;

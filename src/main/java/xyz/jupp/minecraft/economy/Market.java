@@ -84,7 +84,9 @@ public final class Market {
         double halfLifeHours = ConfigManager.getManager().getDemandHalfLifeHours();
         double factor = Math.pow(0.5, DECAY_INTERVAL_MINUTES / (60.0 * halfLifeHours));
         MarketRepository.decayDemand(factor);
+        Services.decayDemand(factor);
         reload();
+        Services.reload();
         Tasks.sync(ShopView::refreshAll);
     }
 

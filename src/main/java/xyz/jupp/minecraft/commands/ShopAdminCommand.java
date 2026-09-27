@@ -14,6 +14,8 @@ import xyz.jupp.minecraft.economy.Economy;
 import xyz.jupp.minecraft.economy.Market;
 import xyz.jupp.minecraft.economy.MarketItem;
 import xyz.jupp.minecraft.economy.MarketRepository;
+import xyz.jupp.minecraft.economy.ServiceOffer;
+import xyz.jupp.minecraft.economy.Services;
 import xyz.jupp.minecraft.economy.ShopView;
 import xyz.jupp.minecraft.economy.TaxClass;
 import xyz.jupp.minecraft.utils.PermissionsUtil;
@@ -32,7 +34,7 @@ import java.util.function.Supplier;
  */
 public class ShopAdminCommand implements TabExecutor {
 
-    private static final List<String> SUBCOMMANDS = List.of("info", "set", "add", "remove", "rotate", "reset", "reload", "verlauf", "undo");
+    private static final List<String> SUBCOMMANDS = List.of("info", "set", "add", "remove", "rotate", "reset", "reload", "verlauf", "undo", "dienst");
 
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
@@ -72,6 +74,7 @@ public class ShopAdminCommand implements TabExecutor {
             case "reload" -> change(sender, () -> true, "§fKatalog neu geladen.");
             case "verlauf" -> history(sender);
             case "undo" -> undo(sender, args);
+            case "dienst" -> service(sender, args);
             default -> help(sender);
         }
         return true;
@@ -88,6 +91,8 @@ public class ShopAdminCommand implements TabExecutor {
         sender.sendMessage("§8» §a/shopadmin reload §8- nach Änderungen in der Datenbank");
         sender.sendMessage("§8» §a/shopadmin verlauf §8- letzte Anpassungen (KI und Admins)");
         sender.sendMessage("§8» §a/shopadmin undo <Nr> §8- Anpassung rückgängig machen");
+        sender.sendMessage("§8» §a/shopadmin dienst <Name> [Feld Wert] §8- Effekte & Dienste (Felder: "
+                + String.join(", ", Services.EDITABLE_COLUMNS.keySet()) + ")");
     }
 
     private static void info(CommandSender sender, Material material) {
@@ -198,6 +203,60 @@ public class ShopAdminCommand implements TabExecutor {
             MarketRepository.logAdjustment(LocalDate.now(Market.ZONE), material, adjustment.field(), current, restored, "Rückgängig #" + id, admin);
             Market.reload();
             return "§f" + material + " " + fieldName(adjustment.field()) + " §fist wieder §a" + adjustment.oldValue() + "§f.";
+        });
+    }
+
+    // /shopadmin dienst <key> shows a service, /shopadmin dienst <key> <field> <value> changes it
+    private static void service(CommandSender sender, String[] args) {
+        if (args.length < 2) {
+            sender.sendMessage(Main.getChatPrefix() + "§fDienste: §a" + String.join(", ",
+                    Services.all().stream().map(ServiceOffer::key).toList()));
+            return;
+        }
+        ServiceOffer offer = Services.get(args[1].toLowerCase(Locale.ROOT));
+        if (offer == null) {
+            sender.sendMessage(Main.getChatPrefix() + "§cUnbekannter Dienst.");
+            return;
+        }
+        if (args.length < 4) {
+            sender.sendMessage("§8=-- §a" + offer.key() + " §8--=");
+            sender.sendMessage("§fArt: §a" + offer.kind() + " §8| §fAktiv: §a" + yes(offer.enabled()) + " §8| §fSteuerklasse: §a" + offer.taxClass());
+            sender.sendMessage("§fBasispreis: §a" + offer.basePrice() + " §8| §fAktuell: §a" + offer.price()
+                    + " §8| §fElastizität: §a" + offer.elasticity() + " §8| §fNachfrage: §a" + String.format(Locale.ROOT, "%.2f", offer.demand()));
+            if (offer.kind() == ServiceOffer.Kind.EFFECT) {
+                sender.sendMessage("§fEffekt: §a" + offer.effect() + " §8| §fStufe: §a" + offer.amplifier()
+                        + " §8| §fDauer/Max: §a" + offer.durationSeconds() + "s§8/§a" + offer.maxSeconds() + "s");
+            }
+            return;
+        }
+        String column = Services.EDITABLE_COLUMNS.get(args[2].toLowerCase(Locale.ROOT));
+        if (column == null) {
+            sender.sendMessage(Main.getChatPrefix() + "§cUnbekanntes Feld. §7Erlaubt: " + String.join(", ", Services.EDITABLE_COLUMNS.keySet()));
+            return;
+        }
+        String raw = String.join(" ", Arrays.copyOfRange(args, 3, args.length));
+        Object value;
+        try {
+            value = switch (column) {
+                case "base_price", "amplifier", "duration_seconds", "max_seconds" -> Integer.parseInt(raw);
+                case "elasticity" -> Double.parseDouble(raw.replace(',', '.'));
+                case "enabled" -> parse("enabled", raw);
+                case "tax_class" -> {
+                    TaxClass taxClass = TaxClass.parse(raw);
+                    if (taxClass == null) throw new IllegalArgumentException("grundbedarf, standard oder luxus");
+                    yield taxClass.name();
+                }
+                default -> raw.replace('&', '§');
+            };
+        } catch (IllegalArgumentException e) {
+            sender.sendMessage(Main.getChatPrefix() + "§cUngültiger Wert: §7" + e.getMessage());
+            return;
+        }
+        String key = offer.key();
+        run(sender, () -> {
+            if (!Services.update(key, column, value)) return "§cNichts geändert.";
+            Services.reload();
+            return "§f" + key + ": §a" + args[2] + " §f= §a" + raw;
         });
     }
 

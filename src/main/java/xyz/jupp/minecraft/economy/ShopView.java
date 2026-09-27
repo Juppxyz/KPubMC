@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * The shop GUI of the "Händler".
@@ -45,6 +46,7 @@ public final class ShopView implements InventoryHolder {
         ORES(Category.ORES),
         FOOD(Category.FOOD),
         MISC(Category.MISC),
+        SERVICES("§dEffekte & Dienste", Material.BREWING_STAND, null),
         INFO("§fSo funktioniert's", Material.BOOK, null);
 
         private final String label;
@@ -62,7 +64,7 @@ public final class ShopView implements InventoryHolder {
         }
     }
 
-    private enum Page { OVERVIEW, DETAIL, RANDOM }
+    private enum Page { OVERVIEW, DETAIL, RANDOM, SERVICE }
 
     private record Action(boolean buy, int bundles) {}
 
@@ -94,12 +96,14 @@ public final class ShopView implements InventoryHolder {
 
     private final Player viewer;
     private final Map<Integer, Material> contentSlots = new HashMap<>();
+    private final Map<Integer, String> serviceSlots = new HashMap<>();
     private final Map<Integer, Action> actions = new HashMap<>();
     private Inventory inventory;
     private Tab tab = Tab.DAILY;
     private int page;
     private Page view = Page.OVERVIEW;
     private @Nullable Material detail;
+    private @Nullable String service;
     private int balance;
     private boolean busy;
     private long ignoreClicksUntil;
@@ -145,6 +149,10 @@ public final class ShopView implements InventoryHolder {
         return switch (view) {
             case OVERVIEW -> prefix.append(Text.section(tab.label));
             case RANDOM -> prefix.append(Text.section("§5Zufall"));
+            case SERVICE -> {
+                ServiceOffer offer = service == null ? null : Services.get(service);
+                yield offer == null ? prefix : prefix.append(Services.name(offer));
+            }
             case DETAIL -> {
                 MarketItem item = detail == null ? null : Market.get(detail);
                 yield item == null ? prefix : prefix.append(name(item));
@@ -155,6 +163,7 @@ public final class ShopView implements InventoryHolder {
     private void render() {
         inventory.clear();
         contentSlots.clear();
+        serviceSlots.clear();
         actions.clear();
         ignoreClicksUntil = System.currentTimeMillis() + CLICK_COOLDOWN_MILLIS;
         ItemStack frame = pane(Material.BLACK_STAINED_GLASS_PANE);
@@ -164,6 +173,7 @@ public final class ShopView implements InventoryHolder {
             case OVERVIEW -> renderOverview();
             case DETAIL -> renderDetail();
             case RANDOM -> renderRandom();
+            case SERVICE -> renderService();
         }
 
         inventory.setItem(SLOT_BALANCE, named(Material.GOLD_NUGGET, "§fDein Konto: " + Main.getCurrencyName(balance), List.of()));
@@ -184,6 +194,10 @@ public final class ShopView implements InventoryHolder {
 
         if (tab == Tab.INFO) {
             renderInfo();
+            return;
+        }
+        if (tab == Tab.SERVICES) {
+            renderServiceOverview();
             return;
         }
         List<MarketItem> goods = goods(tab);
@@ -213,8 +227,17 @@ public final class ShopView implements InventoryHolder {
     private ItemStack tabItem(Tab candidate) {
         boolean selected = candidate == tab;
         List<String> lore = new ArrayList<>();
-        lore.add(candidate == Tab.INFO ? "§7Preise und Steuern erklärt" : "§7Kategorie");
-        if (candidate != Tab.INFO) lore.add("§8" + goods(candidate).size() + " Items");
+        switch (candidate) {
+            case INFO -> lore.add("§7Preise und Steuern erklärt");
+            case SERVICES -> {
+                lore.add("§7Tränke-Effekte und Dienste");
+                lore.add("§8" + Services.all().size() + " Angebote");
+            }
+            default -> {
+                lore.add("§7Kategorie");
+                lore.add("§8" + goods(candidate).size() + " Items");
+            }
+        }
         lore.add("");
         lore.add(selected ? "§a✔ Geöffnet" : "§e» Klicken zum Öffnen");
         ItemStack item = named(candidate.icon, (selected ? "§a§l" : "§f§l") + Text.strip(candidate.label), lore);
@@ -417,6 +440,147 @@ public final class ShopView implements InventoryHolder {
     }
 
 
+    /* effects & services */
+
+    private void renderServiceOverview() {
+        int slot = CONTENT_START;
+        for (ServiceOffer offer : Services.all()) {
+            if (slot >= CONTENT_START + CONTENT_SIZE) break;
+            List<String> lore = new ArrayList<>(serviceLines(offer));
+            lore.add("");
+            lore.add("§e» Klicken zum Kaufen");
+            inventory.setItem(slot, named(offer.icon(), offer.displayName(), lore));
+            serviceSlots.put(slot, offer.key());
+            slot++;
+        }
+        for (; slot < CONTENT_START + CONTENT_SIZE; slot++) inventory.setItem(slot, null);
+    }
+
+    private List<String> serviceLines(ServiceOffer offer) {
+        List<String> lore = new ArrayList<>();
+        int net = offer.price();
+        int tax = Taxes.taxOn(net, offer.taxClass());
+        String price = "§7Preis: " + Main.getCurrencyName(net + tax) + " §8(inkl. " + tax + " Steuer)";
+        switch (offer.kind()) {
+            case EFFECT -> {
+                lore.add("§7Dauer: §f" + minutes(offer.durationSeconds()) + " §8(bis " + minutes(offer.maxSeconds()) + ")");
+                lore.add(price);
+            }
+            case REPAIR -> {
+                lore.add("§7Repariert das Item in deiner Hand.");
+                lore.add("§7Preis: je nach Schaden §8(ab " + (net + tax) + ")");
+            }
+            case WEATHER -> {
+                lore.add("§7Beendet Regen und Gewitter");
+                lore.add("§7für alle Spieler.");
+                lore.add(price);
+            }
+            case DAY -> {
+                lore.add("§7Macht es sofort Tag");
+                lore.add("§7für alle Spieler.");
+                lore.add(price);
+            }
+        }
+        if (offer.trend() >= 0.05) lore.add("§c▲ gerade teurer als sonst");
+        String reason = Services.unavailableReason(viewer, offer);
+        if (reason != null) lore.add("§c" + reason);
+        return lore;
+    }
+
+    private void renderService() {
+        inventory.setItem(SLOT_BACK, named(Material.ARROW, "§f◀ Zurück", List.of("§7zu " + tab.label)));
+        ServiceOffer offer = service == null ? null : Services.get(service);
+        if (offer == null || !offer.enabled()) {
+            inventory.setItem(22, named(Material.BARRIER, "§7Das gibt es gerade nicht.", List.of()));
+            return;
+        }
+        inventory.setItem(SLOT_GOOD, named(offer.icon(), offer.displayName(), serviceLines(offer)));
+        inventory.setItem(SLOT_BUY_LABEL, named(Material.LIME_CONCRETE, "§a§lKaufen", List.of()));
+
+        String reason = Services.unavailableReason(viewer, offer);
+        if (reason != null) {
+            inventory.setItem(CENTER_BUY_SLOT, named(Material.GRAY_STAINED_GLASS_PANE, "§7" + reason, List.of()));
+            return;
+        }
+        List<String> lore = new ArrayList<>();
+        int net = offer.price();
+        if (offer.kind() == ServiceOffer.Kind.REPAIR) {
+            ItemStack hand = viewer.getInventory().getItemInMainHand();
+            int damage = Services.repairDamage(hand);
+            net = offer.repairPrice(damage);
+            int max = hand.getType().getMaxDurability();
+            if (max > 0) lore.add("§7Schaden: §f" + Math.round(100.0 * damage / max) + " %");
+        }
+        int tax = Taxes.taxOn(net, offer.taxClass());
+        lore.add("§7Preis: " + Main.getCurrencyName(net + tax) + " §8(inkl. " + tax + " Steuer)");
+        if (net + tax > balance) lore.add("§cDir fehlen " + (net + tax - balance) + " Schilling");
+        lore.add("");
+        lore.add("§e» Linksklick zum Kaufen");
+        inventory.setItem(CENTER_BUY_SLOT, named(Material.LIME_STAINED_GLASS_PANE, "§a§lKaufen", lore));
+        actions.put(CENTER_BUY_SLOT, new Action(true, 1));
+    }
+
+    private void buyService(Player player) {
+        ServiceOffer offer = service == null ? null : Services.get(service);
+        if (offer == null) return;
+        String reason = Services.unavailableReason(player, offer);
+        if (reason != null) {
+            fail(player, "§f" + reason + ".");
+            render();
+            return;
+        }
+        ItemStack target = null;
+        int damage = 0;
+        if (offer.kind() == ServiceOffer.Kind.REPAIR) {
+            ItemStack hand = player.getInventory().getItemInMainHand();
+            damage = Services.repairDamage(hand);
+            target = hand.clone();
+        }
+        int expected = offer.kind() == ServiceOffer.Kind.REPAIR ? offer.repairPrice(damage) : offer.price();
+        int finalDamage = damage;
+        ItemStack repairTarget = target;
+        busy = true;
+        Tasks.async(() -> {
+            Services.Purchase purchase;
+            try {
+                purchase = Services.buy(player.getUniqueId(), offer.key(), finalDamage, expected);
+            } catch (RuntimeException e) {
+                unavailable(player, e, null, 0);
+                return;
+            }
+            int money = PlayerRepository.getMoney(player);
+            Runnable onMain = () -> {
+                busy = false;
+                balance = money;
+                switch (purchase.outcome()) {
+                    case OK -> {
+                        if (Services.apply(player, Objects.requireNonNull(purchase.offer()), repairTarget)) {
+                            player.sendMessage(Text.section(Main.getChatPrefix() + "§fGekauft: ").append(Services.name(offer))
+                                    .append(Text.section(" §ffür " + Main.getCurrencyName(purchase.total()) + " §8(davon " + purchase.tax() + " Steuer)")));
+                            player.playSound(player.getLocation(), Sound.BLOCK_BREWING_STAND_BREW, 1f, 1.2f);
+                        } else {
+                            Tasks.async(() -> Services.refund(player.getUniqueId(), purchase));
+                            balance += purchase.total();
+                            fail(player, "§fDas ging gerade nicht, du bekommst dein Geld zurück.");
+                        }
+                    }
+                    case INSUFFICIENT_FUNDS -> fail(player, "§fDafür fehlen dir Schilling §8(benötigt: " + purchase.total() + ")§f.");
+                    case PRICE_CHANGED -> fail(player, "§fDer Preis hat sich gerade geändert, bitte prüfe den neuen Preis.");
+                    case UNAVAILABLE -> fail(player, "§fDas gibt es gerade nicht.");
+                }
+                refreshAll();
+            };
+            if (!MainThread.run(onMain) && purchase.outcome() == MarketRepository.Outcome.OK) {
+                Services.refund(player.getUniqueId(), purchase);
+            }
+        });
+    }
+
+    private static String minutes(int seconds) {
+        return seconds >= 3600 && seconds % 3600 == 0 ? seconds / 3600 + " h" : Math.round(seconds / 60.0) + " min";
+    }
+
+
     /* clicks (main thread) */
 
     public void handleClick(@NotNull InventoryClickEvent event, @NotNull Player player) {
@@ -430,7 +594,7 @@ public final class ShopView implements InventoryHolder {
 
         switch (view) {
             case OVERVIEW -> clickOverview(player, slot);
-            case DETAIL, RANDOM -> clickDetail(player, slot, click);
+            case DETAIL, RANDOM, SERVICE -> clickDetail(player, slot, click);
         }
     }
 
@@ -463,6 +627,14 @@ public final class ShopView implements InventoryHolder {
             Tasks.sync(this::reopen);
             return;
         }
+        String serviceKey = serviceSlots.get(slot);
+        if (serviceKey != null) {
+            view = Page.SERVICE;
+            service = serviceKey;
+            player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, 0.5f, 1.2f);
+            Tasks.sync(this::reopen);
+            return;
+        }
         Material material = contentSlots.get(slot);
         if (material == null) return;
         view = Page.DETAIL;
@@ -475,12 +647,17 @@ public final class ShopView implements InventoryHolder {
         if (slot == SLOT_BACK) {
             view = Page.OVERVIEW;
             detail = null;
+            service = null;
             Tasks.sync(this::reopen);
             return;
         }
         Action action = actions.get(slot);
         // buttons only react to a left click
         if (action == null || click != ClickType.LEFT) return;
+        if (view == Page.SERVICE) {
+            buyService(player);
+            return;
+        }
         if (view == Page.RANDOM) {
             buyRandom(player);
             return;
