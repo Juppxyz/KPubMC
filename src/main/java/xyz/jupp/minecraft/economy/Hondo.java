@@ -95,6 +95,8 @@ public final class Hondo {
     public static final int ACTIVE_VOLUME = 500;
     static final double DECAY_SHARE = 0.08;
     static final double DECAY_MIN = 2;
+    // the capped points stay this far below the level after next
+    private static final double DAY_CAP_GAP = 0.01;
 
     public static int level(double points) {
         for (int level = MAX_LEVEL; level > 0; level--) {
@@ -122,6 +124,16 @@ public final class Hondo {
 
     static double pointsForTrade(int value, int tradesToday) {
         return value / SCHILLING_PER_POINT + (tradesToday < BONUS_TRADES_PER_DAY ? 1 : 0);
+    }
+
+    /**
+     * At most one level up per day: the points stop just below the level after next (counted from the level at the
+     * start of the day), everything above is lost. Returns the points the trade really gives.
+     */
+    static double cappedGain(double points, double gain, int levelAtDayStart) {
+        if (levelAtDayStart + 2 > MAX_LEVEL) return gain;
+        double limit = LEVEL_POINTS[levelAtDayStart + 2] - DAY_CAP_GAP;
+        return Math.max(0, Math.min(gain, limit - points));
     }
 
     static double decayed(double points) {

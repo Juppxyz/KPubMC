@@ -119,6 +119,7 @@ public final class HondoView implements InventoryHolder {
             double next = Hondo.pointsFor(level + 1);
             lore.add(progressBar(friendship.points(), Hondo.pointsFor(level), next)
                     + " §7" + (int) friendship.points() + "/" + (int) next + " bis " + Hondo.levelName(level + 1));
+            if (friendship.nextLevelTomorrow()) lore.add("§8Heute schon aufgestiegen, nächste Stufe ab morgen.");
         } else {
             lore.add("§6Höchste Stufe erreicht!");
         }

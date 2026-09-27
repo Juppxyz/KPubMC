@@ -29,13 +29,26 @@ public final class HondoRepository {
 
     public enum Outcome { OK, INSUFFICIENT_FUNDS, PRICE_CHANGED, UNAVAILABLE, ALREADY_CLAIMED, LEVEL_TOO_LOW }
 
-    /** The friendship as the GUI shows it; the trades of today decide whether the points shrink over night. */
-    public record Friendship(double points, int trades, long volume, int tradesToday, long volumeToday, Set<Integer> claimed) {
+    /**
+     * The friendship as the GUI shows it; the trades of today decide whether the points shrink over night,
+     * the points of today give the level at the start of the day (at most one level up per day).
+     */
+    public record Friendship(double points, int trades, long volume, int tradesToday, long volumeToday, double pointsToday,
+                             Set<Integer> claimed) {
 
-        public static final Friendship NONE = new Friendship(0, 0, 0, 0, 0, Set.of());
+        public static final Friendship NONE = new Friendship(0, 0, 0, 0, 0, 0, Set.of());
 
         public int level() {
             return Hondo.level(points);
+        }
+
+        public int levelAtDayStart() {
+            return Hondo.level(points - pointsToday);
+        }
+
+        /** Already one level up today: the next one comes tomorrow at the earliest. */
+        public boolean nextLevelTomorrow() {
+            return level() < Hondo.MAX_LEVEL && level() > levelAtDayStart();
         }
 
         public boolean activeToday() {
@@ -67,12 +80,20 @@ public final class HondoRepository {
     }
 
     private static Friendship friendship(Connection connection, UUID player, Friend friend) throws SQLException {
-        long[] today = Database.queryOne(connection, "SELECT COUNT(*), COALESCE(SUM(value), 0) FROM hondo_trades WHERE player_uuid = ? AND created_at >= ?",
-                row -> new long[]{row.getLong(1), row.getLong(2)}, player, startOfToday());
+        Today today = today(connection, player);
         Set<Integer> claimed = new HashSet<>(Database.query(connection, "SELECT level FROM hondo_claims WHERE player_uuid = ?",
                 row -> row.getInt(1), player));
-        return new Friendship(friend.points(), friend.trades(), friend.volume(),
-                today == null ? 0 : (int) today[0], today == null ? 0 : today[1], Set.copyOf(claimed));
+        return new Friendship(friend.points(), friend.trades(), friend.volume(), today.trades(), today.volume(), today.points(),
+                Set.copyOf(claimed));
+    }
+
+    private record Today(int trades, long volume, double points) {}
+
+    private static Today today(Connection connection, UUID player) throws SQLException {
+        Today today = Database.queryOne(connection, "SELECT COUNT(*), COALESCE(SUM(value), 0), COALESCE(SUM(points), 0) FROM hondo_trades "
+                        + "WHERE player_uuid = ? AND created_at >= ?",
+                row -> new Today(row.getInt(1), row.getLong(2), row.getDouble(3)), player, startOfToday());
+        return today == null ? new Today(0, 0, 0) : today;
     }
 
     private static Friend lockFriend(Connection connection, UUID player) throws SQLException {
@@ -81,12 +102,12 @@ public final class HondoRepository {
                 row -> new Friend(row.getDouble(1), row.getInt(2), row.getLong(3)), player);
     }
 
-    // stores the trade and its points, value is what the player received (in Schilling)
+    // stores the trade and the points it really gives (capped to one level up per day), value is what the player received
     private static Friendship recordTrade(Connection connection, UUID player, Friend friend, String kind, Material material,
                                           int quantity, @Nullable Material given, int givenQuantity, int value) throws SQLException {
-        Integer tradesToday = Database.queryOne(connection, "SELECT COUNT(*) FROM hondo_trades WHERE player_uuid = ? AND created_at >= ?",
-                row -> row.getInt(1), player, startOfToday());
-        double points = Hondo.pointsForTrade(value, tradesToday == null ? 0 : tradesToday);
+        Today today = today(connection, player);
+        int levelAtDayStart = Hondo.level(friend.points() - today.points());
+        double points = Hondo.cappedGain(friend.points(), Hondo.pointsForTrade(value, today.trades()), levelAtDayStart);
         Database.update(connection, "INSERT INTO hondo_trades (player_uuid, kind, material, quantity, given_material, given_quantity, value, points) "
                         + "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 player, kind, material.name(), quantity, given == null ? null : given.name(), givenQuantity, value, points);
