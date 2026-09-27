@@ -44,7 +44,6 @@ public final class ShopView implements InventoryHolder {
         BLOCKS(Category.BLOCKS),
         ORES(Category.ORES),
         FOOD(Category.FOOD),
-        RARE(Category.RARE),
         MISC(Category.MISC),
         INFO("§fSo funktioniert's", Material.BOOK, null);
 
