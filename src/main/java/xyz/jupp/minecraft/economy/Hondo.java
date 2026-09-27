@@ -51,12 +51,13 @@ public final class Hondo {
      */
     public record FriendOffer(int level, Material material, int amount, double discount) {}
 
+    // netherite is the big one at the end: enough for a whole armour
     public static final List<FriendOffer> OFFERS = List.of(
-            new FriendOffer(1, Material.EMERALD, 16, 0.50),
-            new FriendOffer(2, Material.DIAMOND, 4, 0.30),
-            new FriendOffer(3, Material.NETHERITE_INGOT, 1, 0.35),
-            new FriendOffer(4, Material.TOTEM_OF_UNDYING, 1, 0.40),
-            new FriendOffer(5, Material.ENCHANTED_GOLDEN_APPLE, 1, 0.50));
+            new FriendOffer(1, Material.EMERALD, 32, 0.50),
+            new FriendOffer(2, Material.DIAMOND, 8, 0.40),
+            new FriendOffer(3, Material.TOTEM_OF_UNDYING, 1, 0.50),
+            new FriendOffer(4, Material.ENCHANTED_GOLDEN_APPLE, 1, 0.60),
+            new FriendOffer(5, Material.NETHERITE_INGOT, 4, 0.50));
 
     private static final Map<Material, String> LABELS = Map.ofEntries(
             Map.entry(Material.EMERALD, "§aSmaragd"),
