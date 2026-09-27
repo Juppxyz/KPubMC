@@ -1053,8 +1053,7 @@
   "weight": 1,
   "elasticity": 0.1,
   "taxClass": "LUXURY",
-  "since": 2,
-  "description": "Spawner lassen sich damit nicht umstellen."
+  "since": 2
  },
  {
   "material": "RABBIT_SPAWN_EGG",
@@ -1065,8 +1064,7 @@
   "weight": 1,
   "elasticity": 0.1,
   "taxClass": "LUXURY",
-  "since": 2,
-  "description": "Spawner lassen sich damit nicht umstellen."
+  "since": 2
  },
  {
   "material": "PIG_SPAWN_EGG",
@@ -1077,8 +1075,7 @@
   "weight": 1,
   "elasticity": 0.1,
   "taxClass": "LUXURY",
-  "since": 2,
-  "description": "Spawner lassen sich damit nicht umstellen."
+  "since": 2
  },
  {
   "material": "COW_SPAWN_EGG",
@@ -1089,8 +1086,7 @@
   "weight": 1,
   "elasticity": 0.1,
   "taxClass": "LUXURY",
-  "since": 2,
-  "description": "Spawner lassen sich damit nicht umstellen."
+  "since": 2
  },
  {
   "material": "SHEEP_SPAWN_EGG",
@@ -1101,8 +1097,7 @@
   "weight": 1,
   "elasticity": 0.1,
   "taxClass": "LUXURY",
-  "since": 2,
-  "description": "Spawner lassen sich damit nicht umstellen."
+  "since": 2
  },
  {
   "material": "FROG_SPAWN_EGG",
@@ -1113,8 +1108,7 @@
   "weight": 1,
   "elasticity": 0.1,
   "taxClass": "LUXURY",
-  "since": 2,
-  "description": "Spawner lassen sich damit nicht umstellen."
+  "since": 2
  },
  {
   "material": "BEE_SPAWN_EGG",
@@ -1125,8 +1119,7 @@
   "weight": 1,
   "elasticity": 0.1,
   "taxClass": "LUXURY",
-  "since": 2,
-  "description": "Spawner lassen sich damit nicht umstellen."
+  "since": 2
  },
  {
   "material": "CAT_SPAWN_EGG",
@@ -1137,8 +1130,7 @@
   "weight": 1,
   "elasticity": 0.1,
   "taxClass": "LUXURY",
-  "since": 2,
-  "description": "Spawner lassen sich damit nicht umstellen."
+  "since": 2
  },
  {
   "material": "DONKEY_SPAWN_EGG",
@@ -1149,8 +1141,7 @@
   "weight": 1,
   "elasticity": 0.1,
   "taxClass": "LUXURY",
-  "since": 2,
-  "description": "Spawner lassen sich damit nicht umstellen."
+  "since": 2
  },
  {
   "material": "GOAT_SPAWN_EGG",
@@ -1161,8 +1152,7 @@
   "weight": 1,
   "elasticity": 0.1,
   "taxClass": "LUXURY",
-  "since": 2,
-  "description": "Spawner lassen sich damit nicht umstellen."
+  "since": 2
  },
  {
   "material": "AXOLOTL_SPAWN_EGG",
@@ -1173,8 +1163,7 @@
   "weight": 1,
   "elasticity": 0.1,
   "taxClass": "LUXURY",
-  "since": 2,
-  "description": "Spawner lassen sich damit nicht umstellen."
+  "since": 2
  },
  {
   "material": "FOX_SPAWN_EGG",
@@ -1185,8 +1174,7 @@
   "weight": 1,
   "elasticity": 0.1,
   "taxClass": "LUXURY",
-  "since": 2,
-  "description": "Spawner lassen sich damit nicht umstellen."
+  "since": 2
  },
  {
   "material": "HORSE_SPAWN_EGG",
@@ -1197,8 +1185,7 @@
   "weight": 1,
   "elasticity": 0.1,
   "taxClass": "LUXURY",
-  "since": 2,
-  "description": "Spawner lassen sich damit nicht umstellen."
+  "since": 2
  },
  {
   "material": "TURTLE_SPAWN_EGG",
@@ -1209,8 +1196,7 @@
   "weight": 1,
   "elasticity": 0.1,
   "taxClass": "LUXURY",
-  "since": 2,
-  "description": "Spawner lassen sich damit nicht umstellen."
+  "since": 2
  },
  {
   "material": "WOLF_SPAWN_EGG",
@@ -1221,8 +1207,7 @@
   "weight": 1,
   "elasticity": 0.1,
   "taxClass": "LUXURY",
-  "since": 2,
-  "description": "Spawner lassen sich damit nicht umstellen."
+  "since": 2
  },
  {
   "material": "ARMADILLO_SPAWN_EGG",
@@ -1233,8 +1218,7 @@
   "weight": 1,
   "elasticity": 0.1,
   "taxClass": "LUXURY",
-  "since": 2,
-  "description": "Spawner lassen sich damit nicht umstellen."
+  "since": 2
  },
  {
   "material": "PARROT_SPAWN_EGG",
@@ -1245,8 +1229,7 @@
   "weight": 1,
   "elasticity": 0.1,
   "taxClass": "LUXURY",
-  "since": 2,
-  "description": "Spawner lassen sich damit nicht umstellen."
+  "since": 2
  },
  {
   "material": "PANDA_SPAWN_EGG",
@@ -1257,8 +1240,7 @@
   "weight": 1,
   "elasticity": 0.1,
   "taxClass": "LUXURY",
-  "since": 2,
-  "description": "Spawner lassen sich damit nicht umstellen."
+  "since": 2
  },
  {
   "material": "MOOSHROOM_SPAWN_EGG",
@@ -1269,8 +1251,7 @@
   "weight": 1,
   "elasticity": 0.1,
   "taxClass": "LUXURY",
-  "since": 2,
-  "description": "Spawner lassen sich damit nicht umstellen."
+  "since": 2
  },
  {
   "material": "CAMEL_SPAWN_EGG",
@@ -1281,8 +1262,7 @@
   "weight": 1,
   "elasticity": 0.1,
   "taxClass": "LUXURY",
-  "since": 2,
-  "description": "Spawner lassen sich damit nicht umstellen."
+  "since": 2
  },
  {
   "material": "ALLAY_SPAWN_EGG",
@@ -1293,7 +1273,6 @@
   "weight": 1,
   "elasticity": 0.1,
   "taxClass": "LUXURY",
-  "since": 2,
-  "description": "Spawner lassen sich damit nicht umstellen."
+  "since": 2
  }
 ]

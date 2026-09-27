@@ -86,6 +86,9 @@ public final class ShopView implements InventoryHolder {
     private static final int[] SELL_SLOTS = {29, 30, 31, 32};
     private static final int[] BUY_STEPS = {1, 2, 4, 8, 16, 32, 64};
     private static final int[] SELL_STEPS = {1, 4, 16};
+    // changed behaviour: for years spawn eggs could change spawners, now they cannot (see AntiBugListener)
+    private static final String SPAWN_EGG_WARNING = "§c⚠ Kann keine Spawner umstellen!";
+
     // clicks right after a re-render are ignored (double clicks, scroll mods)
     private static final long CLICK_COOLDOWN_MILLIS = 300;
 
@@ -247,7 +250,11 @@ public final class ShopView implements InventoryHolder {
         String trend = trendLine(item);
         if (trend != null) lore.add(trend);
         if (daily && item.buyable()) lore.add("§6★ Tagesangebot §a-" + percent(Market.dailyDiscount()));
-        if (item.buyable() && item.description() != null && !item.description().isBlank()) lore.add("§7§o" + item.description());
+        if (isSpawnEgg(item.material())) {
+            lore.add(SPAWN_EGG_WARNING);
+        } else if (item.buyable() && item.description() != null && !item.description().isBlank()) {
+            lore.add("§7§o" + item.description());
+        }
         return lore;
     }
 
@@ -336,6 +343,7 @@ public final class ShopView implements InventoryHolder {
                 buttonLore.add("§7Preis: " + Main.getCurrencyName(net + tax) + " §8(inkl. " + tax + " Steuer)");
                 if (net + tax > balance) buttonLore.add("§cDir fehlen " + (net + tax - balance) + " Schilling");
                 buttonLore.add("");
+                if (isSpawnEgg(item.material())) buttonLore.add(SPAWN_EGG_WARNING);
                 buttonLore.add("§e» Linksklick zum Kaufen");
                 ItemStack button = named(Material.LIME_STAINED_GLASS_PANE, "§a§lKaufen §8» §f" + bundles * item.amount() + "×", buttonLore);
                 button.setAmount(Math.min(64, bundles));
@@ -511,6 +519,7 @@ public final class ShopView implements InventoryHolder {
                         player.sendMessage(receipt("§fGekauft: §e" + bundles * item.amount() + "× ", item,
                                 " §ffür " + Main.getCurrencyName(trade.net() + trade.tax()) + " §8(davon " + trade.tax() + " Steuer)"));
                         player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f, 2f);
+                        if (isSpawnEgg(item.material())) spawnEggNotice(player);
                     }
                     case INSUFFICIENT_FUNDS -> fail(player, "§fDafür fehlen dir Schilling §8(benötigt: " + (trade.net() + trade.tax()) + ")§f.");
                     case PRICE_CHANGED -> fail(player, "§fDer Preis hat sich gerade geändert, bitte prüfe den neuen Preis.");
@@ -585,6 +594,7 @@ public final class ShopView implements InventoryHolder {
                     player.sendMessage(receipt("§5Zufall: §e" + item.amount() + "× ", item,
                             " §ffür " + Main.getCurrencyName(trade.net() + trade.tax()) + " §8(davon " + trade.tax() + " Steuer)"));
                     player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f, 2f);
+                    if (isSpawnEgg(item.material())) spawnEggNotice(player);
                 } else {
                     fail(player, "§fDafür fehlen dir Schilling §8(benötigt: " + (trade.net() + trade.tax()) + ")§f.");
                 }
@@ -607,6 +617,15 @@ public final class ShopView implements InventoryHolder {
             if (giveBack != null) give(player, giveBack, quantity);
             fail(player, "§fDer Händler ist gerade nicht erreichbar, bitte versuche es gleich nochmal.");
         });
+    }
+
+    private static boolean isSpawnEgg(Material material) {
+        return material.name().endsWith("_SPAWN_EGG");
+    }
+
+    private static void spawnEggNotice(Player player) {
+        player.sendMessage(Main.getChatPrefix() + "§c⚠ Hinweis: §fSpawn-Eier können §ckeine Spawner §fmehr umstellen. "
+                + "§7Du kannst damit nur Tiere spawnen.");
     }
 
     private static ItemStack displayStack(MarketItem item) {
