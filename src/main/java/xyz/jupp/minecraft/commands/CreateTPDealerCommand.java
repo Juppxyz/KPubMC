@@ -23,7 +23,7 @@ public class CreateTPDealerCommand implements CommandExecutor {
             WanderingTrader wanderingTrader = NpcSpawner.spawn(player, EntityType.WANDERING_TRADER, WanderingTrader.class, Main.getTeamPointsDealerVillagerName(), true);
             wanderingTrader.setGlowing(true);
 
-            NpcSpawner.confirm(player, "Der " + Main.getJewelerVillagerName() + " §fwurde §aerfolgreich §ferstellt.");
+            NpcSpawner.confirm(player, "Der " + Main.getTeamPointsDealerVillagerName() + " §fwurde §aerfolgreich §ferstellt.");
         }
         return false;
     }

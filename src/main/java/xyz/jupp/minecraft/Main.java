@@ -133,6 +133,7 @@ public final class Main extends JavaPlugin {
         registerCommands();
         registerListener();
         registerTasks();
+        Npcs.keepLoaded();
 
         JailHandler.initJails(Locations.getJailCorner1(), Locations.getJailCorner2());
         JailHandler.startJailWatcherTask();

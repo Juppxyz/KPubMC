@@ -4,15 +4,16 @@ import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
+import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
+import org.bukkit.event.world.EntitiesLoadEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
-import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.economy.BlackMarketView;
 import xyz.jupp.minecraft.economy.TaxClass;
 import xyz.jupp.minecraft.Main;
@@ -24,6 +25,7 @@ import xyz.jupp.minecraft.inventory.JewelerInventory;
 import xyz.jupp.minecraft.inventory.MainThread;
 import xyz.jupp.minecraft.inventory.Menu;
 import xyz.jupp.minecraft.utils.Logger;
+import xyz.jupp.minecraft.utils.Npcs;
 import xyz.jupp.minecraft.utils.Tasks;
 import xyz.jupp.minecraft.utils.Text;
 
@@ -36,7 +38,7 @@ public class ShopListener implements Listener {
         EntityType entityType = interactedEntity.getType();
 
         if (entityType == EntityType.VILLAGER) {
-            String villagerName = visibleName(interactedEntity);
+            String villagerName = Npcs.visibleName(interactedEntity);
             if (Main.getShopVillagerName().equals(villagerName)) {
                 event.setCancelled(true);
                 ShopView.open(event.getPlayer());
@@ -64,17 +66,11 @@ public class ShopListener implements Listener {
             return;
         }
 
-        if (entityType == EntityType.WANDERING_TRADER && Main.getTeamPointsDealerVillagerName().equals(visibleName(interactedEntity))) {
+        if (entityType == EntityType.WANDERING_TRADER && Main.getTeamPointsDealerVillagerName().equals(Npcs.visibleName(interactedEntity))) {
             event.setCancelled(true);
             NomadView.open(event.getPlayer());
         }
     }
-
-    // the custom name as legacy text, null if there is none or it is not visible
-    private static @Nullable String visibleName(Entity entity) {
-        return entity.isCustomNameVisible() ? Text.legacyOrNull(entity.customName()) : null;
-    }
-
 
     // Basil: cash in the main hand goes to the account
     private static void depositCash(Player player) {
@@ -114,21 +110,15 @@ public class ShopListener implements Listener {
 
     @EventHandler
     public void onDamage(EntityDamageEvent event) {
-        Entity entity = event.getEntity();
-        EntityType entityType = entity.getType();
-        if (entityType == EntityType.VILLAGER) {
-            String villagerName = visibleName(entity);
-            if (Main.getShopVillagerName().equals(villagerName)
-                    || Main.getFinanceVillagerFredName().equals(villagerName)
-                    || Main.getJewelerVillagerName().equals(villagerName)) event.setCancelled(true);
-            return;
-        }
-        if (entityType == EntityType.VINDICATOR) {
-            if (Main.getBlackMarketDealerVillagerName().equals(Text.legacyOrNull(entity.customName()))) event.setCancelled(true);
-            return;
-        }
-        if (entityType == EntityType.WANDERING_TRADER) {
-            if (Main.getTeamPointsDealerVillagerName().equals(visibleName(entity))) event.setCancelled(true);
+        if (Npcs.isNpc(event.getEntity())) event.setCancelled(true);
+    }
+
+
+    // NPCs created before they were made persistent get it when their chunk loads
+    @EventHandler
+    public void onEntitiesLoad(EntitiesLoadEvent event) {
+        for (Entity entity : event.getEntities()) {
+            if (entity instanceof LivingEntity living && Npcs.isNpc(living)) Npcs.keep(living);
         }
     }
 
