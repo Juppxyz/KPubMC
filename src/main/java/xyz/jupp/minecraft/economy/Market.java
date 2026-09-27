@@ -55,7 +55,7 @@ public final class Market {
     /* lifecycle (blocking parts run in onEnable or on workers) */
 
     public static void load() {
-        seedIfEmpty();
+        seedCatalog();
         reload();
         LocalDate today = LocalDate.now(ZONE);
         List<Material> stored = MarketRepository.loadRotation(today);
@@ -222,20 +222,31 @@ public final class Market {
 
     /* start catalog */
 
-    private static void seedIfEmpty() {
-        if (MarketRepository.count() > 0) return;
+    /**
+     * Inserts the start catalog entries the database does not know yet. Every entry has a catalog version ("since",
+     * default 1); an existing database only gets the entries of newer versions, so adjusted or removed items stay as they are.
+     */
+    private static void seedCatalog() {
         try (InputStream stream = Main.class.getResourceAsStream("/market-catalog.json")) {
             if (stream == null) {
                 Main.getInstance().getSLF4JLogger().warn("market-catalog.json is missing, the shop starts empty");
                 return;
             }
+            int known = MarketRepository.catalogVersion();
+            if (known < 0) known = MarketRepository.count() > 0 ? 1 : 0;
             JsonArray entries = JsonParser.parseReader(new InputStreamReader(stream, StandardCharsets.UTF_8)).getAsJsonArray();
+            int latest = known;
             int inserted = 0;
             for (JsonElement element : entries) {
-                MarketItem item = parseSeed(element.getAsJsonObject());
+                JsonObject json = element.getAsJsonObject();
+                int since = json.has("since") ? json.get("since").getAsInt() : 1;
+                latest = Math.max(latest, since);
+                if (since <= known) continue;
+                MarketItem item = parseSeed(json);
                 if (item != null && MarketRepository.insert(item)) inserted++;
             }
-            Main.getInstance().getSLF4JLogger().info("seeded the market catalog with {} items", inserted);
+            MarketRepository.setCatalogVersion(latest);
+            if (inserted > 0) Main.getInstance().getSLF4JLogger().info("added {} items to the market catalog (version {})", inserted, latest);
         } catch (Exception e) {
             Main.getInstance().getSLF4JLogger().error("Could not seed the market catalog", e);
         }

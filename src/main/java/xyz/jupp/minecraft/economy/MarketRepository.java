@@ -85,6 +85,17 @@ public final class MarketRepository {
                 .stream().filter(Objects::nonNull).toList();
     }
 
+    /** Version of the start catalog the database contains; -1 if unknown (databases from before the versioning). */
+    public static int catalogVersion() {
+        String value = Database.queryOne("SELECT value FROM market_meta WHERE key = 'catalog_version'", row -> row.getString(1));
+        return value == null ? -1 : Integer.parseInt(value);
+    }
+
+    public static void setCatalogVersion(int version) {
+        Database.update("INSERT INTO market_meta (key, value) VALUES ('catalog_version', ?) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+                String.valueOf(version));
+    }
+
     public static int count() {
         Integer count = Database.queryOne("SELECT COUNT(*) FROM market_items", row -> row.getInt(1));
         return count == null ? 0 : count;

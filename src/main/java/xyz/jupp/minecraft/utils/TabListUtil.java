@@ -11,7 +11,7 @@ public class TabListUtil {
 
     private static final String HEADER = "Auslastung: ";
     // kept short on purpose: the details are in the shop info tab and /staatskasse
-    private static final String FOOTER = "\n§6Staatskasse: §a%d Schilling\n§7Steuern: %s §8· §7/staatskasse";
+    private static final String FOOTER = "\n§6Staatskasse: §a%d Schilling\n§7Steuern: %s";
 
 
     public static void updateTabForAll() {

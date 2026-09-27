@@ -158,7 +158,8 @@ public final class Database {
                 reason     TEXT NOT NULL,
                 source     TEXT NOT NULL,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-            )"""
+            )""",
+            "CREATE TABLE IF NOT EXISTS market_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
     );
 
     private static volatile HikariDataSource dataSource;
