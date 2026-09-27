@@ -101,6 +101,7 @@ public final class Main extends JavaPlugin {
         Logger.console("register tasks..");
         new PlayerUpdaterTask().startTask();
         Market.startTasks();
+        PlayerTracker.startTask();
     }
 
 

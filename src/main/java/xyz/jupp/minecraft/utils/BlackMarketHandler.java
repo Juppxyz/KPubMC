@@ -4,8 +4,11 @@ import org.bukkit.inventory.ItemStack;
 import xyz.jupp.minecraft.items.BedrockBreakerPickaxe;
 import xyz.jupp.minecraft.items.CustomItemsInterface;
 import xyz.jupp.minecraft.items.Flamethrower;
+import xyz.jupp.minecraft.items.ForgedPapers;
+import xyz.jupp.minecraft.items.GrapplingHook;
 import xyz.jupp.minecraft.items.KeepInventoryItem;
 import xyz.jupp.minecraft.items.PoisonBow;
+import xyz.jupp.minecraft.items.TrackerCompass;
 
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
@@ -24,7 +27,10 @@ public final class BlackMarketHandler {
             new Flamethrower(),
             new PoisonBow(),
             new BedrockBreakerPickaxe(),
-            new KeepInventoryItem()
+            new KeepInventoryItem(),
+            new TrackerCompass(),
+            new ForgedPapers(),
+            new GrapplingHook()
     );
 
     private static final long HOUR_MILLIS = 3_600_000L;
