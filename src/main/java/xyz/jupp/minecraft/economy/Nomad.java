@@ -22,6 +22,7 @@ import java.time.temporal.IsoFields;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -51,6 +52,8 @@ public final class Nomad {
     private static final int POINT_VALUE = 5;
     // a material is not asked for again within this many days (as long as there are alternatives)
     private static final int REPEAT_DAYS = 30;
+    // villager currency: trading halls make it in masses, so it is never worth team points
+    private static final Set<Material> NEVER_WANTED = EnumSet.of(Material.EMERALD, Material.EMERALD_BLOCK);
     public static final int[] RACE_PRIZES = {1_000, 500, 250};
 
     public record Contract(long id, int slot, Material material, int required, int reward, Instant endsAt) {}
@@ -188,7 +191,7 @@ public final class Nomad {
         }).stream().filter(Objects::nonNull).toList();
         redeemables = Database.query("SELECT material, points FROM nomad_redeemables WHERE enabled", row -> {
             Material material = Material.matchMaterial(row.getString(1));
-            return material == null ? null : new Redeemable(material, row.getInt(2));
+            return material == null || NEVER_WANTED.contains(material) ? null : new Redeemable(material, row.getInt(2));
         }).stream().filter(Objects::nonNull).sorted(Comparator.comparingInt(Redeemable::points).reversed()).toList();
         LocalDate today = LocalDate.now(Market.ZONE);
         List<Material> todaysHot = Database.query("SELECT material FROM nomad_hot WHERE day = ?",
@@ -218,6 +221,7 @@ public final class Nomad {
                     .filter(item -> item.enabled() && item.core() && item.category() != Category.RARE)
                     .filter(item -> item.material().isItem() && item.material().getMaxStackSize() > 1)
                     .filter(item -> !item.material().name().endsWith("_SPAWN_EGG") && !used.contains(item.material()))
+                    .filter(item -> !NEVER_WANTED.contains(item.material()))
                     .filter(item -> EndAccess.isAvailable(item.material()))
                     .toList();
             candidates = freshest(candidates, MarketItem::material, recent);
