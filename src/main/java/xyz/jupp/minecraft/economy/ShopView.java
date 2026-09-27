@@ -82,10 +82,11 @@ public final class ShopView implements InventoryHolder {
     private static final int SLOT_GOOD = 4;
     private static final int SLOT_BUY_LABEL = 18;
     private static final int SLOT_SELL_LABEL = 27;
-    private static final int[] BUY_SLOTS = {20, 21, 22, 23, 24, 25};
-    private static final int[] SELL_SLOTS = {29, 30, 31, 32};
-    private static final int[] BUY_STEPS = {1, 2, 4, 8, 16, 32, 64};
-    private static final int[] SELL_STEPS = {1, 4, 16};
+    // one centred button, or up to three: 1 Paket, 1 Stack, Max
+    private static final int[] BUY_SLOTS = {21, 22, 23};
+    private static final int[] SELL_SLOTS = {30, 32};
+    private static final int CENTER_BUY_SLOT = 22;
+    private static final int CENTER_SELL_SLOT = 31;
     // changed behaviour: for years spawn eggs could change spawners, now they cannot (see AntiBugListener)
     private static final String SPAWN_EGG_WARNING = "§c⚠ Kann keine Spawner umstellen!";
 
@@ -238,7 +239,7 @@ public final class ShopView implements InventoryHolder {
     private List<String> priceLines(MarketItem item) {
         boolean daily = isDailyPrice(item);
         List<String> lore = new ArrayList<>();
-        lore.add("§7Paket: §f" + item.amount() + " Stück");
+        if (item.amount() > 1) lore.add("§7Paket: §f" + item.amount() + " Stück");
         if (item.buyable()) {
             int net = item.buyTotal(1, daily ? Market.dailyDiscount() : 0);
             int tax = Taxes.taxOn(net, item.taxClass());
@@ -324,31 +325,33 @@ public final class ShopView implements InventoryHolder {
         inventory.setItem(SLOT_GOOD, good);
 
         // buy row
-        inventory.setItem(SLOT_BUY_LABEL, named(Material.LIME_CONCRETE, "§a§lKaufen", List.of("§7Wähle die Menge.")));
+        inventory.setItem(SLOT_BUY_LABEL, named(Material.LIME_CONCRETE, "§a§lKaufen", List.of()));
         if (!item.buyable()) {
-            inventory.setItem(BUY_SLOTS[0], named(Material.GRAY_STAINED_GLASS_PANE, "§7Hier nicht kaufbar",
+            inventory.setItem(CENTER_BUY_SLOT, named(Material.GRAY_STAINED_GLASS_PANE, "§7Hier nicht kaufbar",
                     item.description() != null ? List.of("§7" + item.description()) : List.of()));
         } else {
-            List<Integer> options = buyOptions(item);
+            List<BuyOption> options = buyOptions(item);
             if (options.isEmpty()) {
-                inventory.setItem(BUY_SLOTS[0], named(Material.GRAY_STAINED_GLASS_PANE, "§7Kein Platz im Inventar", List.of()));
+                inventory.setItem(CENTER_BUY_SLOT, named(Material.GRAY_STAINED_GLASS_PANE, "§7Kein Platz im Inventar", List.of()));
             }
             double discount = isDailyPrice(item) ? Market.dailyDiscount() : 0;
-            for (int i = 0; i < options.size() && i < BUY_SLOTS.length; i++) {
-                int bundles = options.get(i);
-                int net = item.buyTotal(bundles, discount);
+            int[] slots = options.size() == 1 ? new int[]{CENTER_BUY_SLOT} : BUY_SLOTS;
+            for (int i = 0; i < options.size(); i++) {
+                BuyOption option = options.get(i);
+                int quantity = option.bundles() * item.amount();
+                int net = item.buyTotal(option.bundles(), discount);
                 int tax = Taxes.taxOn(net, item.taxClass());
                 List<String> buttonLore = new ArrayList<>();
-                buttonLore.add("§7" + bundles + (bundles == 1 ? " Paket" : " Pakete") + " à " + item.amount() + " Stück");
                 buttonLore.add("§7Preis: " + Main.getCurrencyName(net + tax) + " §8(inkl. " + tax + " Steuer)");
                 if (net + tax > balance) buttonLore.add("§cDir fehlen " + (net + tax - balance) + " Schilling");
                 buttonLore.add("");
                 if (isSpawnEgg(item.material())) buttonLore.add(SPAWN_EGG_WARNING);
                 buttonLore.add("§e» Linksklick zum Kaufen");
-                ItemStack button = named(Material.LIME_STAINED_GLASS_PANE, "§a§lKaufen §8» §f" + bundles * item.amount() + "×", buttonLore);
-                button.setAmount(Math.min(64, bundles));
-                inventory.setItem(BUY_SLOTS[i], button);
-                actions.put(BUY_SLOTS[i], new Action(true, bundles));
+                String name = options.size() == 1
+                        ? "§a§lKaufen" + (quantity > 1 ? " §8» §f" + quantity + "×" : "")
+                        : "§a§l" + option.label() + " §8» §f" + quantity + "×";
+                inventory.setItem(slots[i], named(Material.LIME_STAINED_GLASS_PANE, name, buttonLore));
+                actions.put(slots[i], new Action(true, option.bundles()));
             }
         }
 
@@ -364,30 +367,36 @@ public final class ShopView implements InventoryHolder {
                     List.of("§7Mindestens " + item.amount() + " Stück nötig.")));
             return;
         }
-        List<Integer> sellOptions = new ArrayList<>();
-        for (int step : SELL_STEPS) if (step < ownedBundles) sellOptions.add(step);
-        sellOptions.add(ownedBundles);
-        for (int i = 0; i < sellOptions.size() && i < SELL_SLOTS.length; i++) {
+        // 1 Paket and Alles (one button if both are the same)
+        List<Integer> sellOptions = ownedBundles > 1 ? List.of(1, ownedBundles) : List.of(1);
+        int[] slots = sellOptions.size() == 1 ? new int[]{CENTER_SELL_SLOT} : SELL_SLOTS;
+        for (int i = 0; i < sellOptions.size(); i++) {
             int bundles = sellOptions.get(i);
-            boolean all = bundles == ownedBundles;
-            ItemStack button = named(Material.RED_STAINED_GLASS_PANE,
-                    "§c§lVerkaufen §8» §f" + (all ? "Alles (" + bundles * item.amount() + "×)" : bundles * item.amount() + "×"),
-                    List.of("§7Du erhältst: " + Main.getCurrencyName(item.sellTotal(bundles)), "", "§e» Linksklick zum Verkaufen"));
-            button.setAmount(Math.min(64, bundles));
-            inventory.setItem(SELL_SLOTS[i], button);
-            actions.put(SELL_SLOTS[i], new Action(false, bundles));
+            String name = (i == 1 ? "§c§lAlles verkaufen §8» §f" : "§c§lVerkaufen §8» §f") + bundles * item.amount() + "×";
+            inventory.setItem(slots[i], named(Material.RED_STAINED_GLASS_PANE, name,
+                    List.of("§7Du erhältst: " + Main.getCurrencyName(item.sellTotal(bundles)), "", "§e» Linksklick zum Verkaufen")));
+            actions.put(slots[i], new Action(false, bundles));
         }
     }
 
-    // bundle counts that fit into the inventory (1, 2, 4, ...), plus the maximum if it is larger
-    private List<Integer> buyOptions(MarketItem item) {
-        int fitting = freeSpace(viewer, item.material()) / item.amount();
-        List<Integer> options = new ArrayList<>();
-        for (int step : BUY_STEPS) {
-            if (step <= fitting && options.size() < BUY_SLOTS.length - 1) options.add(step);
-        }
-        int max = Math.min(fitting, 64);
-        if (max > 0 && (options.isEmpty() || options.getLast() < max)) options.add(max);
+    private record BuyOption(String label, int bundles) {}
+
+    // luxury goods and single items are bought one at a time
+    private static boolean isSingleBuy(MarketItem item) {
+        return item.taxClass() == TaxClass.LUXURY || item.category() == Category.RARE
+                || item.material().getMaxStackSize() == 1 || isSpawnEgg(item.material());
+    }
+
+    // 1 Paket, 1 Stack and Max (what fits into the inventory) without duplicates; single items only 1 Paket
+    private List<BuyOption> buyOptions(MarketItem item) {
+        int fitting = Math.min(64, freeSpace(viewer, item.material()) / item.amount());
+        if (fitting < 1) return List.of();
+        List<BuyOption> options = new ArrayList<>();
+        options.add(new BuyOption("1 Paket", 1));
+        if (isSingleBuy(item)) return options;
+        int stack = Math.max(1, item.material().getMaxStackSize() / item.amount());
+        if (stack > 1 && stack <= fitting) options.add(new BuyOption("1 Stack", stack));
+        if (fitting > options.getLast().bundles()) options.add(new BuyOption("Max", fitting));
         return options;
     }
 
@@ -399,14 +408,13 @@ public final class ShopView implements InventoryHolder {
                 "§7Du bekommst ein zufälliges Paket",
                 "§7aus den heutigen Tagesangeboten.",
                 "§7Preis: " + Main.getCurrencyName(net + tax) + " §8(inkl. " + tax + " Steuer)")));
-        inventory.setItem(SLOT_BUY_LABEL, named(Material.LIME_CONCRETE, "§a§lKaufen", List.of()));
         if (net <= 0) return;
         List<String> lore = new ArrayList<>(List.of("§7Preis: " + Main.getCurrencyName(net + tax) + " §8(inkl. " + tax + " Steuer)"));
         if (net + tax > balance) lore.add("§cDir fehlen " + (net + tax - balance) + " Schilling");
         lore.add("");
         lore.add("§e» Linksklick zum Kaufen");
-        inventory.setItem(BUY_SLOTS[0], named(Material.LIME_STAINED_GLASS_PANE, "§a§lZufall kaufen", lore));
-        actions.put(BUY_SLOTS[0], new Action(true, 1));
+        inventory.setItem(CENTER_BUY_SLOT, named(Material.LIME_STAINED_GLASS_PANE, "§a§lZufall kaufen", lore));
+        actions.put(CENTER_BUY_SLOT, new Action(true, 1));
     }
 
 
