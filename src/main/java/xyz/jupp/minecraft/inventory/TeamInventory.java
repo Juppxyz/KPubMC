@@ -85,6 +85,27 @@ public class TeamInventory {
     }
 
 
+    /** The block of a team colour ("§4" etc.), the same as in the colour choice when a team is founded. */
+    public static Material colorBlock(@NotNull String teamColor) {
+        return switch (teamColor) {
+            case "§4" -> Material.RED_WOOL;
+            case "§c" -> Material.RED_TERRACOTTA;
+            case "§6" -> Material.ORANGE_WOOL;
+            case "§e" -> Material.YELLOW_WOOL;
+            case "§2" -> Material.GREEN_WOOL;
+            case "§b" -> Material.LIGHT_BLUE_WOOL;
+            case "§3" -> Material.CYAN_WOOL;
+            case "§1", "§9" -> Material.BLUE_WOOL;
+            case "§d" -> Material.PINK_WOOL;
+            case "§5" -> Material.PURPLE_WOOL;
+            case "§f" -> Material.WHITE_WOOL;
+            case "§7" -> Material.LIGHT_GRAY_WOOL;
+            case "§8" -> Material.GRAY_WOOL;
+            case "§0" -> Material.BLACK_WOOL;
+            default -> Material.LIME_WOOL;
+        };
+    }
+
     private static Inventory createNewTeamInventory(String teamName) {
         Inventory inventory = Menu.create(Menu.Type.TEAM_CREATE, 27, "§aTeam erstellen");
         ItemStack grayPane = createItemStack("§7---", Material.GRAY_STAINED_GLASS_PANE);

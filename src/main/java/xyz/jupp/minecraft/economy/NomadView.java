@@ -14,8 +14,10 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.cache.CacheHandler;
+import xyz.jupp.minecraft.cache.TeamCacheObject;
 import xyz.jupp.minecraft.database.TeamRepository;
 import xyz.jupp.minecraft.inventory.MainThread;
+import xyz.jupp.minecraft.inventory.TeamInventory;
 import xyz.jupp.minecraft.listener.TeamInventoryListener;
 import xyz.jupp.minecraft.utils.Tasks;
 import xyz.jupp.minecraft.utils.Text;
@@ -298,7 +300,9 @@ public final class NomadView implements InventoryHolder {
                     points = standings.get(i).points();
                 }
             }
-            inventory.setItem(31, named(Material.PLAYER_HEAD, "§fDein Team", List.of(place == 0
+            TeamCacheObject team = CacheHandler.getInstance().getTeamCacheObject(teamID);
+            Material block = TeamInventory.colorBlock(team == null ? "" : team.getTeamColor());
+            inventory.setItem(31, named(block, "§fDein Team: " + Nomad.teamName(teamID), List.of(place == 0
                     ? "§7Noch keine Punkte diese Woche."
                     : "§7Platz §f" + place + " §7mit §a" + points + " §7Punkten.")));
         }
