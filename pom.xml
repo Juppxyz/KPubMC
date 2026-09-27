@@ -49,12 +49,12 @@
                             <createDependencyReducedPom>false</createDependencyReducedPom>
                             <relocations>
                                 <relocation>
-                                    <pattern>com.mongodb</pattern>
-                                    <shadedPattern>${shade.package}.mongodb</shadedPattern>
+                                    <pattern>org.postgresql</pattern>
+                                    <shadedPattern>${shade.package}.postgresql</shadedPattern>
                                 </relocation>
                                 <relocation>
-                                    <pattern>org.bson</pattern>
-                                    <shadedPattern>${shade.package}.bson</shadedPattern>
+                                    <pattern>com.zaxxer.hikari</pattern>
+                                    <shadedPattern>${shade.package}.hikari</shadedPattern>
                                 </relocation>
                             </relocations>
                             <transformers>
@@ -101,9 +101,28 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>org.mongodb</groupId>
-            <artifactId>mongodb-driver-sync</artifactId>
-            <version>5.13.0</version>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>42.7.13</version>
+            <exclusions>
+                <!-- annotations only, not needed at runtime -->
+                <exclusion>
+                    <groupId>org.checkerframework</groupId>
+                    <artifactId>checker-qual</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.zaxxer</groupId>
+            <artifactId>HikariCP</artifactId>
+            <version>7.1.0</version>
+            <exclusions>
+                <!-- provided by Paper -->
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-api</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
     </dependencies>
 </project>

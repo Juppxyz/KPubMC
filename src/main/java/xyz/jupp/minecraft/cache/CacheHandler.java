@@ -7,7 +7,7 @@ import org.bukkit.plugin.IllegalPluginAccessException;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
-import xyz.jupp.minecraft.database.TeamCollection;
+import xyz.jupp.minecraft.database.TeamRepository;
 import xyz.jupp.minecraft.utils.AreaOptionsEnum;
 import xyz.jupp.minecraft.utils.Tasks;
 import xyz.jupp.minecraft.utils.Text;
@@ -78,7 +78,7 @@ public class CacheHandler {
 
     // blocking, called on a worker: the announcement is sent on the main thread
     public void createNewTeam(@NotNull Player player, @NotNull String teamName, @NotNull String teamColor) {
-        String teamID = TeamCollection.createNewTeam(player, teamName, teamColor);
+        String teamID = TeamRepository.createNewTeam(player, teamName, teamColor);
         TeamCache.forgetUnknownTeams();
         Component announcement = Text.section(Main.getChatPrefix() + "§fDas Team " + teamColor + teamName + " §fwurde von §6" + player.getName() + " §fgegründet!");
         try {

@@ -15,7 +15,7 @@ import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.TeamCacheObject;
 import xyz.jupp.minecraft.commands.SpecCommand;
-import xyz.jupp.minecraft.database.PlayerCollection;
+import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.utils.JailHandler;
 import xyz.jupp.minecraft.utils.LastSeen;
 import xyz.jupp.minecraft.utils.Locations;
@@ -30,7 +30,7 @@ public class JoinQuitListener implements Listener {
     @EventHandler
     public void onPreLogin(AsyncPlayerPreLoginEvent event) {
         UUID uuid = event.getUniqueId();
-        PlayerCollection.createIfAbsent(uuid);
+        PlayerRepository.createIfAbsent(uuid);
         if (event.getLoginResult() == AsyncPlayerPreLoginEvent.Result.ALLOWED) {
             CacheHandler.getInstance().preloadPlayer(uuid);
         }

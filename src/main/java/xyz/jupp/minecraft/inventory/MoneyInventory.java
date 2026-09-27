@@ -10,7 +10,7 @@ import org.bukkit.inventory.meta.SkullMeta;
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.config.ConfigManager;
-import xyz.jupp.minecraft.database.PlayerCollection;
+import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.utils.Tasks;
 import xyz.jupp.minecraft.utils.Text;
 
@@ -32,7 +32,7 @@ public class MoneyInventory {
             return;
         }
         Tasks.async(() -> {
-            final int money = PlayerCollection.getMoney(player);
+            final int money = PlayerRepository.getMoney(player);
             MainThread.run(() -> open(player, createMainInventory(money)));
         });
     }

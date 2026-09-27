@@ -6,7 +6,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import xyz.jupp.minecraft.Main;
-import xyz.jupp.minecraft.database.CommandLogCollection;
+import xyz.jupp.minecraft.database.CommandLogRepository;
 import xyz.jupp.minecraft.utils.JailHandler;
 import xyz.jupp.minecraft.utils.PermissionsUtil;
 import xyz.jupp.minecraft.utils.Tasks;
@@ -37,7 +37,7 @@ public class CommandBlockListener implements Listener {
         String msg = event.getMessage();
 
         // every command is logged, also the blocked ones
-        Tasks.async(() -> new CommandLogCollection(player, msg).addNewEntry());
+        Tasks.async(() -> CommandLogRepository.log(player, msg));
 
         if (PermissionsUtil.isPlayerAdmin(player)) return;
 

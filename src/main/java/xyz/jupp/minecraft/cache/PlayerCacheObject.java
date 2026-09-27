@@ -1,11 +1,11 @@
 package xyz.jupp.minecraft.cache;
 
-import org.bson.Document;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import xyz.jupp.minecraft.database.PlayerCollection;
+import xyz.jupp.minecraft.database.PlayerRepository;
+import xyz.jupp.minecraft.database.PlayerRepository.PlayerData;
 import xyz.jupp.minecraft.utils.Tasks;
 
 import java.util.UUID;
@@ -24,27 +24,27 @@ public class PlayerCacheObject {
     private volatile boolean isWanted = false;
 
 
-    private PlayerCacheObject(@NotNull UUID uuid, @NotNull Document document) {
-        this.uuid = uuid;
-        this.teamID = document.getString("teamID");
+    private PlayerCacheObject(@NotNull PlayerData data) {
+        this.uuid = data.uuid();
+        this.teamID = data.teamID();
         if (teamID != null) {
             this.teamCacheObject = TeamCache.getTeam(teamID);
         }
-        this.teamInvites = document.getBoolean("teamInvites", false);
-        this.jail = document.getBoolean("jail", false);
-        this.jailEnd = document.get("jailEnd") instanceof Number number ? number.longValue() : 0L;
-        this.isWanted = document.getBoolean("isWanted", false);
+        this.teamInvites = data.teamInvites();
+        this.jail = data.jail();
+        this.jailEnd = data.jailEnd();
+        this.isWanted = data.isWanted();
     }
 
-    // Loads the player from the database (blocking). A missing document is created like on the first login.
+    // Loads the player from the database (blocking). A missing player is created like on the first login.
     static PlayerCacheObject load(@NotNull UUID uuid) {
-        Document document = PlayerCollection.getPlayerDocument(uuid);
-        if (document == null) {
-            PlayerCollection.createIfAbsent(uuid);
-            document = PlayerCollection.getPlayerDocument(uuid);
-            if (document == null) throw new IllegalStateException("no player document for " + uuid);
+        PlayerData data = PlayerRepository.getPlayer(uuid);
+        if (data == null) {
+            PlayerRepository.createIfAbsent(uuid);
+            data = PlayerRepository.getPlayer(uuid);
+            if (data == null) throw new IllegalStateException("no player row for " + uuid);
         }
-        return new PlayerCacheObject(uuid, document);
+        return new PlayerCacheObject(data);
     }
 
     void attach(@NotNull Player player) {
@@ -69,7 +69,7 @@ public class PlayerCacheObject {
     public synchronized boolean changeTeamInvite() {
         boolean newValue = !teamInvites;
         teamInvites = newValue;
-        PlayerCollection.setTeamInvites(uuid, newValue);
+        PlayerRepository.setTeamInvites(uuid, newValue);
         return newValue;
     }
 
@@ -81,7 +81,7 @@ public class PlayerCacheObject {
         }else {
             this.teamCacheObject = null;
         }
-        PlayerCollection.changeTeamID(uuid, id);
+        PlayerRepository.changeTeamID(uuid, id);
     }
 
 
@@ -90,10 +90,10 @@ public class PlayerCacheObject {
         Tasks.async(() -> {
             // same lock as changeTeamInvite, a toggle during the read is not overwritten with the old value
             synchronized (this) {
-                Document document = PlayerCollection.getPlayerDocument(uuid);
-                if (document == null) return;
-                this.teamID = document.getString("teamID");
-                this.teamInvites = document.getBoolean("teamInvites", false);
+                PlayerData data = PlayerRepository.getPlayer(uuid);
+                if (data == null) return;
+                this.teamID = data.teamID();
+                this.teamInvites = data.teamInvites();
             }
 
             Tasks.sync(() -> {
@@ -134,7 +134,7 @@ public class PlayerCacheObject {
         long now = System.currentTimeMillis();
         long futureMillis = now + (hours * 60L * 60L * 1000L);
         this.jailEnd = futureMillis;
-        PlayerCollection.setJail(uuid, jail, futureMillis);
+        PlayerRepository.setJail(uuid, jail, futureMillis);
     }
     public void unsetJail(boolean isEscaped) {
         this.jail = false;
@@ -146,7 +146,7 @@ public class PlayerCacheObject {
             this.jailEnd = 0L;
         }
         this.isWanted = isEscaped;
-        PlayerCollection.unsetJail(uuid, this.jailEnd);
+        PlayerRepository.unsetJail(uuid, this.jailEnd);
     }
     public boolean isJail() {
         return jail;
@@ -159,7 +159,7 @@ public class PlayerCacheObject {
     }
     public void setWanted(boolean wanted) {
         isWanted = wanted;
-        PlayerCollection.setIsWanted(uuid, wanted);
+        PlayerRepository.setIsWanted(uuid, wanted);
     }
 
 

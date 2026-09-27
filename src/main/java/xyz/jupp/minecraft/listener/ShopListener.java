@@ -22,8 +22,8 @@ import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.PlayerCacheObject;
 import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.config.ShopItem;
-import xyz.jupp.minecraft.database.PlayerCollection;
-import xyz.jupp.minecraft.database.TeamCollection;
+import xyz.jupp.minecraft.database.PlayerRepository;
+import xyz.jupp.minecraft.database.TeamRepository;
 import xyz.jupp.minecraft.inventory.JewelerInventory;
 import xyz.jupp.minecraft.inventory.MainThread;
 import xyz.jupp.minecraft.inventory.Menu;
@@ -111,7 +111,7 @@ public class ShopListener implements Listener {
                 player.getInventory().setItemInMainHand(null);
 
                 Tasks.async(() -> {
-                    PlayerCollection.addMoney(player, amountToDeposit);
+                    PlayerRepository.addMoney(player, amountToDeposit);
                     Logger.console("deposit from " + player.getUniqueId() + " (" + amountToDeposit + ")");
                     MainThread.run(() -> {
                         player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f, 2f);
@@ -170,7 +170,7 @@ public class ShopListener implements Listener {
         player.getInventory().setItemInMainHand(null);
 
         Tasks.async(() -> {
-            if (!TeamCollection.addTeamPoints(teamID, earnedTeamPoints)) return;
+            if (!TeamRepository.addTeamPoints(teamID, earnedTeamPoints)) return;
             Logger.console("add teampoints +" + earnedTeamPoints + " (" + player.getUniqueId() + ")");
 
             MainThread.run(() -> {
@@ -256,7 +256,7 @@ public class ShopListener implements Listener {
             }
             int sellPrice = price / 2;
             Tasks.async(() -> {
-                PlayerCollection.addMoney(player, sellPrice);
+                PlayerRepository.addMoney(player, sellPrice);
                 Logger.console("player §a" + player.getUniqueId() + " §fhas §6sold §f" + material.name() + " for §a" + sellPrice);
                 MainThread.run(() -> {
                     player.sendMessage(Main.getChatPrefix() + "§a" + Main.getCurrencyName(sellPrice));
@@ -268,7 +268,7 @@ public class ShopListener implements Listener {
         }
 
         Tasks.async(() -> {
-            if (!PlayerCollection.tryWithdrawMoney(player, price)) {
+            if (!PlayerRepository.tryWithdrawMoney(player, price)) {
                 MainThread.run(() -> {
                     player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
                     player.updateInventory();
@@ -293,11 +293,11 @@ public class ShopListener implements Listener {
             Material material = shopItem == null ? null : Material.getMaterial(shopItem.material());
             if (material == null) {
                 // no usable item in the config: nothing is bought, as before (exception after the balance check)
-                if (PlayerCollection.getMoney(player) < price) MainThread.run(() -> player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f));
+                if (PlayerRepository.getMoney(player) < price) MainThread.run(() -> player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f));
                 return;
             }
 
-            if (!PlayerCollection.tryWithdrawMoney(player, price)) {
+            if (!PlayerRepository.tryWithdrawMoney(player, price)) {
                 MainThread.run(() -> player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f));
                 return;
             }
@@ -330,7 +330,7 @@ public class ShopListener implements Listener {
         Material material = offer.getMaterial();
 
         Tasks.async(() -> {
-            if (!PlayerCollection.tryWithdrawMoney(player, cost)) {
+            if (!PlayerRepository.tryWithdrawMoney(player, cost)) {
                 MainThread.run(() -> {
                     player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
                     player.sendMessage(Main.getChatPrefix() + "§cDu hast leider nicht genügend Geld.");
@@ -357,7 +357,7 @@ public class ShopListener implements Listener {
         int costs = BlackMarketHandler.getCurrentCosts().get();
 
         Tasks.async(() -> {
-            if (!PlayerCollection.tryWithdrawMoney(player, costs)) {
+            if (!PlayerRepository.tryWithdrawMoney(player, costs)) {
                 MainThread.run(() -> {
                     player.playSound(player, Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
                     player.sendMessage(Main.getBlackMarketDealerVillagerName() + " §7» §f§oPuh, dafür will ich mehr Schillinge als du hast, verzieh dich!");

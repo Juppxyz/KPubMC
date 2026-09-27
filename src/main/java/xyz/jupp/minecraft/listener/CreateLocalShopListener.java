@@ -19,7 +19,7 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
-import xyz.jupp.minecraft.database.PlayerCollection;
+import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.inventory.MainThread;
 import xyz.jupp.minecraft.utils.Logger;
 import xyz.jupp.minecraft.utils.Tasks;
@@ -109,7 +109,7 @@ public class CreateLocalShopListener implements Listener {
         String ownerName = secondLine.replace("§6", "");
 
         Tasks.async(() -> {
-            int currentMoney = PlayerCollection.getMoney(player);
+            int currentMoney = PlayerRepository.getMoney(player);
 
             if (currentMoney <= 0) {
                 notifyBuyer(player, "§cDein Konto ist derzeit leider leer.");
@@ -148,7 +148,7 @@ public class CreateLocalShopListener implements Listener {
             }
 
             // pay first, so the goods are only taken out of the chest for a covered purchase
-            if (!PlayerCollection.tryWithdrawMoney(player, sellPrice)) {
+            if (!PlayerRepository.tryWithdrawMoney(player, sellPrice)) {
                 notifyBuyer(player, "§cDein Konto ist aktuell leider nicht ausreichend gedeckt.");
                 return;
             }
@@ -162,14 +162,14 @@ public class CreateLocalShopListener implements Listener {
     private static void handOver(Player player, Block chestBlock, @Nullable Material shopItem, int amount, int sellPrice, OfflinePlayer offlinePlayer, String secondLine) {
         boolean successfullyRemoved = chestBlock.getState(false) instanceof Chest chest && removeItems(chest, shopItem, amount);
         if (!successfullyRemoved) {
-            Tasks.async(() -> PlayerCollection.addMoney(player, sellPrice));
+            Tasks.async(() -> PlayerRepository.addMoney(player, sellPrice));
             player.sendMessage(Main.getChatPrefix() + "§fDer Shop von §6" + secondLine + " §fist aktuell nicht ausreichend gefüllt.");
             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 1f);
             return;
         }
 
         // by uuid, the shop owner may be offline
-        Tasks.async(() -> PlayerCollection.addMoney(offlinePlayer.getUniqueId(), sellPrice));
+        Tasks.async(() -> PlayerRepository.addMoney(offlinePlayer.getUniqueId(), sellPrice));
 
         player.getInventory().addItem(new ItemStack(shopItem, amount));
         Logger.console(String.format("%s bought %s(%d) from %s", player.getName(), shopItem.name(), amount, offlinePlayer.getName()));

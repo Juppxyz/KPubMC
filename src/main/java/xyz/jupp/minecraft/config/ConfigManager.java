@@ -29,7 +29,7 @@ public class ConfigManager {
     private static volatile float tradeTax = 0.0f;
     private static volatile float deathTax = 0.0f;
     private static volatile float netherTransferTax = 0.0f;
-    private static volatile String mongoConnectionString = "";
+    private static volatile String databaseUrl = "";
     // immutable list, replaced as a whole on reload
     private static volatile List<ShopItem> shopItems = List.of();
 
@@ -55,7 +55,7 @@ public class ConfigManager {
             tradeTax = (float) optDouble(config, "tradeTax", 0.0);
             netherTransferTax = (float) optDouble(config, "netherTransferTax", 0.0);
             deathTax = (float) optDouble(config, "deathTax", 0.0);
-            mongoConnectionString = optString(config, "mongoConnectionString", "");
+            databaseUrl = optString(config, "databaseUrl", "");
 
             JsonElement jsonShopItems = config.get("shopItems");
             if (jsonShopItems != null && jsonShopItems.isJsonArray()) {
@@ -118,7 +118,7 @@ public class ConfigManager {
     public float getTradeTax() { return tradeTax; }
     public float getNetherTransferTax() { return netherTransferTax; }
     public float getDeathTax() { return deathTax; }
-    public String getMongoConnectionString() { return mongoConnectionString; }
+    public String getDatabaseUrl() { return databaseUrl; }
 
     public static List<ShopItem> getShopItems() {
         return shopItems;
