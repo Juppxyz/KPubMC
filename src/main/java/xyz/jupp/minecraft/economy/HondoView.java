@@ -192,7 +192,7 @@ public final class HondoView implements InventoryHolder {
         int net = Hondo.offerPrice(item, offer);
         List<String> lore = new ArrayList<>();
         lore.add("§7Freundschaftspreis: §f" + net + " Schilling §8(-" + ShopView.percent(offer.discount()) + ")");
-        lore.add("§7zzgl. " + ShopView.percent(Taxes.rate(Hondo.TAX_CLASS)) + " Steuer §8(" + gross(net) + " gesamt)");
+        lore.add("§aSteuerfrei §8(Hondos Freundschaftsgeschenk)");
         lore.add("§7Nur einmal zu haben!");
         lore.add("");
         if (level >= offer.level()) {
@@ -361,11 +361,11 @@ public final class HondoView implements InventoryHolder {
                         deliver(uuid, offer.material(), offer.amount());
                         player.sendMessage(Hondo.PREFIX + "Für dich, mein Freund. Erzähl es nicht herum.");
                         player.sendMessage(Main.getChatPrefix() + "§fGekauft: §e" + offer.amount() + "× " + Hondo.label(offer.material())
-                                + " §ffür " + Main.getCurrencyName(result.net() + result.tax()) + " §8(davon " + result.tax() + " Steuer)");
+                                + " §ffür " + Main.getCurrencyName(result.net()) + " §8(steuerfrei)");
                         player.playSound(player.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 0.6f, 1.4f);
                         traded(player, result);
                     }
-                    case INSUFFICIENT_FUNDS -> fail(player, "§fDafür fehlen dir Schilling §8(benötigt: " + (result.net() + result.tax()) + ")§f.");
+                    case INSUFFICIENT_FUNDS -> fail(player, "§fDafür fehlen dir Schilling §8(benötigt: " + result.net() + ")§f.");
                     case PRICE_CHANGED -> fail(player, "§fDer Preis hat sich gerade geändert, bitte prüfe den neuen Preis.");
                     case ALREADY_CLAIMED -> fail(player, "§fDieses Angebot hast du schon eingelöst.");
                     case LEVEL_TOO_LOW -> fail(player, "§fDafür ist eure Freundschaft gerade nicht eng genug.");

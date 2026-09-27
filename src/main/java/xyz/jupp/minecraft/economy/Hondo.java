@@ -45,7 +45,10 @@ public final class Hondo {
             new Exchange(Material.LAPIS_LAZULI, Material.AMETHYST_SHARD, 4),
             new Exchange(Material.AMETHYST_SHARD, Material.RESIN_CLUMP, 2));
 
-    /** Once per player: unlocked by the friendship level, priced from the shop with a big discount. */
+    /**
+     * Once per player and level (also after losing and regaining the level): unlocked by the friendship level,
+     * priced from the shop with a big discount and tax free. No lasting offers just for a high level.
+     */
     public record FriendOffer(int level, Material material, int amount, double discount) {}
 
     public static final List<FriendOffer> OFFERS = List.of(

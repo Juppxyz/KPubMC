@@ -177,11 +177,11 @@ public final class HondoRepository {
         return result;
     }
 
-    /** Buys the friendship offer of the level, once per player. */
+    /** Buys the friendship offer of the level: once per player and tax free (Hondo's gift, no tax, nothing for the treasury). */
     public static Result claim(@NotNull UUID player, int offerLevel, int expectedNet) {
         Hondo.FriendOffer offer = Hondo.offer(offerLevel);
         if (offer == null) return Result.of(Outcome.UNAVAILABLE);
-        Result result = Database.inTransaction(connection -> {
+        return Database.inTransaction(connection -> {
             MarketItem item = MarketRepository.lock(connection, offer.material());
             if (item == null || !item.enabled() || !EndAccess.isAvailable(offer.material())) return Result.of(Outcome.UNAVAILABLE);
             Friend friend = lockFriend(connection, player);
@@ -194,18 +194,14 @@ public final class HondoRepository {
             }
 
             int net = Hondo.offerPrice(item, offer);
-            int tax = Taxes.taxOn(net, Hondo.TAX_CLASS);
-            if (net != expectedNet) return new Result(Outcome.PRICE_CHANGED, net, tax, 0, level, null);
-            if (!withdraw(connection, player, net + tax)) return new Result(Outcome.INSUFFICIENT_FUNDS, net, tax, 0, level, null);
+            if (net != expectedNet) return new Result(Outcome.PRICE_CHANGED, net, 0, 0, level, null);
+            if (!withdraw(connection, player, net)) return new Result(Outcome.INSUFFICIENT_FUNDS, net, 0, 0, level, null);
 
             Database.update(connection, "INSERT INTO hondo_claims (player_uuid, level) VALUES (?, ?)", player, offer.level());
-            MarketRepository.logTrade(connection, player, offer.material(), "BUY", offer.amount(), net, tax);
-            Treasury.deposit(connection, Treasury.Source.TRADE_TAX, tax, player);
+            MarketRepository.logTrade(connection, player, offer.material(), "BUY", offer.amount(), net, 0);
             Friendship after = recordTrade(connection, player, friend, "OFFER", offer.material(), offer.amount(), null, 0, net);
-            return new Result(Outcome.OK, net, tax, 0, level, after);
+            return new Result(Outcome.OK, net, 0, 0, level, after);
         });
-        if (result.outcome() == Outcome.OK) Treasury.committed(result.tax());
-        return result;
     }
 
     /* goods the player did not receive (left during the booking, server stop): handed out at the next join */
