@@ -49,6 +49,8 @@ public final class Nomad {
     private static final int MIN_CONTRACT_VALUE = 1_000;
     private static final int MAX_CONTRACT_VALUE = 4_000;
     private static final int POINT_VALUE = 5;
+    // a material is not asked for again within this many days (as long as there are alternatives)
+    private static final int REPEAT_DAYS = 30;
     public static final int[] RACE_PRIZES = {1_000, 500, 250};
 
     public record Contract(long id, int slot, Material material, int required, int reward, Instant endsAt) {}
@@ -65,21 +67,47 @@ public final class Nomad {
 
     private record Special(Material material, int amount, int reward) {}
 
+    // items that need an adventure (structures, bosses, rare mobs); plain items only, so nothing with variants or damage
     private static final List<Special> SPECIALS = List.of(
             new Special(Material.TOTEM_OF_UNDYING, 1, 300),
-            new Special(Material.SHULKER_SHELL, 4, 400),
             new Special(Material.HEART_OF_THE_SEA, 1, 450),
             new Special(Material.ECHO_SHARD, 8, 500),
             new Special(Material.NAUTILUS_SHELL, 3, 300),
             new Special(Material.WITHER_SKELETON_SKULL, 2, 600),
-            new Special(Material.TRIDENT, 1, 400),
             new Special(Material.BREEZE_ROD, 16, 400),
             new Special(Material.PHANTOM_MEMBRANE, 16, 250),
             new Special(Material.GHAST_TEAR, 8, 350),
-            new Special(Material.DRAGON_BREATH, 8, 300),
             new Special(Material.SNIFFER_EGG, 1, 500),
             new Special(Material.HEAVY_CORE, 1, 800),
-            new Special(Material.ENCHANTED_GOLDEN_APPLE, 1, 600));
+            new Special(Material.ENCHANTED_GOLDEN_APPLE, 1, 600),
+            new Special(Material.MUSIC_DISC_PIGSTEP, 1, 500),
+            new Special(Material.MUSIC_DISC_OTHERSIDE, 1, 450),
+            new Special(Material.MUSIC_DISC_RELIC, 1, 400),
+            new Special(Material.SADDLE, 2, 250),
+            new Special(Material.NAME_TAG, 3, 300),
+            new Special(Material.EXPERIENCE_BOTTLE, 32, 300),
+            new Special(Material.RABBIT_FOOT, 6, 250),
+            new Special(Material.TURTLE_SCUTE, 8, 350),
+            new Special(Material.ARMADILLO_SCUTE, 8, 300),
+            new Special(Material.DIAMOND_HORSE_ARMOR, 1, 300),
+            new Special(Material.TRIAL_KEY, 4, 300),
+            new Special(Material.OMINOUS_TRIAL_KEY, 1, 500),
+            new Special(Material.SENTRY_ARMOR_TRIM_SMITHING_TEMPLATE, 1, 300),
+            new Special(Material.SNOUT_ARMOR_TRIM_SMITHING_TEMPLATE, 1, 400),
+            new Special(Material.WARD_ARMOR_TRIM_SMITHING_TEMPLATE, 1, 600),
+            new Special(Material.NETHERITE_UPGRADE_SMITHING_TEMPLATE, 1, 500),
+            new Special(Material.ANCIENT_DEBRIS, 4, 500),
+            new Special(Material.ARCHER_POTTERY_SHERD, 2, 300),
+            new Special(Material.CREEPER_HEAD, 1, 450),
+            new Special(Material.ZOMBIE_HEAD, 1, 350),
+            new Special(Material.SKELETON_SKULL, 1, 350),
+            new Special(Material.WET_SPONGE, 4, 300),
+            new Special(Material.PRISMARINE_CRYSTALS, 16, 250),
+            new Special(Material.BELL, 1, 300),
+            new Special(Material.CONDUIT, 1, 700),
+            // only while the End is open
+            new Special(Material.SHULKER_SHELL, 4, 400),
+            new Special(Material.DRAGON_BREATH, 8, 300));
 
     // the former fixed list at half of its points (contracts are the main source now)
     private static final Map<Material, Integer> DEFAULT_REDEEMABLES = Map.ofEntries(
@@ -175,9 +203,11 @@ public final class Nomad {
         Material material;
         int required;
         int reward;
+        Map<Material, Instant> recent = recentlyAsked();
         if (slot == SPECIAL_SLOT) {
-            List<Special> candidates = SPECIALS.stream()
-                    .filter(special -> !used.contains(special.material()) && EndAccess.isAvailable(special.material())).toList();
+            List<Special> candidates = freshest(SPECIALS.stream()
+                    .filter(special -> !used.contains(special.material()) && EndAccess.isAvailable(special.material())).toList(),
+                    Special::material, recent);
             if (candidates.isEmpty()) return null;
             Special special = candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
             material = special.material();
@@ -190,6 +220,7 @@ public final class Nomad {
                     .filter(item -> !item.material().name().endsWith("_SPAWN_EGG") && !used.contains(item.material()))
                     .filter(item -> EndAccess.isAvailable(item.material()))
                     .toList();
+            candidates = freshest(candidates, MarketItem::material, recent);
             if (candidates.isEmpty()) return null;
             MarketItem item = candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
             double unitValue = (double) item.basePrice() / item.amount();
@@ -203,6 +234,25 @@ public final class Nomad {
                 row -> row.getLong(1), slot, material.name(), required, reward, Timestamp.from(endsAt));
         Main.getInstance().getSLF4JLogger().info("nomad contract {}: {}x {} for {} team points until {}", slot, required, material, reward, endDay);
         return new Contract(Objects.requireNonNull(id), slot, material, required, reward, endsAt);
+    }
+
+    // material -> last time it was asked for, within the repeat window
+    private static Map<Material, Instant> recentlyAsked() {
+        Map<Material, Instant> recent = new HashMap<>();
+        Database.query("SELECT material, MAX(created_at) FROM nomad_contracts WHERE created_at >= now() - make_interval(days => ?) GROUP BY material",
+                row -> {
+                    Material material = Material.matchMaterial(row.getString(1));
+                    if (material != null) recent.put(material, row.getTimestamp(2).toInstant());
+                    return null;
+                }, REPEAT_DAYS);
+        return recent;
+    }
+
+    /** The candidates not asked for within the repeat window; if there are none, the one asked for longest ago. */
+    static <T> List<T> freshest(List<T> candidates, java.util.function.Function<T, Material> material, Map<Material, Instant> recent) {
+        List<T> fresh = candidates.stream().filter(candidate -> !recent.containsKey(material.apply(candidate))).toList();
+        if (!fresh.isEmpty() || candidates.isEmpty()) return fresh;
+        return List.of(candidates.stream().min(Comparator.comparing(candidate -> recent.get(material.apply(candidate)))).orElseThrow());
     }
 
     // round to amounts that feel natural: 1..7, multiples of 4, 16 or 64
