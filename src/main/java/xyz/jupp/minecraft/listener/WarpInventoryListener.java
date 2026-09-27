@@ -154,7 +154,7 @@ public class WarpInventoryListener implements Listener {
             }
 
             MainThread.deliverOrRefund(player.getUniqueId(), 200, () -> {
-                new PlayerTeleport().teleportAfter(player, toLocation(ownWarpObject));
+                new PlayerTeleport().teleportAfter(player, toLocation(ownWarpObject), () -> refundWarp(player));
 
                 player.sendMessage(Main.getChatPrefix() + "§c-200 " + Main.getCurrencyName());
                 player.playSound(player.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 2f, 2f);
@@ -200,13 +200,23 @@ public class WarpInventoryListener implements Listener {
             }
 
             MainThread.deliverOrRefund(player.getUniqueId(), 200, () -> {
-                new PlayerTeleport().teleportAfter(player, toLocation(targetWarpObject));
+                String ownerName = Bukkit.getOfflinePlayer(ownerUuid).getName();
+                new PlayerTeleport().teleportAfter(player, toLocation(targetWarpObject), () -> refundWarp(player));
 
                 player.sendMessage(Main.getChatPrefix() + "§c-200 " + Main.getCurrencyName());
-                player.sendMessage(Main.getChatPrefix() + "§fDu wurdest zum Warp von §a" + Bukkit.getOfflinePlayer(ownerUuid).getName() + " §fteleportiert.");
+                player.sendMessage(Main.getChatPrefix() + "§fDu wirst zum Warp von §a" + ownerName + " §fteleportiert.");
                 closeMenu(player);
             });
         });
+    }
+
+    // the teleport did not happen (moved, left the server): the price goes back
+    private static void refundWarp(Player player) {
+        UUID uuid = player.getUniqueId();
+        Tasks.async(() -> PlayerRepository.addMoney(uuid, 200));
+        if (player.isOnline()) {
+            player.sendMessage(Main.getChatPrefix() + "§fDu bekommst die " + Main.getCurrencyName(200) + " §fzurück.");
+        }
     }
 
     private static void notifyWarpError(Player player, String message) {

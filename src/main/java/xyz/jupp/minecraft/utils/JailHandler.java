@@ -95,7 +95,8 @@ public final class JailHandler {
     }
 
 
-    private static void refreshPlayerName(@NotNull Player player, @NotNull PlayerCacheObject pco) {
+    // team name plus the jail/wanted prefix, every name refresh has to go through here or the prefix is lost
+    public static void refreshPlayerName(@NotNull Player player, @NotNull PlayerCacheObject pco) {
         onMainThread(() -> {
             String finalName = teamFormattedName(player, pco);
             if (pco.isJail()) {

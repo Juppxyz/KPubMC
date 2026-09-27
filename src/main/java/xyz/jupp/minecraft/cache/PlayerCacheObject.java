@@ -6,6 +6,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.database.PlayerRepository.PlayerData;
+import xyz.jupp.minecraft.utils.JailHandler;
 import xyz.jupp.minecraft.utils.Tasks;
 
 import java.util.UUID;
@@ -99,28 +100,8 @@ public class PlayerCacheObject {
             Tasks.sync(() -> {
                 Player player = getPlayer();
                 if (player == null || !player.isOnline()) return;
-                TeamCacheObject team = getTeamCacheObject();
-
-                if (getTeamID() == null || team == null) {
-                    player.setDisplayName("§a" + player.getName());
-                    player.setPlayerListName("§a" + player.getName());
-                    return;
-                }
-
-                if (team.getTeamOwner().equals(uuid.toString())) {
-                    player.setPlayerListName(team.getTeamColor() + "§l" + player.getName());
-                    player.setDisplayName(team.getTeamColor() + "§l" + player.getName());
-                    return;
-                }
-
-                if (team.getTeamVices().contains(uuid.toString())) {
-                    player.setPlayerListName(team.getTeamColor() + "§o" + player.getName());
-                    player.setDisplayName(team.getTeamColor() + "§o" + player.getName());
-                    return;
-                }
-
-                player.setPlayerListName(team.getTeamColor() + player.getName());
-                player.setDisplayName(team.getTeamColor() + player.getName());
+                // keeps the jail/wanted prefix, the death listener recognizes the bounty by it
+                JailHandler.refreshPlayerName(player, this);
             });
         });
     }

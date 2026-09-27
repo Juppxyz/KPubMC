@@ -108,8 +108,8 @@ public final class NomadView implements InventoryHolder {
         if (teamID == null) {
             // Nomad only trades with teams: explain how to get into one instead of opening the menu
             player.sendMessage(Nomad.PREFIX + "Ich handle nur mit Teams, Fremder.");
-            player.sendMessage(Nomad.PREFIX + "Gründe dein eigenes mit §a/team neu <Name> §8(kostet "
-                    + TeamInventoryListener.TEAM_CREATION_COST + " Schilling)§f,");
+            player.sendMessage(Nomad.PREFIX + "Gründe dein eigenes mit §a/team neu <Name> §8(ab Level "
+                    + TeamInventoryListener.TEAM_CREATION_LEVEL + ", kostet " + TeamInventoryListener.TEAM_CREATION_COST + " Schilling)§f,");
             player.sendMessage(Nomad.PREFIX + "oder lass dich einladen: Mit §a/invites §fstellst du ein, ob du Einladungen annimmst.");
             player.playSound(player.getLocation(), Sound.ENTITY_WANDERING_TRADER_NO, 1f, 1f);
             return;

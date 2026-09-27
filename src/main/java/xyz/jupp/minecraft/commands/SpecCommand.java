@@ -22,11 +22,11 @@ public class SpecCommand implements CommandExecutor {
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
         if (sender instanceof Player player) {
             if (PermissionsUtil.isPlayerAdmin(player)) {
-                // hide/show without plugin key on purpose: JoinQuitListener hides with the plugin key,
-                // the plugin overloads would change who sees the admin after leaving the spec mode
+                // always with the plugin key, like JoinQuitListener for players who join later:
+                // hide and show only undo each other with the same key
                 if (!specMode.contains(player.getUniqueId())){
                     for (Player online: Bukkit.getOnlinePlayers()){
-                        online.hidePlayer(player);
+                        online.hidePlayer(Main.getInstance(), player);
                     }
                     player.sendMessage(Main.getChatPrefix() + "§fDein SpectatorMode ist nun: §aAN");
                     player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f,2f);
@@ -34,7 +34,7 @@ public class SpecCommand implements CommandExecutor {
                     Bukkit.broadcast(Text.section("§8[§c-§8] §a" + Text.legacy(player.playerListName()) + " §fhat den Server verlassen."));
                 }else {
                     for (Player online: Bukkit.getOnlinePlayers()){
-                        online.showPlayer(player);
+                        online.showPlayer(Main.getInstance(), player);
                     }
                     player.sendMessage(Main.getChatPrefix() + "§fDein SpectatorMode ist nun: §aAUS");
                     player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f,2f);
@@ -50,6 +50,7 @@ public class SpecCommand implements CommandExecutor {
         return specMode.contains(playerUUID);
     }
 
+    // quit in spec mode: Paper clears the hide itself when the player leaves, a showPlayer here would reveal him for a moment
     public static void changeSpecMode(@NotNull UUID playerUUID) {
         specMode.remove(playerUUID);
     }

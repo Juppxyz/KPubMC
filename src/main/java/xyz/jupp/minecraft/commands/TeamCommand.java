@@ -24,8 +24,8 @@ public class TeamCommand implements CommandExecutor {
 
             // open create new Team Inventory
             if (playerCacheObject.getTeamID() == null && args.length == 2 && args[0].equals("neu")) {
-                if (player.getExpToLevel() < 40) {
-                    player.sendMessage(Main.getChatPrefix() + "Du brauchst §a40 §fLevel, um ein Team zu erstellen.");
+                if (player.getLevel() < TeamInventoryListener.TEAM_CREATION_LEVEL) {
+                    player.sendMessage(Main.getChatPrefix() + "Du brauchst §a" + TeamInventoryListener.TEAM_CREATION_LEVEL + " §fLevel, um ein Team zu erstellen.");
                     player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
                     return false;
                 }
