@@ -126,7 +126,6 @@ public final class Nomad {
             Map.entry(Material.MUSIC_DISC_PIGSTEP, 60),
             Map.entry(Material.SILENCE_ARMOR_TRIM_SMITHING_TEMPLATE, 50),
             Map.entry(Material.ELYTRA, 45),
-            Map.entry(Material.BUDDING_AMETHYST, 30),
             Map.entry(Material.HEART_OF_THE_SEA, 20),
             Map.entry(Material.DISC_FRAGMENT_5, 20),
             Map.entry(Material.ECHO_SHARD, 12),
