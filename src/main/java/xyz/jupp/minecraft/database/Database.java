@@ -217,7 +217,47 @@ public final class Database {
                 created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
             )""",
             "CREATE INDEX IF NOT EXISTS nomad_deliveries_created_idx ON nomad_deliveries (created_at)",
-            "CREATE TABLE IF NOT EXISTS nomad_race_payouts (week TEXT PRIMARY KEY, paid_at TIMESTAMPTZ NOT NULL DEFAULT now())"
+            "CREATE TABLE IF NOT EXISTS nomad_race_payouts (week TEXT PRIMARY KEY, paid_at TIMESTAMPTZ NOT NULL DEFAULT now())",
+            // Hondo: friendship per player, every trade with him and the friendship offers already bought
+            """
+            CREATE TABLE IF NOT EXISTS hondo_friends (
+                player_uuid   UUID PRIMARY KEY,
+                points        DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (points >= 0),
+                trades        INTEGER NOT NULL DEFAULT 0,
+                volume        BIGINT  NOT NULL DEFAULT 0,
+                last_trade_at TIMESTAMPTZ
+            )""",
+            """
+            CREATE TABLE IF NOT EXISTS hondo_trades (
+                id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                player_uuid    UUID    NOT NULL,
+                kind           TEXT    NOT NULL CHECK (kind IN ('BUY', 'EXCHANGE', 'OFFER')),
+                material       TEXT    NOT NULL,
+                quantity       INTEGER NOT NULL,
+                given_material TEXT,
+                given_quantity INTEGER NOT NULL DEFAULT 0,
+                value          INTEGER NOT NULL,
+                points         DOUBLE PRECISION NOT NULL,
+                created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+            )""",
+            "CREATE INDEX IF NOT EXISTS hondo_trades_player_idx ON hondo_trades (player_uuid, created_at)",
+            "CREATE INDEX IF NOT EXISTS hondo_trades_created_idx ON hondo_trades (created_at)",
+            """
+            CREATE TABLE IF NOT EXISTS hondo_claims (
+                player_uuid UUID    NOT NULL,
+                level       INTEGER NOT NULL,
+                claimed_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+                PRIMARY KEY (player_uuid, level)
+            )""",
+            """
+            CREATE TABLE IF NOT EXISTS hondo_pending (
+                id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                player_uuid UUID    NOT NULL,
+                material    TEXT    NOT NULL,
+                quantity    INTEGER NOT NULL CHECK (quantity > 0),
+                created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+            )""",
+            "CREATE INDEX IF NOT EXISTS hondo_pending_player_idx ON hondo_pending (player_uuid)"
     );
 
     private static volatile HikariDataSource dataSource;

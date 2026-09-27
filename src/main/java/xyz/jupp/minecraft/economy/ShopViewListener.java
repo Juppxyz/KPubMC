@@ -14,12 +14,13 @@ public class ShopViewListener implements Listener {
         if (event.getInventory().getHolder(false) instanceof ShopView view) view.handleClick(event, player);
         if (event.getInventory().getHolder(false) instanceof NomadView view) view.handleClick(event, player);
         if (event.getInventory().getHolder(false) instanceof BlackMarketView view) view.handleClick(event, player);
+        if (event.getInventory().getHolder(false) instanceof HondoView view) view.handleClick(event, player);
     }
 
     @EventHandler
     public void onDrag(InventoryDragEvent event) {
         Object holder = event.getInventory().getHolder(false);
-        if (holder instanceof ShopView || holder instanceof NomadView || holder instanceof BlackMarketView) {
+        if (holder instanceof ShopView || holder instanceof NomadView || holder instanceof BlackMarketView || holder instanceof HondoView) {
             event.setCancelled(true);
         }
     }

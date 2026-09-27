@@ -9,6 +9,7 @@ import xyz.jupp.minecraft.commands.*;
 import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.database.Database;
 import xyz.jupp.minecraft.economy.Economy;
+import xyz.jupp.minecraft.economy.Hondo;
 import xyz.jupp.minecraft.economy.Market;
 import xyz.jupp.minecraft.economy.Nomad;
 import xyz.jupp.minecraft.economy.Services;
@@ -129,6 +130,7 @@ public final class Main extends JavaPlugin {
         Market.load();
         Services.load();
         Nomad.load();
+        Hondo.load();
         Logger.console("loaded " + Market.all().size() + " market items, " + Market.dailyOffers().size() + " daily offers");
         registerCommands();
         registerListener();

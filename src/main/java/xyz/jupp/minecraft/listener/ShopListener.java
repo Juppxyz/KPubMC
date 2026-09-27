@@ -9,21 +9,17 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageEvent;
-import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.world.EntitiesLoadEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import xyz.jupp.minecraft.economy.BlackMarketView;
-import xyz.jupp.minecraft.economy.TaxClass;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.database.PlayerRepository;
+import xyz.jupp.minecraft.economy.HondoView;
 import xyz.jupp.minecraft.economy.NomadView;
 import xyz.jupp.minecraft.economy.ShopView;
-import xyz.jupp.minecraft.economy.Taxes;
-import xyz.jupp.minecraft.inventory.JewelerInventory;
 import xyz.jupp.minecraft.inventory.MainThread;
-import xyz.jupp.minecraft.inventory.Menu;
 import xyz.jupp.minecraft.utils.Logger;
 import xyz.jupp.minecraft.utils.Npcs;
 import xyz.jupp.minecraft.utils.Tasks;
@@ -53,7 +49,7 @@ public class ShopListener implements Listener {
 
             if (Main.getJewelerVillagerName().equals(villagerName)) {
                 event.setCancelled(true);
-                JewelerInventory.openInventory(event.getPlayer());
+                HondoView.open(event.getPlayer());
                 return;
             }
         }
@@ -121,54 +117,5 @@ public class ShopListener implements Listener {
             if (entity instanceof LivingEntity living && Npcs.isNpc(living)) Npcs.keep(living);
         }
     }
-
-
-    @EventHandler
-    public void onClick(InventoryClickEvent event) {
-        if (!(event.getWhoClicked() instanceof Player player)) return;
-        Menu menu = Menu.of(event.getInventory());
-        if (menu == null) return;
-
-        switch (menu.getType()) {
-            case JEWELER -> onJewelerClick(event, player);
-            default -> {}
-        }
-    }
-
-
-    private static void onJewelerClick(InventoryClickEvent event, Player player) {
-        event.setCancelled(true);
-        ItemStack clickedItem = event.getCurrentItem();
-        if (clickedItem == null) return;
-        ItemMeta clickedMeta = clickedItem.getItemMeta();
-        if (clickedMeta == null) return;
-        String displayName = Text.legacy(clickedMeta.customName());
-
-        JewelerInventory.Offer offer = JewelerInventory.Offer.byItemName(displayName);
-        if (offer == null) return;
-
-        String itemName = displayName.split(" ")[0];
-        Material material = offer.getMaterial();
-
-        // price plus trade tax, the tax goes to the state treasury
-        Tasks.async(() -> {
-            Taxes.Purchase purchase = Taxes.chargePurchase(player.getUniqueId(), offer.getPrice(), TaxClass.LUXURY);
-            if (!purchase.success()) {
-                MainThread.run(() -> {
-                    player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
-                    player.sendMessage(Main.getChatPrefix() + "§cDu hast leider nicht genügend Geld.");
-                });
-                return;
-            }
-            MainThread.deliverOrRefund(player.getUniqueId(), purchase.total(), () -> {
-                player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f,2f);
-                player.getInventory().addItem(new ItemStack(material, 1));
-                player.sendMessage(Main.getChatPrefix() + "§fDu hast erfolgreich " + itemName + " §fgekauft!");
-                player.sendMessage(Main.getChatPrefix() + "§c-" + purchase.total() + " Schilling §8(davon " + purchase.tax() + " Steuer)");
-            });
-        });
-    }
-
-
 
 }

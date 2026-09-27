@@ -97,7 +97,7 @@ public final class Market {
      */
     private static void dailyUpdate() {
         LocalDate today = LocalDate.now(ZONE);
-        if (today.equals(offersDay) && Economy.isMeasured(today) && Nomad.isUpToDate(today)) return;
+        if (today.equals(offersDay) && Economy.isMeasured(today) && Nomad.isUpToDate(today) && Hondo.isUpToDate(today)) return;
         if (!updating.compareAndSet(false, true)) return;
         try {
             if (!Economy.isMeasured(today)) {
@@ -108,6 +108,11 @@ public final class Market {
             boolean newOffers = !today.equals(offersDay);
             List<Material> offers = newOffers ? rotate() : List.of();
             List<Component> nomadNews = Nomad.isUpToDate(today) ? List.of() : Nomad.dailyUpdate(today);
+            try {
+                Hondo.dailyUpdate(today);
+            } catch (RuntimeException e) {
+                Main.getInstance().getSLF4JLogger().error("Hondo's daily update failed, next try in a minute", e);
+            }
             Tasks.sync(() -> {
                 nomadNews.forEach(Bukkit::broadcast);
                 if (!offers.isEmpty()) {

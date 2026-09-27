@@ -14,6 +14,7 @@ import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.TeamCacheObject;
+import xyz.jupp.minecraft.economy.HondoView;
 import xyz.jupp.minecraft.commands.SpecCommand;
 import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.utils.JailHandler;
@@ -75,6 +76,8 @@ public class JoinQuitListener implements Listener {
 
         // jail handling, JailHandler.handleJoin can write to the database
         Tasks.async(() -> JailHandler.handleJoin(player));
+        // goods from a Hondo trade the player left during
+        HondoView.deliverPending(player);
 
     }
 

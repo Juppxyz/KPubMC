@@ -1274,5 +1274,14 @@
   "elasticity": 0.1,
   "taxClass": "LUXURY",
   "since": 2
+ },
+ {
+  "material": "EMERALD",
+  "category": "ORES",
+  "amount": 1,
+  "price": 50,
+  "buyable": false,
+  "description": "Kaufen beim Juwelier",
+  "since": 3
  }
 ]

@@ -120,15 +120,20 @@ public final class MarketRepository {
 
     public static void resetDemand(@Nullable Material material) {
         if (material == null) {
-            Database.update("UPDATE market_items SET demand = 0");
+            Database.update("UPDATE market_items m SET demand = 0 FROM (" + LOCK_ALL_IN_ORDER + ") s WHERE m.material = s.material");
         } else {
             Database.update("UPDATE market_items SET demand = 0 WHERE material = ?", material.name());
         }
     }
 
+    // Hondo's exchanges lock two rows in material order; statements over many rows lock in the same order,
+    // otherwise both could wait for each other
+    private static final String LOCK_ALL_IN_ORDER = "SELECT material FROM market_items ORDER BY material COLLATE \"C\" FOR UPDATE";
+
     /** Moves every demand towards 0; tiny rests are set to 0. */
     public static void decayDemand(double factor) {
-        Database.update("UPDATE market_items SET demand = CASE WHEN abs(demand * ?) < 0.05 THEN 0 ELSE demand * ? END WHERE demand <> 0",
+        Database.update("UPDATE market_items m SET demand = CASE WHEN abs(m.demand * ?) < 0.05 THEN 0 ELSE m.demand * ? END "
+                        + "FROM (" + LOCK_ALL_IN_ORDER + ") s WHERE m.material = s.material AND m.demand <> 0",
                 factor, factor);
     }
 
@@ -154,7 +159,7 @@ public final class MarketRepository {
 
     /* trades */
 
-    private static @Nullable MarketItem lock(Connection connection, Material material) throws SQLException {
+    static @Nullable MarketItem lock(Connection connection, Material material) throws SQLException {
         return Database.queryOne(connection, "SELECT " + COLUMNS + " FROM market_items WHERE material = ? FOR UPDATE",
                 MarketRepository::map, material.name());
     }
@@ -222,7 +227,7 @@ public final class MarketRepository {
         return trade;
     }
 
-    private static void logTrade(Connection connection, UUID player, Material material, String kind, int quantity,
+    static void logTrade(Connection connection, UUID player, Material material, String kind, int quantity,
                                  int net, int tax) throws SQLException {
         Database.update(connection, "INSERT INTO market_transactions (player_uuid, material, kind, quantity, net, tax) VALUES (?, ?, ?, ?, ?, ?)",
                 player, material.name(), kind, quantity, net, tax);

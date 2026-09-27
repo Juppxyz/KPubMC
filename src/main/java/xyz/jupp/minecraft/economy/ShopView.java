@@ -130,11 +130,12 @@ public final class ShopView implements InventoryHolder {
         });
     }
 
-    /** Re-renders every open shop in place, e.g. after a trade or a price decay. */
+    /** Re-renders every open shop in place, e.g. after a trade or a price decay; Hondo shows the same prices. */
     public static void refreshAll() {
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (player.getOpenInventory().getTopInventory().getHolder(false) instanceof ShopView shop) shop.render();
         }
+        HondoView.refreshAll();
     }
 
     // a new window, because the title (current tab or good) cannot be changed on an open inventory
@@ -834,7 +835,7 @@ public final class ShopView implements InventoryHolder {
     }
 
     // how many plain items of this material still fit into the storage slots
-    private static int freeSpace(Player player, Material material) {
+    static int freeSpace(Player player, Material material) {
         ItemStack plain = new ItemStack(material);
         int maxStack = material.getMaxStackSize();
         int space = 0;
