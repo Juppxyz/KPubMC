@@ -154,7 +154,7 @@ public class DeathListener implements Listener {
             message = Main.getChatPrefix() + "Dir wurde §ckeine §fTodes-Steuer berechnet.";
         } else {
             message = String.format(
-                    "%sDir wurden §a%s §8(§2%.0f%%§8) §fals Todes-Steuer berechnet. §8→ Staatskasse",
+                    "%sDir wurden §a%s §8(§2%.0f%%§8) §fals Todes-Steuer berechnet.",
                     Main.getChatPrefix(),
                     Main.getCurrencyName(tax.tax()),
                     Taxes.deathRate() * 100

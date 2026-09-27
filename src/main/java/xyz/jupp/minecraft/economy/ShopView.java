@@ -15,7 +15,6 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
-import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.inventory.MainThread;
 import xyz.jupp.minecraft.utils.Tasks;
@@ -47,7 +46,7 @@ public final class ShopView implements InventoryHolder {
         FOOD(Category.FOOD),
         RARE(Category.RARE),
         MISC(Category.MISC),
-        INFO("§fInfo & Steuern", Material.BOOK, null);
+        INFO("§fSo funktioniert's", Material.BOOK, null);
 
         private final String label;
         private final Material icon;
@@ -166,9 +165,8 @@ public final class ShopView implements InventoryHolder {
 
         inventory.setItem(SLOT_BALANCE, named(Material.GOLD_NUGGET, "§fDein Konto: " + Main.getCurrencyName(balance), List.of()));
         inventory.setItem(SLOT_TREASURY, named(Material.GOLD_BLOCK, "§6Staatskasse: " + Main.getCurrencyName((int) Math.min(Integer.MAX_VALUE, Treasury.balance())),
-                List.of("§7Alle Steuern fließen hierhin.",
-                        "§7Steuern: §a" + classRates(),
-                        "§7Konjunktur: " + factorText(),
+                List.of("§7Hier landen alle Steuern.",
+                        "§7Steuern gerade: " + Economy.levelWord(),
                         "§8/staatskasse")));
     }
 
@@ -212,7 +210,7 @@ public final class ShopView implements InventoryHolder {
     private ItemStack tabItem(Tab candidate) {
         boolean selected = candidate == tab;
         List<String> lore = new ArrayList<>();
-        lore.add(candidate == Tab.INFO ? "§7Preise, Steuern & Staatskasse" : "§7Kategorie");
+        lore.add(candidate == Tab.INFO ? "§7Preise und Steuern erklärt" : "§7Kategorie");
         if (candidate != Tab.INFO) lore.add("§8" + goods(candidate).size() + " Items");
         lore.add("");
         lore.add(selected ? "§a✔ Geöffnet" : "§e» Klicken zum Öffnen");
@@ -241,13 +239,13 @@ public final class ShopView implements InventoryHolder {
         if (item.buyable()) {
             int net = item.buyTotal(1, daily ? Market.dailyDiscount() : 0);
             int tax = Taxes.taxOn(net, item.taxClass());
-            lore.add("§7Kaufen: " + Main.getCurrencyName(net + tax) + " §8(" + net + " + " + tax + " Steuer)");
-            lore.add("§7Steuerklasse: §f" + item.taxClass().label() + " §8(" + percent(Taxes.rate(item.taxClass())) + ")");
+            lore.add("§7Kaufen: " + Main.getCurrencyName(net + tax) + " §8(inkl. " + tax + " Steuer)");
         } else {
             lore.add("§7Kaufen: §8nicht hier" + (item.description() != null ? " §8(" + item.description() + ")" : ""));
         }
         lore.add(item.sellable() ? "§7Verkaufen: " + Main.getCurrencyName(item.sellPrice()) : "§7Verkaufen: §8wird nicht angekauft");
-        lore.add(trendLine(item));
+        String trend = trendLine(item);
+        if (trend != null) lore.add(trend);
         if (daily && item.buyable()) lore.add("§6★ Tagesangebot §a-" + percent(Market.dailyDiscount()));
         if (item.buyable() && item.description() != null && !item.description().isBlank()) lore.add("§7§o" + item.description());
         return lore;
@@ -257,55 +255,45 @@ public final class ShopView implements InventoryHolder {
         return (view == Page.OVERVIEW ? tab == Tab.DAILY : Market.isDailyOffer(item.material())) && Market.isDailyOffer(item.material());
     }
 
-    private static String trendLine(MarketItem item) {
+    // only when the price is noticeably off its usual level
+    private static @Nullable String trendLine(MarketItem item) {
         double trend = item.trend();
-        String base = " §8(Basis " + item.basePrice() + ")";
-        if (Math.abs(trend) < 0.02) return "§7Trend: §f● stabil" + base;
-        String change = Math.round(Math.abs(trend) * 100) + "%";
-        return (trend > 0 ? "§7Trend: §c▲ +" + change : "§7Trend: §a▼ -" + change) + base;
+        if (trend >= 0.05) return "§c▲ gerade teurer als sonst";
+        if (trend <= -0.05) return "§a▼ gerade günstiger als sonst";
+        return null;
     }
 
     private void renderInfo() {
-        ConfigManager config = ConfigManager.getManager();
         inventory.setItem(20, named(Material.WRITABLE_BOOK, "§ePreise", List.of(
-                "§7Jeder Kauf erhöht den Preis,",
-                "§7jeder Verkauf senkt ihn.",
-                "§7Mit der Zeit pendeln die Preise zurück",
-                "§7zum Basispreis §8(Halbwertszeit " + formatHours(config.getDemandHalfLifeHours()) + ")§7.",
-                "§7Ankaufpreise steigen nie über",
-                "§7den Basispreis.")));
+                "§7Was oft gekauft wird, wird teurer.",
+                "§7Was oft verkauft wird, wird billiger.",
+                "§7Nach ein paar Stunden pendeln sich",
+                "§7die Preise wieder ein.")));
 
-        List<String> taxes = new ArrayList<>();
-        for (TaxClass taxClass : TaxClass.values()) {
-            taxes.add("§f" + taxClass.label() + ": §a" + percent(Taxes.rate(taxClass)) + " §7" + switch (taxClass) {
-                case BASIC -> "(Nahrung, Farm)";
-                case STANDARD -> "(Blöcke, Rohstoffe, Abheben)";
-                case LUXURY -> "(Seltenes, Juwelier, Schwarzmarkt)";
-            });
-        }
-        taxes.add("§fTod: §a" + percent(Taxes.deathRate()) + " §7(ab 250 Schilling)");
-        taxes.add("§fNether-Transfer §7(gestaffelt):");
-        for (TaxBracket bracket : Taxes.netherBrackets()) {
-            taxes.add("§7  ab " + bracket.from() + ": §a" + percent(bracket.rate()));
-        }
-        taxes.add("§8Alle Steuern gehen an die Staatskasse.");
+        List<String> taxes = new ArrayList<>(List.of(
+                "§7Beim Kaufen zahlst du Steuern:",
+                "§7  Essen & Farm-Sachen: §a" + percent(Taxes.rate(TaxClass.BASIC)),
+                "§7  Normale Waren: §a" + percent(Taxes.rate(TaxClass.STANDARD)),
+                "§7  Seltenes & Luxus: §a" + percent(Taxes.rate(TaxClass.LUXURY)),
+                "§7Beim Sterben: §a" + percent(Taxes.deathRate()) + " §7deines Geldes §8(ab 250)",
+                "§7Beim Nether-Portal: je mehr Geld",
+                "§7du hast, desto mehr §8(bis " + percent(Taxes.topNetherRate()) + ")",
+                "",
+                "§7Steuern gerade: " + Economy.levelWord(),
+                "§8Ist viel Geld im Umlauf, steigen sie etwas,",
+                "§8sonst sinken sie wieder."));
         inventory.setItem(22, named(Material.PAPER, "§cSteuern", taxes));
-
-        inventory.setItem(31, named(Material.COMPARATOR, "§bKonjunktur " + factorText(), List.of(
-                "§7Jeden Tag um 0 Uhr wird die Geldmenge",
-                "§7pro aktivem Spieler gemessen.",
-                "§7Wächst sie zu schnell, steigen die Steuern,",
-                "§7bei Flaute oder voller Staatskasse sinken sie.",
-                "§7Faktor: §f×" + String.format(java.util.Locale.GERMANY, "%.2f", Economy.factor()) + " §8(auf alle Steuersätze)",
-                "§8" + Economy.note())));
 
         ZonedDateTime now = ZonedDateTime.now(Market.ZONE);
         Duration untilReset = Duration.between(now, LocalDate.now(Market.ZONE).plusDays(1).atStartOfDay(Market.ZONE));
         inventory.setItem(24, named(Material.CLOCK, "§6Tagesangebote", List.of(
-                "§7Neue Angebote jeden Tag um 0 Uhr.",
-                "§7Nächste in: §f" + untilReset.toHours() + " h " + untilReset.toMinutesPart() + " min",
-                "§7Rabatt: §a-" + percent(Market.dailyDiscount()),
-                "§7Heute: §f" + Market.dailyOffers().size() + " Angebote")));
+                "§7Jeden Tag um 0 Uhr neu, mit Rabatt.",
+                "§7Neue Angebote in: §f" + untilReset.toHours() + " h " + untilReset.toMinutesPart() + " min")));
+
+        inventory.setItem(31, named(Material.GOLD_BLOCK, "§6Staatskasse", List.of(
+                "§7Alle Steuern landen hier.",
+                "§7Stand: " + Main.getCurrencyName((int) Math.min(Integer.MAX_VALUE, Treasury.balance())),
+                "§8/staatskasse")));
     }
 
 
@@ -345,7 +333,7 @@ public final class ShopView implements InventoryHolder {
                 int tax = Taxes.taxOn(net, item.taxClass());
                 List<String> buttonLore = new ArrayList<>();
                 buttonLore.add("§7" + bundles + (bundles == 1 ? " Paket" : " Pakete") + " à " + item.amount() + " Stück");
-                buttonLore.add("§7Preis: " + Main.getCurrencyName(net + tax) + " §8(" + net + " + " + tax + " Steuer)");
+                buttonLore.add("§7Preis: " + Main.getCurrencyName(net + tax) + " §8(inkl. " + tax + " Steuer)");
                 if (net + tax > balance) buttonLore.add("§cDir fehlen " + (net + tax - balance) + " Schilling");
                 buttonLore.add("");
                 buttonLore.add("§e» Linksklick zum Kaufen");
@@ -402,10 +390,10 @@ public final class ShopView implements InventoryHolder {
         inventory.setItem(SLOT_GOOD, named(Material.EXPERIENCE_BOTTLE, "§5§oZufall", List.of(
                 "§7Du bekommst ein zufälliges Paket",
                 "§7aus den heutigen Tagesangeboten.",
-                "§7Preis: " + Main.getCurrencyName(net + tax) + " §8(" + net + " + " + tax + " Steuer)")));
+                "§7Preis: " + Main.getCurrencyName(net + tax) + " §8(inkl. " + tax + " Steuer)")));
         inventory.setItem(SLOT_BUY_LABEL, named(Material.LIME_CONCRETE, "§a§lKaufen", List.of()));
         if (net <= 0) return;
-        List<String> lore = new ArrayList<>(List.of("§7Preis: " + Main.getCurrencyName(net + tax) + " §8(" + net + " + " + tax + " Steuer)"));
+        List<String> lore = new ArrayList<>(List.of("§7Preis: " + Main.getCurrencyName(net + tax) + " §8(inkl. " + tax + " Steuer)"));
         if (net + tax > balance) lore.add("§cDir fehlen " + (net + tax - balance) + " Schilling");
         lore.add("");
         lore.add("§e» Linksklick zum Kaufen");
@@ -521,7 +509,7 @@ public final class ShopView implements InventoryHolder {
                     case OK -> {
                         give(player, item.material(), bundles * item.amount());
                         player.sendMessage(receipt("§fGekauft: §e" + bundles * item.amount() + "× ", item,
-                                " §ffür " + Main.getCurrencyName(trade.net() + trade.tax()) + " §8(" + trade.net() + " + " + trade.tax() + " Steuer → Staatskasse)"));
+                                " §ffür " + Main.getCurrencyName(trade.net() + trade.tax()) + " §8(davon " + trade.tax() + " Steuer)"));
                         player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f, 2f);
                     }
                     case INSUFFICIENT_FUNDS -> fail(player, "§fDafür fehlen dir Schilling §8(benötigt: " + (trade.net() + trade.tax()) + ")§f.");
@@ -595,7 +583,7 @@ public final class ShopView implements InventoryHolder {
                 if (trade.outcome() == MarketRepository.Outcome.OK) {
                     give(player, item.material(), item.amount());
                     player.sendMessage(receipt("§5Zufall: §e" + item.amount() + "× ", item,
-                            " §ffür " + Main.getCurrencyName(trade.net() + trade.tax()) + " §8(" + trade.net() + " + " + trade.tax() + " Steuer → Staatskasse)"));
+                            " §ffür " + Main.getCurrencyName(trade.net() + trade.tax()) + " §8(davon " + trade.tax() + " Steuer)"));
                     player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f, 2f);
                 } else {
                     fail(player, "§fDafür fehlen dir Schilling §8(benötigt: " + (trade.net() + trade.tax()) + ")§f.");
@@ -713,20 +701,9 @@ public final class ShopView implements InventoryHolder {
         return item;
     }
 
-    static String classRates() {
-        return percent(Taxes.rate(TaxClass.BASIC)) + "§8/§a" + percent(Taxes.rate(TaxClass.STANDARD)) + "§8/§a" + percent(Taxes.rate(TaxClass.LUXURY));
-    }
-
-    static String factorText() {
-        return "§f×" + String.format(java.util.Locale.GERMANY, "%.2f", Economy.factor()) + " " + Economy.trendSymbol();
-    }
-
     static String percent(double rate) {
         return Math.round(rate * 100) + "%";
     }
 
-    private static String formatHours(double hours) {
-        return (hours == Math.rint(hours) ? String.valueOf((long) hours) : String.valueOf(hours)) + " h";
-    }
 
 }

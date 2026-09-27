@@ -240,7 +240,7 @@ public class ShopListener implements Listener {
                 player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f,2f);
                 player.getInventory().addItem(new ItemStack(material, 1));
                 player.sendMessage(Main.getChatPrefix() + "§fDu hast erfolgreich " + itemName + " §fgekauft!");
-                player.sendMessage(Main.getChatPrefix() + "§c-" + purchase.total() + " Schilling §8(" + purchase.net() + " + " + purchase.tax() + " Steuer → Staatskasse)");
+                player.sendMessage(Main.getChatPrefix() + "§c-" + purchase.total() + " Schilling §8(davon " + purchase.tax() + " Steuer)");
             });
         });
     }
@@ -268,8 +268,8 @@ public class ShopListener implements Listener {
 
             MainThread.deliverOrRefund(player.getUniqueId(), purchase.total(), () -> {
                 player.getInventory().addItem(offeredItem);
-                player.sendMessage(Main.getChatPrefix() + "§c-%d %s §8(%d + %d Steuer → Staatskasse)".formatted(
-                        purchase.total(), Main.getCurrencyName(), purchase.net(), purchase.tax()));
+                player.sendMessage(Main.getChatPrefix() + "§c-%d %s §8(davon %d Steuer)".formatted(
+                        purchase.total(), Main.getCurrencyName(), purchase.tax()));
                 player.sendMessage(Main.getBlackMarketDealerVillagerName() + " §7» §f§oBesuche mich gerne bald wieder! Viel Spaß damit.");
                 player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.4f,0.2f);
                 player.playSound(player.getLocation(), Sound.ENTITY_ITEM_PICKUP, 2f,2f);

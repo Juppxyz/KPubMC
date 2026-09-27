@@ -185,7 +185,7 @@ public class MoneyInventoryListener implements Listener {
                     amountOfCash -= stackAmount;
                 }
                 player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f, 2f);
-                player.sendMessage(Main.getChatPrefix() + "§fDu hast §2" + netAmount + " " + Main.getCurrencyName() + " §fabgehoben §8(+ " + withdrawal.tax() + " Steuer → Staatskasse)");
+                player.sendMessage(Main.getChatPrefix() + "§fDu hast §2" + netAmount + " " + Main.getCurrencyName() + " §fabgehoben §8(Steuer: " + withdrawal.tax() + ")");
             });
         });
     }

@@ -20,13 +20,12 @@ public class NetherTransferListener implements Listener {
         Tasks.supplyAsync(() -> {
             Taxes.BalanceTax tax = Taxes.chargeNetherTax(player.getUniqueId());
             if (tax.tax() == 0) {
-                return Main.getChatPrefix() + "Dir wurde §ckeine §fTransfer-Steuer berechnet.";
+                return Main.getChatPrefix() + "Dir wurde §ckeine §fNether-Steuer berechnet.";
             }
             return String.format(
-                    "%sDir wurden §a%s §8(§2%.0f%%§8, gestaffelt) §fals Transfer-Steuer berechnet. §8→ Staatskasse",
+                    "%sDir wurden §a%s §fNether-Steuer berechnet.",
                     Main.getChatPrefix(),
-                    Main.getCurrencyName(tax.tax()),
-                    tax.effectiveRate() * 100
+                    Main.getCurrencyName(tax.tax())
             );
         }, message -> player.sendMessage(message));
     }

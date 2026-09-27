@@ -4,17 +4,14 @@ import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import xyz.jupp.minecraft.economy.Economy;
-import xyz.jupp.minecraft.economy.TaxClass;
-import xyz.jupp.minecraft.economy.Taxes;
 import xyz.jupp.minecraft.economy.Treasury;
-
-import java.util.Locale;
 
 // main thread only
 public class TabListUtil {
 
     private static final String HEADER = "Auslastung: ";
-    private static final String FOOTER = "\n§fSteuern: §a%s §8| §fTod: §a%d%% §8| §fTransfer: §abis %d%%\n§fKonjunktur: %s §8| §6Staatskasse: §a%d Schilling";
+    // kept short on purpose: the details are in the shop info tab and /staatskasse
+    private static final String FOOTER = "\n§6Staatskasse: §a%d Schilling\n§7Steuern: %s §8· §7/staatskasse";
 
 
     public static void updateTabForAll() {
@@ -34,11 +31,7 @@ public class TabListUtil {
     }
 
     private static Component footer() {
-        String classes = Math.round(Taxes.rate(TaxClass.BASIC) * 100) + "§8/§a" + Math.round(Taxes.rate(TaxClass.STANDARD) * 100)
-                + "§8/§a" + Math.round(Taxes.rate(TaxClass.LUXURY) * 100) + "%";
-        String factor = "§f×" + String.format(Locale.GERMANY, "%.2f", Economy.factor()) + " " + Economy.trendSymbol();
-        return Component.text(FOOTER.formatted(classes, Math.round(Taxes.deathRate() * 100),
-                Math.round(Taxes.topNetherRate() * 100), factor, Treasury.balance()));
+        return Component.text(FOOTER.formatted(Treasury.balance(), Economy.levelWord()));
     }
 
     private static String currentPerformance() {

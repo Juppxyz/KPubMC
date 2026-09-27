@@ -15,11 +15,14 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 // /staatskasse: balance and inflows of the state treasury
 public class TreasuryCommand implements CommandExecutor {
+
+    private static String percent(double rate) {
+        return Math.round(rate * 100) + "%";
+    }
 
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
@@ -30,19 +33,16 @@ public class TreasuryCommand implements CommandExecutor {
             List<String> lines = new ArrayList<>();
             lines.add("§8=-- §6§lStaatskasse §8--=");
             lines.add("§fStand: " + Main.getCurrencyName((int) Math.min(Integer.MAX_VALUE, Treasury.balance())));
-            lines.add("§fEinnahmen §8(24 h / 7 Tage)§8:");
-            for (Treasury.Source source : Treasury.Source.values()) {
-                lines.add("§8» §7" + source.label() + "§8: §a" + day.getOrDefault(source, 0L) + " §8/ §a" + week.getOrDefault(source, 0L));
-            }
-            lines.add("§fSteuern aktuell§8:");
-            for (TaxClass taxClass : TaxClass.values()) {
-                lines.add("§8» §7" + taxClass.label() + "§8: §a" + Math.round(Taxes.rate(taxClass) * 100) + "%");
-            }
-            lines.add("§8» §7Tod§8: §a" + Math.round(Taxes.deathRate() * 100) + "% §8| §7Transfer§8: §abis " + Math.round(Taxes.topNetherRate() * 100) + "%");
-            lines.add("§fKonjunktur§8: §f×" + String.format(Locale.GERMANY, "%.2f", Economy.factor()) + " " + Economy.trendSymbol()
-                    + " §8(" + Economy.note() + ")");
+            long today = day.values().stream().mapToLong(Long::longValue).sum();
+            long lastWeek = week.values().stream().mapToLong(Long::longValue).sum();
+            lines.add("§fEingenommen: §a" + today + " §7heute§8, §a" + lastWeek + " §7diese Woche");
+            lines.add("§fSteuern gerade: " + Economy.levelWord());
+            lines.add("§8» §7Essen & Farm-Sachen: §a" + percent(Taxes.rate(TaxClass.BASIC))
+                    + " §8| §7Normale Waren: §a" + percent(Taxes.rate(TaxClass.STANDARD))
+                    + " §8| §7Seltenes: §a" + percent(Taxes.rate(TaxClass.LUXURY)));
+            lines.add("§8» §7Sterben: §a" + percent(Taxes.deathRate()) + " §8| §7Nether-Portal: §abis " + percent(Taxes.topNetherRate()));
             String report = Economy.latestAiSummary();
-            if (report != null) lines.add("§fWirtschaftsbericht§8: §7§o" + report);
+            if (report != null) lines.add("§fMarktbericht: §7§o" + report);
             return lines;
         }, lines -> lines.forEach(sender::sendMessage));
         return true;

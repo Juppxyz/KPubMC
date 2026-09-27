@@ -43,7 +43,7 @@ abstract class BlackMarketItem implements CustomItemsInterface {
         List<String> lore = new ArrayList<>(baseLore);
         int net = BlackMarketHandler.getCurrentCosts().get();
         int tax = Taxes.taxOn(net, TaxClass.LUXURY);
-        lore.add("§fPreis: " + Main.getCurrencyName(net + tax) + " §8(" + net + " + " + tax + " Steuer)");
+        lore.add("§fPreis: " + Main.getCurrencyName(net + tax) + " §8(inkl. " + tax + " Steuer)");
         meta.lore(Text.lore(lore));
 
         item.setItemMeta(meta);

@@ -64,6 +64,13 @@ public final class Economy {
         return note;
     }
 
+    /** The tax level in plain words for players: gesenkt, normal or erhöht (with colour code). */
+    public static String levelWord() {
+        if (factor <= 0.95) return "§agesenkt";
+        if (factor >= 1.05) return "§cerhöht";
+        return "§fnormal";
+    }
+
     public static boolean isMeasured(@NotNull LocalDate day) {
         return day.equals(lastDay);
     }

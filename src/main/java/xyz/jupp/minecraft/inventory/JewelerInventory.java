@@ -65,7 +65,7 @@ public class JewelerInventory {
         Inventory inventory = Menu.create(Menu.Type.JEWELER, 27, "§8Tresen des %s's".formatted(Main.getJewelerVillagerName()));
 
         String currentTax = String.valueOf(Math.round(Taxes.rate(TaxClass.LUXURY) * 100));
-        String [] lores = {"§c+" + currentTax + "% Steuern"};
+        String [] lores = {"§7zzgl. " + currentTax + "% Steuer"};
 
         ItemStack grayPane = createItemStack("§7---", Material.GRAY_STAINED_GLASS_PANE);
         for (int i = 0; i < 27; i++) {
