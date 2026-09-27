@@ -33,7 +33,7 @@ import java.util.Set;
 public class TeamInventoryListener implements Listener {
 
     // same price that /team neu announces and checks
-    private static final int TEAM_CREATION_COST = 2500;
+    public static final int TEAM_CREATION_COST = 2500;
 
     private static final Set<Menu.Type> TEAM_MENUS = EnumSet.of(
             Menu.Type.TEAM_CREATE, Menu.Type.TEAM_MAIN, Menu.Type.TEAM_ROLES, Menu.Type.TEAM_INVITE, Menu.Type.TEAM_AREA);

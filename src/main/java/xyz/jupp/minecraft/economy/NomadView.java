@@ -16,6 +16,7 @@ import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.database.TeamRepository;
 import xyz.jupp.minecraft.inventory.MainThread;
+import xyz.jupp.minecraft.listener.TeamInventoryListener;
 import xyz.jupp.minecraft.utils.Tasks;
 import xyz.jupp.minecraft.utils.Text;
 
@@ -104,6 +105,15 @@ public final class NomadView implements InventoryHolder {
 
     public static void open(@NotNull Player player) {
         String teamID = CacheHandler.getInstance().getPlayerInCache(player).getTeamID();
+        if (teamID == null) {
+            // Nomad only trades with teams: explain how to get into one instead of opening the menu
+            player.sendMessage(Nomad.PREFIX + "Ich handle nur mit Teams, Fremder.");
+            player.sendMessage(Nomad.PREFIX + "Gründe dein eigenes mit §a/team neu <Name> §8(kostet "
+                    + TeamInventoryListener.TEAM_CREATION_COST + " Schilling)§f,");
+            player.sendMessage(Nomad.PREFIX + "oder lass dich einladen: Mit §a/invites §fstellst du ein, ob du Einladungen annimmst.");
+            player.playSound(player.getLocation(), Sound.ENTITY_WANDERING_TRADER_NO, 1f, 1f);
+            return;
+        }
         NomadView view = new NomadView(player, teamID);
         view.load(() -> {
             if (!player.isOnline()) return;
