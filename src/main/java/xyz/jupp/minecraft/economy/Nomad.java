@@ -112,22 +112,28 @@ public final class Nomad {
             new Special(Material.SHULKER_SHELL, 4, 400),
             new Special(Material.DRAGON_BREATH, 8, 300));
 
-    // the former fixed list at half of its points (contracts are the main source now)
+    // The redemption list, it decides over the table (no admin command yet): changed points are taken over, items that
+    // are no longer listed are switched off. Contracts are the main source of team points, so the list pays little.
     private static final Map<Material, Integer> DEFAULT_REDEEMABLES = Map.ofEntries(
-            Map.entry(Material.DRAGON_EGG, 1000),
-            Map.entry(Material.NETHER_STAR, 500),
-            Map.entry(Material.ENCHANTED_GOLDEN_APPLE, 175),
-            Map.entry(Material.MUSIC_DISC_PIGSTEP, 125),
-            Map.entry(Material.SILENCE_ARMOR_TRIM_SMITHING_TEMPLATE, 100),
-            Map.entry(Material.ELYTRA, 90),
-            Map.entry(Material.BUDDING_AMETHYST, 60),
-            Map.entry(Material.HEART_OF_THE_SEA, 40),
-            Map.entry(Material.DISC_FRAGMENT_5, 40),
-            Map.entry(Material.ECHO_SHARD, 25),
-            Map.entry(Material.TOTEM_OF_UNDYING, 20),
-            Map.entry(Material.NAUTILUS_SHELL, 15),
-            Map.entry(Material.SHULKER_SHELL, 13),
-            Map.entry(Material.SPONGE, 8));
+            // complex and rare: crafted from rare parts
+            Map.entry(Material.BEACON, 275),
+            Map.entry(Material.MUSIC_DISC_5, 200),
+            Map.entry(Material.NETHERITE_BLOCK, 200),
+            Map.entry(Material.MACE, 150),
+            Map.entry(Material.RECOVERY_COMPASS, 110),
+            Map.entry(Material.NETHER_STAR, 250),
+            Map.entry(Material.ENCHANTED_GOLDEN_APPLE, 90),
+            Map.entry(Material.MUSIC_DISC_PIGSTEP, 60),
+            Map.entry(Material.SILENCE_ARMOR_TRIM_SMITHING_TEMPLATE, 50),
+            Map.entry(Material.ELYTRA, 45),
+            Map.entry(Material.BUDDING_AMETHYST, 30),
+            Map.entry(Material.HEART_OF_THE_SEA, 20),
+            Map.entry(Material.DISC_FRAGMENT_5, 20),
+            Map.entry(Material.ECHO_SHARD, 12),
+            Map.entry(Material.TOTEM_OF_UNDYING, 10),
+            Map.entry(Material.NAUTILUS_SHELL, 8),
+            Map.entry(Material.SHULKER_SHELL, 6),
+            Map.entry(Material.SPONGE, 4));
 
     private static volatile List<Contract> contracts = List.of();
     private static volatile List<Redeemable> redeemables = List.of();
@@ -139,9 +145,13 @@ public final class Nomad {
 
     public static void load() {
         for (Map.Entry<Material, Integer> entry : DEFAULT_REDEEMABLES.entrySet()) {
-            Database.update("INSERT INTO nomad_redeemables (material, points) VALUES (?, ?) ON CONFLICT (material) DO NOTHING",
+            Database.update("INSERT INTO nomad_redeemables (material, points, enabled) VALUES (?, ?, TRUE) "
+                            + "ON CONFLICT (material) DO UPDATE SET points = EXCLUDED.points, enabled = TRUE",
                     entry.getKey().name(), entry.getValue());
         }
+        Object[] listed = DEFAULT_REDEEMABLES.keySet().stream().map(Material::name).toArray();
+        String placeholders = String.join(", ", java.util.Collections.nCopies(listed.length, "?"));
+        Database.update("UPDATE nomad_redeemables SET enabled = FALSE WHERE material NOT IN (" + placeholders + ")", listed);
         dailyUpdate(LocalDate.now(Market.ZONE));
     }
 
