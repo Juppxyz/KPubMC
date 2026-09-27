@@ -1,14 +1,19 @@
 package xyz.jupp.minecraft.config;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
+import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
 import org.bukkit.Bukkit;
-import org.json.JSONArray;
-import org.json.JSONObject;
-import org.json.JSONException;
+import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.utils.Logger;
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
+
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
@@ -16,52 +21,60 @@ import java.util.List;
 public class ConfigManager {
     private ConfigManager() {}
 
-    private static JSONObject config;
-    private final String configPath = Paths.get("").toAbsolutePath() + "/plugins/kpub/config.json";
-    private final File configFile = new File(configPath);
+    private static JsonObject config;
+    private final Path configPath = Paths.get("").toAbsolutePath().resolve("plugins/kpub/config.json");
 
-    // config settings
-    private static String serverMOTD = "";
-    private static float tradeTax = 0.0f;
-    private static float deathTax = 0.0f;
-    private static float netherTransferTax = 0.0f;
-    private static List<ShopItem> shopItems = new ArrayList<>();
+    // config settings (read from async tasks, therefore volatile)
+    private static volatile String serverMOTD = "";
+    private static volatile float tradeTax = 0.0f;
+    private static volatile float deathTax = 0.0f;
+    private static volatile float netherTransferTax = 0.0f;
+    private static volatile String mongoConnectionString = "";
+    // immutable list, replaced as a whole on reload
+    private static volatile List<ShopItem> shopItems = List.of();
 
     // singleton pattern
-    private static ConfigManager instance;
+    private static final ConfigManager instance = new ConfigManager();
     public static ConfigManager getManager() {
-        return instance == null ? instance = new ConfigManager() : instance;
+        return instance;
     }
 
     public boolean loadConfig() {
         Logger.console("load config ..");
-        if (getConfigFile().exists()) {
-            config = getJsonObjectFromFile();
-            if (config == null) {
+        if (Files.exists(configPath)) {
+            JsonObject loadedConfig = readConfigFile();
+            if (loadedConfig == null) {
                 Logger.console("failed parsing config");
                 return false;
             }
+            config = loadedConfig;
 
             serverMOTD = getServerMOTD();
             Bukkit.getServer().setMotd(serverMOTD);
 
-            tradeTax = (float) config.optDouble("tradeTax", 0.0);
-            netherTransferTax = (float) config.optDouble("netherTransferTax", 0.0);
-            deathTax = (float) config.optDouble("deathTax", 0.0);
+            tradeTax = (float) optDouble(config, "tradeTax", 0.0);
+            netherTransferTax = (float) optDouble(config, "netherTransferTax", 0.0);
+            deathTax = (float) optDouble(config, "deathTax", 0.0);
+            mongoConnectionString = optString(config, "mongoConnectionString", "");
 
-            JSONArray jsonShopItems = config.optJSONArray("shopItems");
-            if (jsonShopItems != null) {
-                shopItems.clear();
-                for (int i = 0; i < jsonShopItems.length(); i++) {
-                    JSONObject jsonItem = jsonShopItems.getJSONObject(i);
-                    String name = jsonItem.optString("name", "");
-                    int price = jsonItem.optInt("price", 0);
-                    boolean sell = jsonItem.optBoolean("sell", false);
-                    int amount = jsonItem.optInt("amount", 0);
-                    String description = jsonItem.optString("description", "");
-                    String material = jsonItem.optString("material", "");
-                    shopItems.add(new ShopItem(name, material, price, sell, amount, description));
+            JsonElement jsonShopItems = config.get("shopItems");
+            if (jsonShopItems != null && jsonShopItems.isJsonArray()) {
+                List<ShopItem> loadedShopItems = new ArrayList<>();
+                for (JsonElement element : jsonShopItems.getAsJsonArray()) {
+                    if (!element.isJsonObject()) {
+                        Main.getInstance().getSLF4JLogger().warn("Skipping invalid shop item in config: {}", element);
+                        continue;
+                    }
+                    JsonObject jsonItem = element.getAsJsonObject();
+                    String name = optString(jsonItem, "name", "");
+                    int price = optInt(jsonItem, "price", 0);
+                    boolean sell = optBoolean(jsonItem, "sell", false);
+                    int amount = optInt(jsonItem, "amount", 0);
+                    String description = optString(jsonItem, "description", "");
+                    String material = optString(jsonItem, "material", "");
+                    loadedShopItems.add(new ShopItem(name, material, price, sell, amount, description));
                 }
+                shopItems = List.copyOf(loadedShopItems);
             }
 
             Logger.console("loaded config successfully");
@@ -77,31 +90,27 @@ public class ConfigManager {
         Logger.console("updated config.");
     }
 
-    private JSONObject getJsonObjectFromFile() {
-        try (BufferedReader reader = new BufferedReader(new FileReader(configPath))) {
-            StringBuilder sb = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                sb.append(line);
+    private JsonObject readConfigFile() {
+        try {
+            // line breaks are dropped like the former line-by-line reader did
+            String content = new String(Files.readAllBytes(configPath), StandardCharsets.UTF_8)
+                    .replace("\r", "")
+                    .replace("\n", "");
+            JsonElement element = JsonParser.parseString(content);
+            if (element.isJsonObject()) {
+                return element.getAsJsonObject();
             }
-            return new JSONObject(sb.toString());
-        } catch (IOException | JSONException e) {
-            e.printStackTrace();
-            return null;
+            Main.getInstance().getSLF4JLogger().error("{} does not contain a JSON object", configPath);
+        } catch (IOException | JsonParseException e) {
+            Main.getInstance().getSLF4JLogger().error("Could not read {}", configPath, e);
         }
+        return null;
     }
 
-    private File getConfigFile() {
-        return configFile;
-    }
-
-    public JSONObject getConfig() {
-        return config;
-    }
-
+    // Once set, the MOTD is kept until the next restart (a reload does not change it).
     public String getServerMOTD() {
-        if (serverMOTD.isEmpty()) {
-            serverMOTD = config.optString("serverMOTD", "").replace("&", "§");
+        if (serverMOTD.isEmpty() && config != null) {
+            serverMOTD = optString(config, "serverMOTD", "").replace("&", "§");
         }
         return serverMOTD;
     }
@@ -109,9 +118,55 @@ public class ConfigManager {
     public float getTradeTax() { return tradeTax; }
     public float getNetherTransferTax() { return netherTransferTax; }
     public float getDeathTax() { return deathTax; }
+    public String getMongoConnectionString() { return mongoConnectionString; }
 
-    public static ConfigManager getInstance() { return instance; }
     public static List<ShopItem> getShopItems() {
         return shopItems;
+    }
+
+
+    // lenient accessors with the same semantics as the former org.json opt* methods
+
+    private static Number optNumber(JsonObject object, String key) {
+        JsonElement element = object.get(key);
+        if (element == null || !element.isJsonPrimitive()) return null;
+        JsonPrimitive primitive = element.getAsJsonPrimitive();
+        if (primitive.isNumber()) return primitive.getAsNumber();
+        if (primitive.isString()) {
+            try {
+                return new BigDecimal(primitive.getAsString().trim());
+            } catch (NumberFormatException e) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private static double optDouble(JsonObject object, String key, double defaultValue) {
+        Number number = optNumber(object, key);
+        return number == null ? defaultValue : number.doubleValue();
+    }
+
+    private static int optInt(JsonObject object, String key, int defaultValue) {
+        Number number = optNumber(object, key);
+        return number == null ? defaultValue : number.intValue();
+    }
+
+    private static boolean optBoolean(JsonObject object, String key, boolean defaultValue) {
+        JsonElement element = object.get(key);
+        if (element == null || !element.isJsonPrimitive()) return defaultValue;
+        JsonPrimitive primitive = element.getAsJsonPrimitive();
+        if (primitive.isBoolean()) return primitive.getAsBoolean();
+        if (primitive.isString()) {
+            if ("true".equalsIgnoreCase(primitive.getAsString())) return true;
+            if ("false".equalsIgnoreCase(primitive.getAsString())) return false;
+        }
+        return defaultValue;
+    }
+
+    private static String optString(JsonObject object, String key, String defaultValue) {
+        JsonElement element = object.get(key);
+        if (element == null || element.isJsonNull()) return defaultValue;
+        return element.isJsonPrimitive() ? element.getAsString() : element.toString();
     }
 }

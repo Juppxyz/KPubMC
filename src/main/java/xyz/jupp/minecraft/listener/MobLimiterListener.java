@@ -1,9 +1,13 @@
 package xyz.jupp.minecraft.listener;
 
-import org.bukkit.Bukkit;
-import org.bukkit.Chunk;
 import org.bukkit.Location;
-import org.bukkit.entity.*;
+import org.bukkit.block.Block;
+import org.bukkit.entity.EnderDragon;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Mob;
+import org.bukkit.entity.Player;
+import org.bukkit.entity.WitherSkeleton;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockExplodeEvent;
@@ -12,12 +16,11 @@ import org.bukkit.event.entity.EntityBreakDoorEvent;
 import org.bukkit.event.entity.EntityChangeBlockEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.hanging.HangingBreakByEntityEvent;
-import xyz.jupp.minecraft.Main;
-import xyz.jupp.minecraft.cache.CacheHandler;
-import xyz.jupp.minecraft.cache.ChunkCache;
-import xyz.jupp.minecraft.cache.ChunkCacheObject;
+import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.cache.TeamCacheObject;
+import xyz.jupp.minecraft.utils.ClaimedAreaHelper;
 import xyz.jupp.minecraft.utils.Locations;
+import xyz.jupp.minecraft.utils.Tasks;
 
 import java.util.EnumSet;
 import java.util.Set;
@@ -32,14 +35,17 @@ public class MobLimiterListener implements Listener {
     private static final int NEARBY_ENTITY_LIMIT = 50;
     private static final long WITHER_SKELETON_LIFESPAN_TICKS = 600L;
 
-    private boolean isProtected(Location location) {
-        ChunkCacheObject chunkCacheObject = ChunkCache.getInstance().getChunkObject(location.getWorld().getName(), location.getChunk().getX(), location.getChunk().getZ());
-        if (chunkCacheObject == null) return false;
+    private static boolean isProtected(@Nullable TeamCacheObject claimingTeam) {
+        return claimingTeam != null && claimingTeam.getLevel() >= 2 && !claimingTeam.isZoneOptionMobDamage();
+    }
 
-        TeamCacheObject teamCacheObject = CacheHandler.getInstance().getTeamCacheObject(chunkCacheObject.getTeamID());
-        if (teamCacheObject == null) return false;
-        boolean checkTeamLevel = teamCacheObject.getLevel() >= 2 ;
-        return checkTeamLevel && !teamCacheObject.isZoneOptionMobDamage();
+    // block coordinates only, no Location per block (explosions check every block)
+    private static boolean isProtected(Block block) {
+        return isProtected(ClaimedAreaHelper.getClaimingTeam(block));
+    }
+
+    private static boolean isProtected(Location location) {
+        return isProtected(ClaimedAreaHelper.getClaimingTeam(location));
     }
 
     @EventHandler
@@ -59,15 +65,15 @@ public class MobLimiterListener implements Listener {
             return;
         }
 
-        if (entityType == EntityType.WITHER_SKELETON) {
-            expandWitherSkeletonTime((WitherSkeleton) entity);
+        if (entity instanceof WitherSkeleton witherSkeleton) {
+            expandWitherSkeletonTime(witherSkeleton);
         }
     }
 
 
     @EventHandler(ignoreCancelled = true)
     public void onEntityExplode(EntityExplodeEvent e) {
-        e.blockList().removeIf(b -> isProtected(b.getLocation()));
+        e.blockList().removeIf(block -> isProtected(block));
         if (isProtected(e.getLocation())) {
             e.setYield(0f);
         }
@@ -76,8 +82,8 @@ public class MobLimiterListener implements Listener {
 
     @EventHandler(ignoreCancelled = true)
     public void onBlockExplode(BlockExplodeEvent e) {
-        e.blockList().removeIf(b -> isProtected(b.getLocation()));
-        if (isProtected(e.getBlock().getLocation())) {
+        e.blockList().removeIf(block -> isProtected(block));
+        if (isProtected(e.getBlock())) {
             e.setYield(0f);
         }
     }
@@ -87,14 +93,14 @@ public class MobLimiterListener implements Listener {
     public void onEntityChangeBlock(EntityChangeBlockEvent e) {
         Entity ent = e.getEntity();
         boolean isMobOrDragon = (ent instanceof Mob) || (ent instanceof EnderDragon);
-        if (isMobOrDragon && isProtected(e.getBlock().getLocation())) {
+        if (isMobOrDragon && isProtected(e.getBlock())) {
             e.setCancelled(true);
         }
     }
 
     @EventHandler(ignoreCancelled = true)
     public void onEntityBreakDoor(EntityBreakDoorEvent e) {
-        if (isProtected(e.getBlock().getLocation())) {
+        if (isProtected(e.getBlock())) {
             e.setCancelled(true);
         }
     }
@@ -112,11 +118,11 @@ public class MobLimiterListener implements Listener {
         witherSkeleton.setRemoveWhenFarAway(false);
         witherSkeleton.setTicksLived(1);
 
-        Bukkit.getScheduler().runTaskLater(Main.getInstance(), () -> {
+        Tasks.syncLater(WITHER_SKELETON_LIFESPAN_TICKS, () -> {
             if (witherSkeleton.isValid()) {
                 witherSkeleton.remove();
             }
-        }, WITHER_SKELETON_LIFESPAN_TICKS);
+        });
     }
 
 }

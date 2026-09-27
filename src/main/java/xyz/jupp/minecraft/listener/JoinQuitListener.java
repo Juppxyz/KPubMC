@@ -1,36 +1,38 @@
 package xyz.jupp.minecraft.listener;
 
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
-import org.bukkit.*;
+import org.bukkit.Bukkit;
+import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
-import xyz.jupp.minecraft.cache.PlayerCacheObject;
 import xyz.jupp.minecraft.cache.TeamCacheObject;
 import xyz.jupp.minecraft.commands.SpecCommand;
 import xyz.jupp.minecraft.database.PlayerCollection;
 import xyz.jupp.minecraft.utils.JailHandler;
+import xyz.jupp.minecraft.utils.LastSeen;
 import xyz.jupp.minecraft.utils.Locations;
+import xyz.jupp.minecraft.utils.TabListUtil;
+import xyz.jupp.minecraft.utils.Tasks;
+import xyz.jupp.minecraft.utils.Text;
 
-import java.util.Objects;
 import java.util.UUID;
 
 public class JoinQuitListener implements Listener {
 
-    private static final LegacyComponentSerializer LEGACY_SEC = LegacyComponentSerializer.legacySection();
-
     @EventHandler
     public void onPreLogin(AsyncPlayerPreLoginEvent event) {
         UUID uuid = event.getUniqueId();
-        PlayerCollection playerCollection = new PlayerCollection(uuid.toString());
-        if (!playerCollection.existPlayerInDatabase()) {
-            playerCollection.createNewPlayerInDatabase();
+        PlayerCollection.createIfAbsent(uuid);
+        if (event.getLoginResult() == AsyncPlayerPreLoginEvent.Result.ALLOWED) {
+            CacheHandler.getInstance().preloadPlayer(uuid);
         }
     }
 
@@ -40,35 +42,38 @@ public class JoinQuitListener implements Listener {
         Player player = event.getPlayer();
         event.joinMessage(Component.empty());
 
-        if (!player.hasPlayedBefore()) {
-            player.teleport(new Location(Objects.requireNonNull(Bukkit.getWorld("world_MCWinter")),
-                    92624.5, 72.5, 114430.5));
+        int activeState = LastSeen.getJoinState(player);
+        applyTeamDisplayNames(player);
+        TabListUtil.updateTabFor(player);
+
+        if (activeState == 1) {
+            player.teleport(Locations.getCurrentSpawn());
+            Bukkit.broadcast(Text.section(
+                    "§8§l[§a§l+§8§l] §a§l" + player.getName() + " §f§lhat den Server zum ersten Mal betreten."
+            ));
+            sendWelcome(player);
+
+        } else if (activeState == 2) {
+            player.teleport(Locations.getCurrentSpawn());
+            Bukkit.broadcast(Text.section(
+                    "§8§l[§a§l+§8§l] §a§l" + player.getName() + " §f§list nach langer Zeit wieder zurückgekehrt"
+            ));
+
+        } else {
+            Bukkit.broadcast(Text.section(
+                    String.format("§8[§a+§8] %s §fhat den Server betreten.", Text.legacy(player.playerListName()))
+            ));
         }
 
-        if (!SpecCommand.getSpecMode().isEmpty()) {
-            for (UUID uuid : SpecCommand.getSpecMode()) {
-                Player target = Bukkit.getPlayer(uuid);
-                if (target != null && target.isOnline()) {
-                    player.hidePlayer(Main.getInstance(), target);
-                }
+        for (UUID uuid : SpecCommand.getSpecMode()) {
+            Player target = Bukkit.getPlayer(uuid);
+            if (target != null && target.isOnline()) {
+                player.hidePlayer(Main.getInstance(), target);
             }
         }
 
-        applyTeamDisplayNames(player);
-        Component joinMsg = LEGACY_SEC.deserialize(
-                String.format("§8[§a+§8] %s §fhat den Server betreten.", player.getPlayerListName())
-        );
-        Bukkit.broadcast(joinMsg);
-        if (!player.hasPlayedBefore()) {
-            Bukkit.broadcast(LEGACY_SEC.deserialize(
-                    "§8§l[§a§l+§8§l] §a§l" + player.getName() + " §f§lhat den Server zum ersten Mal betreten."));
-            sendWelcome(player);
-        }
-
-        // jail handling
-        Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
-            JailHandler.handleJoin(event.getPlayer());
-        });
+        // jail handling, JailHandler.handleJoin can write to the database
+        Tasks.async(() -> JailHandler.handleJoin(player));
 
     }
 
@@ -85,37 +90,37 @@ public class JoinQuitListener implements Listener {
             return;
         }
 
-        Component msg = LEGACY_SEC.deserialize(
-                "§8[§c-§8] §a" + player.getPlayerListName() + " §fhat den Server verlassen.");
-        event.quitMessage(msg);
+        event.quitMessage(Text.section(
+                "§8[§c-§8] §a" + Text.legacy(player.playerListName()) + " §fhat den Server verlassen."));
     }
 
 
     private void applyTeamDisplayNames(Player player) {
         TeamCacheObject team = CacheHandler.getInstance().getPlayerInCache(player).getTeamCacheObject();
-        String display;
-        if (team != null) {
-            display = team.getTeamColor() + player.getName();
-            if (team.getTeamVices().contains(player.getUniqueId().toString())) {
-                display = team.getTeamColor() + "§o" + player.getName();
-            } else if (team.getTeamOwner().equals(player.getUniqueId().toString())) {
-                display = team.getTeamColor() + "§l" + player.getName();
-            }
-        } else {
-            display = "§a" + player.getName();
-        }
-        // Adventure-Setzer statt deprecated String-Setter:
-        Component comp = LEGACY_SEC.deserialize(display);
-        player.playerListName(comp);
-        player.displayName(comp);
+        Component name = Text.section(teamPlayerName(player, team, false));
+        player.playerListName(name);
+        player.displayName(name);
+    }
+
+    /**
+     * Team colour plus §l for the owner and §o for vices, "§a" without a team.
+     * The join checks the vices first, the respawn the owner: ownerFirst keeps that order for a player listed as both.
+     */
+    static String teamPlayerName(@NotNull Player player, @Nullable TeamCacheObject team, boolean ownerFirst) {
+        if (team == null) return "§a" + player.getName();
+        String uuid = player.getUniqueId().toString();
+        boolean owner = uuid.equals(team.getTeamOwner());
+        boolean vice = team.getTeamVices().contains(uuid);
+        String role = owner && (ownerFirst || !vice) ? "§l" : vice ? "§o" : "";
+        return team.getTeamColor() + role + player.getName();
     }
 
 
     private void sendWelcome(Player p) {
-        p.sendMessage(LEGACY_SEC.deserialize(Main.getChatPrefix() + "§a§lHerzlich Willkommen auf unserem Minecraft-Server!"));
-        p.sendMessage(LEGACY_SEC.deserialize(Main.getChatPrefix() + "§fMelde dich bei Fragen oder Problemen einfach"));
-        p.sendMessage(LEGACY_SEC.deserialize(Main.getChatPrefix() + "§fim Discord Channel §a§l#minecraft§f."));
-        p.sendMessage(LEGACY_SEC.deserialize(Main.getChatPrefix() + "§aViel Spaß!"));
+        p.sendMessage(Text.section(Main.getChatPrefix() + "§a§lHerzlich Willkommen auf unserem Minecraft-Server!"));
+        p.sendMessage(Text.section(Main.getChatPrefix() + "§fMelde dich bei Fragen oder Problemen einfach"));
+        p.sendMessage(Text.section(Main.getChatPrefix() + "§fim Discord Channel §a§l#minecraft§f."));
+        p.sendMessage(Text.section(Main.getChatPrefix() + "§aViel Spaß!"));
         p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f, 2f);
     }
 }

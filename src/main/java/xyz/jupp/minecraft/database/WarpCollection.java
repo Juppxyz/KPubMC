@@ -2,8 +2,8 @@ package xyz.jupp.minecraft.database;
 
 import com.mongodb.client.FindIterable;
 import com.mongodb.client.MongoCollection;
+import com.mongodb.client.model.UpdateOptions;
 import org.bson.Document;
-import org.bson.conversions.Bson;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
@@ -11,42 +11,45 @@ import xyz.jupp.minecraft.utils.Logger;
 
 import static com.mongodb.client.model.Filters.eq;
 
-public class WarpCollection {
+/**
+ * DAO for the collection 'warps'. Stateless, every method is blocking.
+ */
+public final class WarpCollection {
 
-    private static final MongoCollection<Document> warpsCollection = MongoDB.getInstance().getKpubMC().getCollection("warps");
-    private Player player;
+    private WarpCollection() {}
 
-    public WarpCollection(@NotNull Player player) {this.player = player;}
-
-    public static FindIterable<Document> getAllWarps() {
-        FindIterable<Document> iterDoc = warpsCollection.find();
-        return iterDoc;
+    private static MongoCollection<Document> warps() {
+        return MongoDB.getInstance().getKpubMC().getCollection("warps");
     }
 
-    public void createNewPlayerWarp() {
-        if (existPlayerWarp()) return;
+    public static FindIterable<Document> getAllWarps() {
+        return warps().find();
+    }
+
+    /* creates the warp only if the player has none yet */
+    public static void createNewPlayerWarp(@NotNull Player player) {
         Location loc = player.getLocation();
-        Document warpDocument = new Document("uuid", player.getUniqueId().toString());
-        warpDocument.append("world", loc.getWorld().getName());
+        Document warpDocument = new Document("world", loc.getWorld().getName());
         warpDocument.append("x", loc.getX());
         warpDocument.append("y", loc.getY() + 0.5D);
         warpDocument.append("z", loc.getZ());
         warpDocument.append("isTeam", false);
-        warpsCollection.insertOne(warpDocument);
+        boolean created = warps().updateOne(eq("uuid", player.getUniqueId().toString()),
+                new Document("$setOnInsert", warpDocument), new UpdateOptions().upsert(true)).getUpsertedId() != null;
+        if (!created) return;
         Logger.console("created player warp for %s on %d,%d,%d (%s)".formatted(player.getName(), loc.getBlockX(), loc.getBlockY(), loc.getBlockZ(), loc.getWorld().getName()));
     }
 
-    public void updatePlayerWarp() {
-        if (!existPlayerWarp()) return;
+    public static void updatePlayerWarp(@NotNull Player player) {
         Location location = player.getLocation();
 
         // Erstellen eines Dokuments mit den zu aktualisierenden Feldern
-        Document updatedFields = new Document("x", player.getLocation().getBlockX());
-        updatedFields.append("y", player.getLocation().getBlockY() + 0.5D);
-        updatedFields.append("z", player.getLocation().getBlockZ());
-        updatedFields.append("world", player.getLocation().getWorld().getName());
-        Document updateOperation = new Document("$set", updatedFields);
-        warpsCollection.findOneAndUpdate(eq("uuid", player.getUniqueId().toString()), updateOperation);
+        Document updatedFields = new Document("x", location.getBlockX() + 0.5D);
+        updatedFields.append("y", location.getBlockY() + 0.5D);
+        updatedFields.append("z", location.getBlockZ() + 0.5D);
+        updatedFields.append("world", location.getWorld().getName());
+        boolean updated = warps().updateOne(eq("uuid", player.getUniqueId().toString()), new Document("$set", updatedFields)).getMatchedCount() > 0;
+        if (!updated) return;
 
         Logger.console("updated player warp for %s on %d,%d,%d (%s)".formatted(
                 player.getName(),
@@ -57,31 +60,9 @@ public class WarpCollection {
         ));
     }
 
-
-    public void createNewTeamWarp(String teamID) {
-        if (!existPlayerWarp()) return;
-        Location loc = player.getLocation();
-        Document warpDocument = new Document("uuid", teamID);
-        warpDocument.append("world", loc.getWorld().getName());
-        warpDocument.append("x", loc.getX());
-        warpDocument.append("y", loc.getY() );
-        warpDocument.append("z", loc.getZ());
-        warpDocument.append("isTeam", true);
-    }
-
-
-    public void removePlayerWarp() {
-        warpsCollection.findOneAndDelete(eq("uuid", player.getUniqueId().toString()));
+    public static void removePlayerWarp(@NotNull Player player) {
+        warps().deleteOne(eq("uuid", player.getUniqueId().toString()));
         Logger.console("deleted player warp for %s".formatted(player.getName()));
     }
 
-    private boolean existPlayerWarp() {
-        Bson filter = eq("uuid", getPlayer().getUniqueId().toString());
-        return (warpsCollection.find(filter).first() != null);
-    }
-
-    // Getter
-    private Player getPlayer() {
-        return player;
-    }
 }

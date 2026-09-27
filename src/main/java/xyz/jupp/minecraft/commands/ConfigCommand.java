@@ -11,28 +11,32 @@ import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.utils.BlackMarketHandler;
 import xyz.jupp.minecraft.utils.PermissionsUtil;
+import xyz.jupp.minecraft.utils.TabListUtil;
 
 public class ConfigCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(@NotNull CommandSender commandSender, @NotNull Command command, @NotNull String s, @NotNull String[] strings) {
-        if (commandSender instanceof Player) {
-            Player player = (Player) commandSender;
+        if (commandSender instanceof Player player) {
             if (!PermissionsUtil.isPlayerAdmin(player)) {
                 PermissionsUtil.sendNoPermMsg(player);
                 return false;
             }
 
-            ConfigManager.getManager().updateConfig();
-            BlackMarketHandler.forceReroll();
+            reload();
+            TabListUtil.updateTabForAll();
             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f,2f);
             player.sendMessage(Main.getChatPrefix() + "Die Config wurde §aerfolgreich §faktualisiert!");
         }else {
-            ConfigManager.getManager().updateConfig();
-            BlackMarketHandler.forceReroll();
+            reload();
             Bukkit.getConsoleSender().sendMessage(Main.getChatPrefix() + "Die Config wurde §aerfolgreich §faktualisiert!");
         }
         return false;
+    }
+
+    private static void reload() {
+        ConfigManager.getManager().updateConfig();
+        BlackMarketHandler.forceReroll();
     }
 
 }

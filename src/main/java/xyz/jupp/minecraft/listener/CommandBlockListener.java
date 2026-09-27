@@ -1,6 +1,5 @@
 package xyz.jupp.minecraft.listener;
 
-import org.bukkit.Bukkit;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -10,62 +9,49 @@ import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.database.CommandLogCollection;
 import xyz.jupp.minecraft.utils.JailHandler;
 import xyz.jupp.minecraft.utils.PermissionsUtil;
+import xyz.jupp.minecraft.utils.Tasks;
 
-import java.util.ArrayList;
+import java.util.Set;
 
 public class CommandBlockListener implements Listener {
 
-    private static ArrayList<String> allowedCommands = null;
-    public static ArrayList<String> getAllowedCommands() {
-        if (allowedCommands == null) {
-            allowedCommands = new ArrayList<>();
-            allowedCommands.add("/money");
-            allowedCommands.add("/geld");
-            allowedCommands.add("/schilling");
-            allowedCommands.add("/config");
-            allowedCommands.add("/hilfe");
-            allowedCommands.add("/help");
-            allowedCommands.add("/sc");
-            allowedCommands.add("/slimechunk");
-            allowedCommands.add("/einladungen");
-            allowedCommands.add("/invites");
-            allowedCommands.add("/team");
-            allowedCommands.add("/ranking");
-            allowedCommands.add("/warp");
-            allowedCommands.add("/head");
-            allowedCommands.add("/kopf");
-            allowedCommands.add("/donate");
-            allowedCommands.add("/spenden");
-            allowedCommands.add("/spawn");
-            allowedCommands.add("/regeln");
-            allowedCommands.add("/rules");
-            allowedCommands.add("/ec");
-            allowedCommands.add("/enderchest");
-            allowedCommands.add("/wanted");
-        }
-        return allowedCommands;
+    // exact matches, the prefixes with arguments are checked in isAllowedForNormalPlayer
+    private static final Set<String> ALLOWED_COMMANDS = Set.of(
+            "/money", "/geld", "/schilling", "/config", "/hilfe", "/help", "/sc", "/slimechunk",
+            "/einladungen", "/invites", "/team", "/ranking", "/warp", "/head", "/kopf", "/donate",
+            "/spenden", "/spawn", "/regeln", "/rules", "/ec", "/enderchest", "/wanted", "/sit",
+            "/ursprung", "/origin", "/removechunk"
+    );
+
+    private static boolean isAllowedForNormalPlayer(String msg) {
+        return ALLOWED_COMMANDS.contains(msg)
+                || msg.startsWith("/team")
+                || msg.startsWith("/msg")
+                || msg.startsWith("/head")
+                || msg.startsWith("/kopf");
     }
 
     @EventHandler
-    public void onCommandExecute(PlayerCommandPreprocessEvent event){
+    public void onCommandExecute(PlayerCommandPreprocessEvent event) {
         Player player = event.getPlayer();
         String msg = event.getMessage();
-        if (!PermissionsUtil.isPlayerAdmin(player)) return; {
-            if (JailHandler.isPlayerInJail(player)) {
-                event.setCancelled(true);
-                player.sendMessage(Main.getChatPrefix() + "§fIm Gefängnis kannst du keine Befehle ausführen.");
-                player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 1f);
-                return;
-            }
-            if (!getAllowedCommands().contains(msg) && !msg.startsWith("/team") && !msg.startsWith("/msg") && !msg.startsWith("/head") && !msg.startsWith("/kopf")) {
-                event.setCancelled(true);
-                PermissionsUtil.sendNoPermMsg(player);
-                return;
-            }
+
+        // every command is logged, also the blocked ones
+        Tasks.async(() -> new CommandLogCollection(player, msg).addNewEntry());
+
+        if (PermissionsUtil.isPlayerAdmin(player)) return;
+
+        if (JailHandler.isPlayerInJail(player)) {
+            event.setCancelled(true);
+            player.sendMessage(Main.getChatPrefix() + "§fIm Gefängnis kannst du keine Befehle ausführen.");
+            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 1f);
+            return;
         }
 
-        // Danny, sei leise. Sicher ist sicher.
-        Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> new CommandLogCollection(player, msg).addNewEntry());
+        if (!isAllowedForNormalPlayer(msg)) {
+            event.setCancelled(true);
+            PermissionsUtil.sendNoPermMsg(player);
+        }
     }
 
 }

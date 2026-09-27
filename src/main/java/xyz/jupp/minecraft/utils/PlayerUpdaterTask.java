@@ -1,59 +1,44 @@
 package xyz.jupp.minecraft.utils;
 
 import org.bukkit.Bukkit;
-import org.bukkit.Location;
-import org.bukkit.World;
-import org.bukkit.entity.Entity;
-import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
-import xyz.jupp.minecraft.cache.PlayerCacheObject;
 
-import java.util.Random;
+public class PlayerUpdaterTask {
 
-import static xyz.jupp.minecraft.utils.Locations.isLocationASpawn;
-import static xyz.jupp.minecraft.utils.MobEvent.createMobEvent;
+    // 72 empty runs of 15 minutes, the shutdown follows in the 73rd empty run (about 18 h)
+    private static final int MAX_EMPTY_RUNS = 72;
 
+    // only used on the main thread
+    private int serverEmptyCheck = 0;
 
-public class PlayerUpdaterTask implements TaskHandler.Tasks {
-
-
-    @Override
     public boolean startTask() {
-        Bukkit.getScheduler().scheduleAsyncRepeatingTask(Main.getInstance(), () -> {
-            Bukkit.getConsoleSender().sendMessage(Main.getConsolePrefix() + "§fupdating players data..");
-
-            Random random = new Random();
-            boolean isMonsterEvent = random.nextInt(200) == 0;
-
-            Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
-                for (Player player : Bukkit.getOnlinePlayers()) {
-                    PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
-                    playerCacheObject.updatePlayer();
-
-                    Location bedSpawn = null;
-                    if (player.isSleeping()) {
-                        bedSpawn = player.getBedLocation();
-                    }
-                    if (bedSpawn == null) {
-                        bedSpawn = player.getRespawnLocation();
-                    }
-                    if ((bedSpawn != null) && !isLocationASpawn(bedSpawn) && bedSpawn.getWorld().equals(player.getWorld())) {
-                        double distance = bedSpawn.distance(player.getLocation());
-                        if ( distance <= 160 && isMonsterEvent) {
-                            player.sendMessage(Main.getChatPrefix() + "§cSicherheitsmeldung: Ungeziefer im Schlafbereich erkannt.");
-                            Bukkit.getConsoleSender().sendMessage(Main.getConsolePrefix() + "created monster event for player " + player.getName() + " at " + bedSpawn.toString());
-                            createMobEvent(player);
-                        }
-                    }
-
-                }
-            });
-
-            Bukkit.getConsoleSender().sendMessage(Main.getChatPrefix() + "§ffinished updating players data");
-        }, 0, 20L * 900);
+        Bukkit.getScheduler().runTaskTimerAsynchronously(Main.getInstance(), this::update, 0, 20L * 900);
         return false;
+    }
+
+    // async worker: the cache lookups may hit the database, everything else goes to the main thread
+    private void update() {
+        Tasks.sync(this::updateOnMainThread);
+
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            CacheHandler.getInstance().getPlayerInCache(player).updatePlayer();
+        }
+    }
+
+    private void updateOnMainThread() {
+        TabListUtil.updateTabForAll();
+
+        if (Bukkit.getOnlinePlayers().isEmpty()) {
+            if (serverEmptyCheck >= MAX_EMPTY_RUNS) {
+                Bukkit.shutdown();
+            }
+            serverEmptyCheck++;
+            Logger.console("increased emptyServerCheck to " + serverEmptyCheck);
+            return;
+        }
+        serverEmptyCheck = 0;
     }
 
 }

@@ -9,17 +9,17 @@ import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.PlayerCacheObject;
+import xyz.jupp.minecraft.cache.TeamCacheObject;
 
 public class EnderchestCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(@NotNull CommandSender commandSender, @NotNull Command command, @NotNull String s, @NotNull String @NotNull [] strings) {
 
-        if (commandSender instanceof Player) {
-            Player player = (Player) commandSender;
-
+        if (commandSender instanceof Player player) {
             PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
-            if (playerCacheObject.getTeamID() == null || playerCacheObject.getTeamCacheObject().getLevel() < 3) {
+            TeamCacheObject team = playerCacheObject.getTeamCacheObject();
+            if (playerCacheObject.getTeamID() == null || team == null || team.getLevel() < 3) {
                 player.sendMessage(Main.getChatPrefix() + "§fDies können nur §aTeams §fmit der Stufe §a3 §foder höher.");
                 player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
                 return false;

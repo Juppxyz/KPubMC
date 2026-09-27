@@ -1,9 +1,7 @@
 package xyz.jupp.minecraft.listener;
 
 import org.bukkit.Material;
-import org.bukkit.Sound;
 import org.bukkit.block.Block;
-import org.bukkit.entity.ItemFrame;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -27,8 +25,9 @@ public class SpawnListener implements Listener {
     @EventHandler
     public void onInteractAtSpawn(@NotNull PlayerInteractEvent event) {
         Player player = event.getPlayer();
-        if (PermissionsUtil.isPlayerAdmin(player)) return;
+        // most interactions happen outside the spawn, so the area check comes first
         if (!Locations.isLocationASpawn(player.getLocation())) return;
+        if (PermissionsUtil.isPlayerAdmin(player)) return;
 
         Block block = event.getClickedBlock();
         if (block == null || block.getType() == Material.AIR) return;

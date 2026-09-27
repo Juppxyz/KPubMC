@@ -11,8 +11,7 @@ public class MoneyCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(@NotNull CommandSender commandSender, @NotNull Command command, @NotNull String s, @NotNull String[] args) {
-        if (commandSender instanceof Player) {
-            Player player = (Player) commandSender;
+        if (commandSender instanceof Player player) {
             MoneyInventory.openInventory(player, MoneyInventory.MoneyInventoryTypes.MAIN);
         }
         return false;

@@ -1,7 +1,6 @@
 package xyz.jupp.minecraft.commands;
 
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
-import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.Sound;
 import org.bukkit.command.*;
@@ -11,6 +10,7 @@ import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.utils.PermissionsUtil;
+import xyz.jupp.minecraft.utils.Text;
 
 public class HoverTextCommand implements CommandExecutor {
 
@@ -33,7 +33,7 @@ public class HoverTextCommand implements CommandExecutor {
 
         // "&" -> §-Farben (Legacy), anschließend in Adventure-Component wandeln
         String raw = String.join(" ", args);
-        String legacy = ChatColor.translateAlternateColorCodes('&', raw);
+        String legacy = Text.amp(raw);
 
         createNewArmorStand(player.getLocation(), legacy);
         player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f, 2f);
@@ -41,7 +41,7 @@ public class HoverTextCommand implements CommandExecutor {
         return true;
     }
 
-    private ArmorStand createNewArmorStand(Location loc, String legacyTitle) {
+    private void createNewArmorStand(Location loc, String legacyTitle) {
         Location pos = loc.clone().add(0.5, 1.0, 0.5);
 
         ArmorStand as = (ArmorStand) pos.getWorld().spawnEntity(pos, EntityType.ARMOR_STAND);
@@ -54,6 +54,5 @@ public class HoverTextCommand implements CommandExecutor {
         as.setCustomNameVisible(true);
 
         as.customName(LegacyComponentSerializer.legacySection().deserialize(legacyTitle));
-        return as;
     }
 }

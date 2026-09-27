@@ -1,6 +1,7 @@
 package xyz.jupp.minecraft.listener;
 
 import org.bukkit.Location;
+import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
@@ -10,20 +11,22 @@ import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
-import xyz.jupp.minecraft.cache.*;
+import xyz.jupp.minecraft.cache.CacheHandler;
+import xyz.jupp.minecraft.cache.PlayerCacheObject;
+import xyz.jupp.minecraft.cache.TeamCacheObject;
+import xyz.jupp.minecraft.utils.ClaimedAreaHelper;
 
 public class TeamAreaListener implements Listener {
 
     // README: the mob griefing part is in the MobLimiterListener
 
-    private boolean isProtected(@NotNull Location location, int neededLevel) {
-        ChunkCacheObject chunkCacheObject = ChunkCache.getInstance().getChunkObject(location.getWorld().getName(), location.getChunk().getX(), location.getChunk().getZ());
-        if (chunkCacheObject == null) return false;
+    private static final int PVP_PROTECTION_LEVEL = 3;
 
-        TeamCacheObject teamCacheObject = CacheHandler.getInstance().getTeamCacheObject(chunkCacheObject.getTeamID());
-        if (teamCacheObject == null) return false;
-        boolean checkTeamLevel = teamCacheObject.getLevel() >= neededLevel ;
-        return checkTeamLevel && !teamCacheObject.isZoneOptionPvP();
+    private static boolean isPvPProtected(@NotNull Location location) {
+        TeamCacheObject teamCacheObject = ClaimedAreaHelper.getClaimingTeam(location);
+        return teamCacheObject != null
+                && teamCacheObject.getLevel() >= PVP_PROTECTION_LEVEL
+                && !teamCacheObject.isZoneOptionPvP();
     }
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGH)
@@ -36,7 +39,7 @@ public class TeamAreaListener implements Listener {
             attacker = p;
         }
         if (attacker == null) return;
-        if (isProtected(victim.getLocation(), 3) || isProtected(attacker.getLocation(), 3)) {
+        if (isPvPProtected(victim.getLocation()) || isPvPProtected(attacker.getLocation())) {
             event.setCancelled(true);
             attacker.sendMessage(Main.getChatPrefix() + "PVP ist in diesem Team-Gebiet §cdeaktiviert§f!");
         }
@@ -46,24 +49,16 @@ public class TeamAreaListener implements Listener {
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGH)
     public void onPlayerInteractWithProtectedArea(PlayerInteractEvent event) {
+        Block clicked = event.getClickedBlock();
+        TeamCacheObject teamCacheObject = clicked != null
+                ? ClaimedAreaHelper.getClaimingTeam(clicked)
+                : ClaimedAreaHelper.getClaimingTeam(event.getPlayer().getLocation());
+        if (teamCacheObject == null || teamCacheObject.isZoneOptionInteract()) return;
+
         PlayerCacheObject pco = CacheHandler.getInstance().getPlayerInCache(event.getPlayer());
-        if (pco == null) return;
-
-        Location location;
-        if (event.getClickedBlock() != null) {
-            location = event.getClickedBlock().getLocation();
-        } else {
-            location = event.getPlayer().getLocation();
-        }
-
-        ChunkCacheObject chunkCacheObject = ChunkCache.getInstance().getChunkObject(location.getWorld().getName(), location.getChunk().getX(), location.getChunk().getZ());
-        if (chunkCacheObject == null) return;
-
-        TeamCacheObject teamCacheObject = CacheHandler.getInstance().getTeamCacheObject(chunkCacheObject.getTeamID());
-        if (teamCacheObject == null) return;
-        if (teamCacheObject.getTeamID().equals(pco.getTeamID())) return;
-        else if (!teamCacheObject.getTeamID().equals(pco.getTeamID()) && !teamCacheObject.isZoneOptionInteract())
+        if (!teamCacheObject.getTeamID().equals(pco.getTeamID())) {
             event.setCancelled(true);
+        }
     }
 
 }

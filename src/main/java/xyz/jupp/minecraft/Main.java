@@ -1,18 +1,15 @@
 package xyz.jupp.minecraft;
 
 import org.bukkit.Bukkit;
-import org.bukkit.Location;
-import org.bukkit.World;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitWorker;
+import xyz.jupp.minecraft.cache.ChunkCache;
 import xyz.jupp.minecraft.cache.WarpCache;
 import xyz.jupp.minecraft.commands.*;
 import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.database.MongoDB;
 import xyz.jupp.minecraft.listener.*;
-import xyz.jupp.minecraft.utils.JailHandler;
-import xyz.jupp.minecraft.utils.Locations;
-import xyz.jupp.minecraft.utils.Logger;
-import xyz.jupp.minecraft.utils.PlayerUpdaterTask;
+import xyz.jupp.minecraft.utils.*;
 
 public final class Main extends JavaPlugin {
 
@@ -23,8 +20,6 @@ public final class Main extends JavaPlugin {
     private final static String blackMarketDealerVillagerName = "§8§lMorpheus";
     private final static String teamPointsDealerVillagerName = "§6§lNomad der Punktemakler";
 
-    private final static String consolePrefix = "[KPubMC] ";
-    private final static String version = "v2.0.0";
     private final static String currencyName = "Schilling";
     private final static String teamName = "§aTeam";
 
@@ -36,43 +31,35 @@ public final class Main extends JavaPlugin {
     // for static Access
     private static Main instance;
 
+    // aliases are declared in plugin.yml
     private void registerCommands() {
-        Bukkit.getConsoleSender().sendMessage("register commands..");
-        this.getCommand("geld").setExecutor(new MoneyCommand());
+        Logger.console("register commands..");
         this.getCommand("money").setExecutor(new MoneyCommand());
-        this.getCommand("schilling").setExecutor(new MoneyCommand());
         this.getCommand("config").setExecutor(new ConfigCommand());
-        this.getCommand("hilfe").setExecutor(new HelpCommand());
         this.getCommand("help").setExecutor(new HelpCommand());
-        this.getCommand("sc").setExecutor(new SlimeChunkCommand());
         this.getCommand("slimechunk").setExecutor(new SlimeChunkCommand());
-        this.getCommand("einladungen").setExecutor(new InvitesCommand());
         this.getCommand("invites").setExecutor(new InvitesCommand());
         this.getCommand("team").setExecutor(new TeamCommand());
         this.getCommand("ranking").setExecutor(new RankingCommand());
         this.getCommand("hover").setExecutor(new HoverTextCommand());
-        this.getCommand("kopf").setExecutor(new PlayerHeadsCommand());
         this.getCommand("head").setExecutor(new PlayerHeadsCommand());
         this.getCommand("warp").setExecutor(new WarpCommand());
         this.getCommand("customItem").setExecutor(new ItemCommand());
-        this.getCommand("spenden").setExecutor(new DonateCommand());
         this.getCommand("donate").setExecutor(new DonateCommand());
         this.getCommand("spawn").setExecutor(new SpawnCommand());
         this.getCommand("rules").setExecutor(new RulesCommand());
-        this.getCommand("regeln").setExecutor(new RulesCommand());
         this.getCommand("spec").setExecutor(new SpecCommand());
-        this.getCommand("ec").setExecutor(new EnderchestCommand());
+        this.getCommand("enderchest").setExecutor(new EnderchestCommand());
         this.getCommand("createshop").setExecutor(new CreateShopCommand());
         this.getCommand("createbankier").setExecutor(new CreateBankierCommand());
-        this.getCommand("enderchest").setExecutor(new EnderchestCommand());
         this.getCommand("createjuweler").setExecutor(new CreateJewelerCommand());
         this.getCommand("createdealer").setExecutor(new CreateBlackMarketDealerCommand());
         this.getCommand("createtpdealer").setExecutor(new CreateTPDealerCommand());
         this.getCommand("dummy").setExecutor(new CreateDummyEntityCommand());
         this.getCommand("bestrafung").setExecutor(new JailCommand());
         this.getCommand("wanted").setExecutor(new WantedCommand());
-        this.getCommand("debug").setExecutor(new MonsterEventCommand());
-
+        this.getCommand("origin").setExecutor(new NullpointCommand());
+        this.getCommand("removechunk").setExecutor(new RemoveChunkCommand());
     }
 
     private void registerListener() {
@@ -93,41 +80,74 @@ public final class Main extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new CustomToolsListener(), this);
         Bukkit.getPluginManager().registerEvents(new EnderDragonListener(), this);
         Bukkit.getPluginManager().registerEvents(new SpawnListener(), this);
+        Bukkit.getPluginManager().registerEvents(new TeamAreaListener(), this);
+        Bukkit.getPluginManager().registerEvents(new AntiBugListener(), this);
 
-        //Bukkit.getPluginManager().registerEvents(new SwordListener(), this);
-        //Bukkit.getPluginManager().registerEvents(new ElytraFlyListener(), this);
-        //Bukkit.getPluginManager().registerEvents(new TeamBlockListener(), this);
+        // afk
+        Bukkit.getPluginManager().registerEvents(new AfkListener(), this);
     }
 
     private void registerTasks() {
-        PlayerUpdaterTask playerListUpdate = new PlayerUpdaterTask();
-        Bukkit.getConsoleSender().sendMessage(consolePrefix + "§fregister tasks ..");
-        playerListUpdate.startTask();
+        Logger.console("register tasks..");
+        new PlayerUpdaterTask().startTask();
     }
 
 
     @Override
     public void onEnable() {
         instance = this;
+        AfkHelper.tickKickTask().runTaskTimer(this, 20L, 20L);
+
         Logger.console("running kpub-system..");
         Logger.console("load config..");
         ConfigManager.getManager().loadConfig();
         Logger.console("connecting to database..");
+        try {
+            MongoDB.connect();
+        } catch (RuntimeException e) {
+            getSLF4JLogger().error(e.getMessage());
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
+        Tasks.async(MongoDB.getInstance()::ensureIndexes);
         Logger.console("init warps..");
-        WarpCache.getInstance().getWarpCache();
-        MongoDB.getInstance();
+        int warps = WarpCache.getInstance().load();
+        int claimedChunks = ChunkCache.getInstance().load();
+        Logger.console("loaded " + warps + " warps and " + claimedChunks + " claimed chunks");
         registerCommands();
         registerListener();
         registerTasks();
 
         JailHandler.initJails(Locations.getJailCorner1(), Locations.getJailCorner2());
         JailHandler.startJailWatcherTask();
-
     }
 
+    // Running async workers (e.g. a money transfer between withdraw and credit) are not interrupted by Bukkit,
+    // so the client is only closed once they are done (bounded, Paper itself waits 5 s for them after onDisable).
     @Override
     public void onDisable() {
-        // Plugin shutdown logic
+        getServer().getScheduler().cancelTasks(this);
+        awaitRunningWorkers(5_000L);
+        MongoDB.close();
+    }
+
+    private void awaitRunningWorkers(long timeoutMillis) {
+        long deadline = System.currentTimeMillis() + timeoutMillis;
+        while (hasRunningWorkers() && System.currentTimeMillis() < deadline) {
+            try {
+                Thread.sleep(20L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+    }
+
+    private boolean hasRunningWorkers() {
+        for (BukkitWorker worker : getServer().getScheduler().getActiveWorkers()) {
+            if (worker.getOwner() == this && worker.getThread() != Thread.currentThread()) return true;
+        }
+        return false;
     }
 
 
@@ -136,11 +156,9 @@ public final class Main extends JavaPlugin {
 
     public static int getTeamLevelMultiple() {return teamLevelMultiple;}
 
-    public static String getVersion() {return version;}
     public static String getTeamName() {return teamName;}
     public static String getChatPrefix() {return chatPrefix;}
     public static String getCurrencyName() {return currencyName;}
-    public static String getConsolePrefix() {return consolePrefix;}
     public static String getShopVillagerName() {return shopVillagerName;}
     public static String getJewelerVillagerName() {return jewelerVillagerName;}
     public static String getFinanceVillagerFredName() {return financeVillagerFredName;}
@@ -155,4 +173,6 @@ public final class Main extends JavaPlugin {
     public static String getIsWantedPrefix() {
         return isWantedPrefix;
     }
+
+
 }

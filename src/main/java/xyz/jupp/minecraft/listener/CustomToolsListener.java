@@ -1,15 +1,23 @@
 package xyz.jupp.minecraft.listener;
 
-import net.kyori.adventure.text.Component;
-import org.bukkit.*;
+import io.papermc.paper.event.player.PlayerArmSwingEvent;
+import org.bukkit.Color;
+import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
+import org.bukkit.Particle;
+import org.bukkit.Sound;
+import org.bukkit.World;
 import org.bukkit.block.Block;
-import org.bukkit.entity.*;
+import org.bukkit.entity.AbstractArrow;
+import org.bukkit.entity.Arrow;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.Fireball;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
-import org.bukkit.event.Event.Result;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.EntityShootBowEvent;
-import org.bukkit.event.player.PlayerAnimationEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
@@ -20,25 +28,24 @@ import org.bukkit.potion.PotionEffectType;
 import org.bukkit.util.Vector;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.items.BedrockBreakerPickaxe;
-
-import xyz.jupp.minecraft.items.PoisonBow;
 import xyz.jupp.minecraft.utils.Locations;
-
-import java.util.Objects;
+import xyz.jupp.minecraft.utils.Text;
 
 public class CustomToolsListener implements Listener {
 
+    // the listener is created in onEnable, so the plugin instance exists here
+    private static final NamespacedKey FLAMETHROWER_KEY = new NamespacedKey(Main.getInstance(), "flamethrower_sword");
+    private static final NamespacedKey POISON_BOW_KEY = new NamespacedKey(Main.getInstance(), "poison_bow");
+    private static final String BEDROCK_BREAKER_NAME = new BedrockBreakerPickaxe().getItemName();
+
     @EventHandler(ignoreCancelled = true)
-    public void onFlamethrowerUse(PlayerAnimationEvent event) {
+    public void onFlamethrowerUse(PlayerArmSwingEvent event) {
         Player player = event.getPlayer();
         ItemStack item = player.getInventory().getItemInMainHand();
-        if (item == null || item.getType().isAir()) return;
+        if (item.getType().isAir()) return;
 
-        ItemMeta meta = item.getItemMeta();
-        if (meta == null) return;
-
-        NamespacedKey key = new NamespacedKey(Main.getInstance(), "flamethrower_sword");
-        if (!meta.getPersistentDataContainer().has(key, PersistentDataType.BYTE)) return;
+        // read-only view, no ItemMeta copy on every swing
+        if (!item.getPersistentDataContainer().has(FLAMETHROWER_KEY, PersistentDataType.BYTE)) return;
 
         World world = player.getWorld();
         Location eye = player.getEyeLocation();
@@ -67,23 +74,13 @@ public class CustomToolsListener implements Listener {
         Block clicked = event.getClickedBlock();
         if (clicked == null) return;
 
-        if (Locations.isLocationASpawn(clicked.getLocation())) return;
-
         Player player = event.getPlayer();
         ItemStack hand = player.getInventory().getItemInMainHand();
-        if (hand == null || hand.getType().isAir()) return;
+        if (hand.getType() != Material.WOODEN_PICKAXE) return;
         ItemMeta handMeta = hand.getItemMeta();
-        if (handMeta == null) return;
+        if (handMeta == null || !BEDROCK_BREAKER_NAME.equals(Text.legacy(handMeta.customName()))) return;
 
-        ItemStack pickaxe = new BedrockBreakerPickaxe().getItemStack();
-        ItemMeta pickMeta = pickaxe.getItemMeta();
-
-        if (!hand.getType().equals(pickaxe.getType())) return;
-
-        Component handName = handMeta.displayName();
-        Component pickName = (pickMeta == null) ? null : pickMeta.displayName();
-
-        if (!Objects.equals(handName, pickName)) return;
+        if (Locations.isLocationASpawn(clicked.getLocation())) return;
 
         if (clicked.getType() != Material.BEDROCK) {
             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
@@ -121,25 +118,10 @@ public class CustomToolsListener implements Listener {
         if (usedBow == null || usedBow.getType() != Material.BOW) return;
 
         ItemMeta meta = usedBow.getItemMeta();
-        if (meta == null || !meta.hasDisplayName()) return;
+        if (meta == null || !meta.hasCustomName()) return;
 
-        // Prüfe über Namen ODER PersistentDataContainer
-        PoisonBow poisonBow = new PoisonBow();
-
-        boolean isPoisonBow = false;
-
-        // Bessere Methode: PersistentDataContainer prüfen
-        if (meta.getPersistentDataContainer()
-                .has(new NamespacedKey(Main.getInstance(), "poison_bow"), PersistentDataType.BYTE)) {
-            isPoisonBow = true;
-        }
-        // oder Fallback auf Name:
-        else if (ChatColor.stripColor(meta.getDisplayName())
-                .equalsIgnoreCase(ChatColor.stripColor(poisonBow.getItemName()))) {
-            isPoisonBow = true;
-        }
-
-        if (!isPoisonBow) return;
+        // nur echte Giftbögen tragen den PDC-Marker, ein im Amboss umbenannter Bogen nicht
+        if (!meta.getPersistentDataContainer().has(POISON_BOW_KEY, PersistentDataType.BYTE)) return;
 
         Entity proj = event.getProjectile();
         Arrow arrow;

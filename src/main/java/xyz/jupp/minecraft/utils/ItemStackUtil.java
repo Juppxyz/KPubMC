@@ -12,7 +12,7 @@ public class ItemStackUtil {
     public static ItemStack createItemStack(@NotNull String itemName, @NotNull Material material) {
         ItemStack itemStack = new ItemStack(material);
         ItemMeta itemMeta = itemStack.getItemMeta();
-        itemMeta.setDisplayName(itemName);
+        itemMeta.customName(Text.of(itemName));
         itemStack.setItemMeta(itemMeta);
         return itemStack;
     }
@@ -20,8 +20,8 @@ public class ItemStackUtil {
     public static ItemStack createItemStack(@NotNull String itemName, @NotNull Material material, @NotNull String[] lores) {
         ItemStack itemStack = new ItemStack(material);
         ItemMeta itemMeta = itemStack.getItemMeta();
-        itemMeta.setDisplayName(itemName);
-        if (lores != null) itemMeta.setLore(List.of(lores));
+        itemMeta.customName(Text.of(itemName));
+        if (lores != null) itemMeta.lore(Text.lore(List.of(lores)));
         itemStack.setItemMeta(itemMeta);
         return itemStack;
     }

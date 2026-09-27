@@ -1,39 +1,32 @@
 package xyz.jupp.minecraft.utils;
 
-import java.util.HashSet;
-import java.util.Set;
+import org.bukkit.Location;
+import org.bukkit.World;
+import org.bukkit.block.Block;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import xyz.jupp.minecraft.cache.CacheHandler;
+import xyz.jupp.minecraft.cache.ChunkCache;
+import xyz.jupp.minecraft.cache.ChunkCacheObject;
+import xyz.jupp.minecraft.cache.TeamCacheObject;
 
-public class ClaimedAreaHelper {
+public final class ClaimedAreaHelper {
 
-    private static final Set<String> playersInClaimedAreas = new HashSet<>();
+    private ClaimedAreaHelper() {}
 
-    public static Set<String> getPlayersInClaimedAreas() {
-        return playersInClaimedAreas;
+    // team that claimed the chunk of this block position, null in the wilderness or for an unknown team (never loads a chunk)
+    public static @Nullable TeamCacheObject getClaimingTeam(@NotNull World world, int blockX, int blockZ) {
+        ChunkCacheObject claim = ChunkCache.getInstance().getClaim(world, blockX >> 4, blockZ >> 4);
+        return claim == null ? null : CacheHandler.getInstance().getTeamCacheObject(claim.getTeamID());
     }
 
-    public static void addPlayerToClaimedAreas(String player) {
-        playersInClaimedAreas.add(player);
+    public static @Nullable TeamCacheObject getClaimingTeam(@NotNull Block block) {
+        return getClaimingTeam(block.getWorld(), block.getX(), block.getZ());
     }
 
-    public static void removePlayerFromClaimedAreas(String player) {
-        playersInClaimedAreas.remove(player);
+    public static @Nullable TeamCacheObject getClaimingTeam(@NotNull Location location) {
+        World world = location.getWorld();
+        return world == null ? null : getClaimingTeam(world, location.getBlockX(), location.getBlockZ());
     }
-
-
-
-    private static final Set<String> teamPlayerInArea = new HashSet<>();
-    public static Set<String> getTeamPlayerInArea() {
-        return playersInClaimedAreas;
-    }
-
-    public static void addTeamPlayerInArea(String player) {
-        playersInClaimedAreas.add(player);
-    }
-
-    public static void removeTeamPlayerInArea(String player) {
-        playersInClaimedAreas.remove(player);
-    }
-
-
 
 }

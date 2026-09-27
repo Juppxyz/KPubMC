@@ -10,7 +10,6 @@ from openai import OpenAI, OpenAIError
 
 CONFIG_PATH = "/mnt/HC_Volume_101895195/KlotzscherPub/plugins/kpub/config.json"
 
-# Schema nur für shopItems
 SHOP_ITEMS_SCHEMA: Dict[str, Any] = {
     "type": "array",
     "items": {
@@ -37,7 +36,6 @@ SHOP_ITEMS_SCHEMA: Dict[str, Any] = {
     "maxItems": 10,
 }
 
-# Schema für die Modell-Antwort: { "shopItems": [...] }
 MODEL_RESPONSE_SCHEMA: Dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -49,14 +47,12 @@ MODEL_RESPONSE_SCHEMA: Dict[str, Any] = {
 
 
 def get_config_path() -> str:
-    """Ermittelt den Pfad zur Config (optional per CLI-Argument überschreibbar)."""
     if len(sys.argv) > 1:
         return sys.argv[1]
     return CONFIG_PATH
 
 
 def load_config(path: str) -> Dict[str, Any]:
-    """Lädt die JSON-Config von der Platte."""
     try:
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
@@ -69,7 +65,6 @@ def load_config(path: str) -> Dict[str, Any]:
 
 
 def write_config(path: str, config_data: Dict[str, Any]) -> None:
-    """Schreibt die komplette Config zurück auf die Platte (mit Einrückung)."""
     try:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(config_data, f, indent=2, ensure_ascii=False)
@@ -80,10 +75,11 @@ def write_config(path: str, config_data: Dict[str, Any]) -> None:
 
 
 def build_prompt(current_config: Dict[str, Any]) -> str:
-    """
-    Baut den User-Prompt für das Modell.
-    current_config ist die aktuelle Config, die als Vorlage dient.
-    """
+    old_items = current_config.get("shopItems", [])
+    old_materials = [item.get("material") for item in old_items if isinstance(item, dict)]
+    # the database credentials must never be sent to OpenAI
+    prompt_config = {key: value for key, value in current_config.items() if key != "mongoConnectionString"}
+
     return (
         "Du wirkst als Konfigurations-Generator für einen kleinen Minecraft-Ingame-Shop. "
         "Du bekommst eine bestehende Shop-Konfiguration als JSON und sollst NUR das Feld 'shopItems' aktualisieren.\n\n"
@@ -92,31 +88,39 @@ def build_prompt(current_config: Dict[str, Any]) -> str:
         "- Du darfst KEINE anderen Felder zurückgeben.\n\n"
         "Regeln für den Shop:\n"
         "- Aktualisiere einige und/oder alle Items inklusive Preis und Menge, um den Shop dynamisch zu halten.\n"
+        "- Mindestens 5 der 10 Items müssen komplett NEU sein:\n"
+        "  - anderes 'material' als in der bisherigen Konfiguration UND\n"
+        "  - anderer 'name' (falls gesetzt) UND\n"
+        "  - anderer 'price'.\n"
+        "- Du darfst maximal 2 Items aus der bisherigen Konfiguration inhaltlich sehr ähnlich lassen.\n"
         "- Wenn ein Item verkauft werden kann (sell = true), ist der Verkaufspreis immer die Hälfte des Kaufpreises, "
         "auf ganze Zahlen gerundet.\n"
         "- Verboten im Shop: Bedrock, Drachen-Ei, Command-Blöcke, Barrieren.\n"
         "- Es muss mindestens 1 klar wertvolles Item geben (z.B. Elytra, Nether Star, sehr seltene Items).\n"
-        "- Es müssen mindestens 2 leicht farmbare Items verkauft werden (z.B. Holz, Stein, Weizen, etc.).\n"
+        "- Es müssen mindestens 2 leicht farmbare Items verkauft werden (z.B. Holz, Stein, Weizen, Karotten, etc.).\n"
         "- Es muss mindestens 1 Nahrungs-Item geben.\n"
         "- Es müssen exakt 10 Items im Shop existieren.\n"
         "- Achte darauf, dass nicht zu viel Geld durch einfache, massenhaft farmbare Items in Umlauf kommt. "
         "Teuer sollen nur wirklich wertvolle Items sein.\n"
         "- Beispiel: Smaragdblöcke sind relativ leicht zu bekommen, eine Elytra ist dagegen deutlich wertvoller.\n"
-        "- Nur wertvolle Items bekommen einen eigenen, kreativen Namen unter 'name', muss aber nicht sein. "
-        "Dieser Name soll stilvoll und nerdig/geekig sein, aber nicht cringy.\n"
-        "- 'Viel Geld' ist in diesem Kontext alles bei etwa 10000.\n\n"
+        "- Nur wertvolle Items bekommen einen eigenen, kreativen Namen unter 'name'. "
+        "- Hinweis, diese Items müssen mindestens den markierten Preis haben: 1 Diamant = 200, 1 Emeralds = 50 , 1 Hartz = 500, 1 Gold = 100, 1 Amethyst = 200, 1 Netherite = 1000, 1 Lapislazuli = 50"
+        "Dieser Name soll stilvoll und nerdig/geekig sein, aber nicht cringy oder zwanghaft gesetzt sein.\n"
+        "- 'Viel Geld' ist in diesem Kontext alles bei etwa 20000.\n\n"
+        "Zusätzliche Rotations-Info:\n"
+        f"- Bisherige Materialien im Shop (nur Kontext, NICHT direkt kopieren): {old_materials}\n\n"
         "Technische Regeln:\n"
         "- Gib ausschließlich ein JSON-Objekt mit dem Feld 'shopItems' zurück.\n"
         "- 'shopItems' muss ein Array mit exakt 10 Elementen sein.\n"
         "- Kein Fließtext, keine Erklärungen, keine Kommentare – nur JSON.\n\n"
         f"Hier ist die aktuelle Konfiguration als Kontext (NICHT direkt zurückgeben, nur zur Orientierung):\n"
-        f"{json.dumps(current_config, ensure_ascii=False)}"
+        f"{json.dumps(prompt_config, ensure_ascii=False)}"
     )
 
 
+
 def create_client() -> OpenAI:
-    """Erzeugt einen OpenAI-Client aus der Umgebungsvariable OPENAI_API_KEY."""
-    api_key = "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"
+    api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         print("[!] Umgebungsvariable OPENAI_API_KEY ist nicht gesetzt.")
         print("    Setze sie z.B. mit: export OPENAI_API_KEY='sk-...' (Linux) oder in Windows-Umgebungsvariablen.")
@@ -127,10 +131,6 @@ def create_client() -> OpenAI:
 def call_openai_for_shop_items(
     client: OpenAI, prompt: str, max_retries: int = 2
 ) -> Dict[str, Any]:
-    """
-    Ruft das Modell auf und versucht bei JSON/Schema-Fehlern bis zu max_retries erneut.
-    Rückgabe: ein Dict mit dem Feld 'shopItems'.
-    """
     last_error: str | None = None
 
     for attempt in range(1, max_retries + 1):
@@ -138,8 +138,8 @@ def call_openai_for_shop_items(
 
         try:
             response = client.chat.completions.create(
-                model="gpt-5-mini",  # oder was du gerade nutzt
-                response_format={"type": "json_object"},  # zwingt das Modell zu JSON
+                model="gpt-5-mini",
+                response_format={"type": "json_object"},
                 messages=[
                     {
                         "role": "system",
@@ -151,7 +151,6 @@ def call_openai_for_shop_items(
                     },
                     {"role": "user", "content": prompt},
                 ],
-                # temperature NICHT setzen, dieses Modell erlaubt nur den Default
             )
         except OpenAIError as e:
             last_error = f"OpenAI API Fehler: {e}"

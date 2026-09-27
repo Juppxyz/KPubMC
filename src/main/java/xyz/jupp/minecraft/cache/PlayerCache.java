@@ -3,34 +3,43 @@ package xyz.jupp.minecraft.cache;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.HashMap;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
-class PlayerCache {
-    private static final HashMap<String, PlayerCacheObject> playerCacheMap = new HashMap<>();
+final class PlayerCache {
 
-    PlayerCacheObject getPlayer(@NotNull Player player) {
-        if (!playerCacheMap.containsKey(player.getUniqueId().toString())){
-            PlayerCacheObject newPlayerCacheObject = new PlayerCacheObject(player);
-            playerCacheMap.put(player.getUniqueId().toString(), newPlayerCacheObject);
-            return newPlayerCacheObject;
+    private PlayerCache() {}
+
+    private static final ConcurrentHashMap<UUID, PlayerCacheObject> playerCacheMap = new ConcurrentHashMap<>();
+
+    // Returns the cached object, loads it synchronously if it was not preloaded. Never null.
+    static PlayerCacheObject getPlayer(@NotNull Player player) {
+        UUID uuid = player.getUniqueId();
+        PlayerCacheObject cached = playerCacheMap.get(uuid);
+        if (cached == null) {
+            PlayerCacheObject loaded = PlayerCacheObject.load(uuid);
+            if (!player.isOnline()) {
+                // late task for a player who already left: answer, but do not cache again
+                loaded.attach(player);
+                return loaded;
+            }
+            cached = playerCacheMap.putIfAbsent(uuid, loaded);
+            if (cached == null) {
+                cached = loaded;
+                if (!player.isOnline()) playerCacheMap.remove(uuid, loaded);
+            }
         }
-        return playerCacheMap.get(player.getUniqueId().toString());
+        cached.attach(player);
+        return cached;
     }
 
-
-    PlayerCacheObject reinitialisePlayerObject(@NotNull Player player) {
-        if (playerCacheMap.containsKey(player.getUniqueId().toString())) {
-            playerCacheMap.remove(player.getUniqueId().toString());
-            PlayerCacheObject newPlayerCacheObject = new PlayerCacheObject(player);
-            playerCacheMap.put(player.getUniqueId().toString(), newPlayerCacheObject);
-            return newPlayerCacheObject;
-        }
-        return null;
+    // blocking, used on the async pre-login thread; replaces a possibly stale entry
+    static void preload(@NotNull UUID uuid) {
+        playerCacheMap.put(uuid, PlayerCacheObject.load(uuid));
     }
 
-
-    void removePlayer(@NotNull Player player) {
-        playerCacheMap.remove(player.getUniqueId().toString());
+    static void removePlayer(@NotNull UUID uuid) {
+        playerCacheMap.remove(uuid);
     }
 
 }

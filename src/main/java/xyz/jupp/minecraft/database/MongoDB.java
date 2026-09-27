@@ -2,48 +2,74 @@ package xyz.jupp.minecraft.database;
 
 import com.mongodb.ConnectionString;
 import com.mongodb.MongoClientSettings;
+import com.mongodb.MongoCommandException;
+import com.mongodb.MongoException;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.model.Indexes;
 import org.bson.Document;
-import xyz.jupp.minecraft.utils.Logger;
-import xyz.jupp.minecraft.utils.Secrets;
+import xyz.jupp.minecraft.Main;
+import xyz.jupp.minecraft.config.ConfigManager;
 
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-
-import static com.mongodb.client.model.Filters.eq;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
-public class MongoDB {
+public final class MongoDB {
 
-    /* knowledge variables */
+    public static final String CONNECTION_STRING_ENV = "KPUB_MONGO_URI";
+    public static final String CONNECTION_STRING_CONFIG_KEY = "mongoConnectionString";
 
-    private MongoClient mongoClient;
-    private MongoDatabase kpubMC;
-    private ExecutorService executor;
+    // server error codes for "an index with this name/key already exists with other options"
+    private static final int INDEX_OPTIONS_CONFLICT = 85;
+    private static final int INDEX_KEY_SPECS_CONFLICT = 86;
+
+    private final MongoClient mongoClient;
+    private final MongoDatabase kpubMC;
 
 
-    private MongoDB() {
+    private MongoDB(String connectionString) {
+        ConnectionString settings = new ConnectionString(connectionString);
         this.mongoClient = MongoClients.create(
-                MongoClientSettings.builder().applyConnectionString(new ConnectionString(Secrets.mongoDBConnectionString))
+                MongoClientSettings.builder().applyConnectionString(settings)
                         .applyToServerSettings(builder ->
                                 builder.minHeartbeatFrequency(120, MILLISECONDS)
-                                        .heartbeatFrequency(300, SECONDS)).build()
+                                        .heartbeatFrequency(300, SECONDS))
+                        // an unreachable database must not block a thread for the driver defaults (30 s / infinite),
+                        // values given in the connection string win
+                        .applyToClusterSettings(builder -> {
+                            if (settings.getServerSelectionTimeout() == null) builder.serverSelectionTimeout(5, SECONDS);
+                        })
+                        .applyToSocketSettings(builder -> {
+                            if (settings.getConnectTimeout() == null) builder.connectTimeout(5, SECONDS);
+                            if (settings.getSocketTimeout() == null) builder.readTimeout(10, SECONDS);
+                        })
+                        .build()
         );
-
         this.kpubMC = mongoClient.getDatabase("kpubMC");
-        this.executor = Executors.newFixedThreadPool(4);
-        Logger.console("connected successfully to database");
     }
 
-    // single pattern
-    private static MongoDB instance = null;
+    // single pattern, created explicitly in onEnable after the config was loaded
+    private static volatile MongoDB instance = null;
+
+    public static synchronized void connect() {
+        if (instance != null) return;
+        MongoDB mongoDB = new MongoDB(resolveConnectionString());
+        try {
+            // the driver connects lazily: ping once so wrong hosts or credentials fail here with a clear message
+            mongoDB.kpubMC.runCommand(new Document("ping", 1));
+        } catch (MongoException e) {
+            mongoDB.mongoClient.close();
+            throw new IllegalStateException("MongoDB nicht erreichbar oder Anmeldung fehlgeschlagen (" + CONNECTION_STRING_ENV
+                    + " / " + CONNECTION_STRING_CONFIG_KEY + " prüfen): " + e.getMessage(), e);
+        }
+        instance = mongoDB;
+    }
+
     public static MongoDB getInstance() {
-        return instance == null ? instance = new MongoDB() : instance;
+        MongoDB mongoDB = instance;
+        if (mongoDB == null) throw new IllegalStateException("MongoDB is not connected");
+        return mongoDB;
     }
 
     // Main Database
@@ -51,42 +77,49 @@ public class MongoDB {
         return kpubMC;
     }
 
-
-    public CompletableFuture<Void> insertDocumentAsync(String collectionName, Document document) {
-        return CompletableFuture.runAsync(() -> {
-            try {
-                kpubMC.getCollection(collectionName).insertOne(document);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }, executor);
+    public static synchronized void close() {
+        if (instance == null) return;
+        instance.mongoClient.close();
+        instance = null;
     }
 
 
-    public CompletableFuture<Document> findDocumentAsync(String collectionName, String key, String value) {
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                return kpubMC.getCollection(collectionName).find(eq(key, value)).first();
-            } catch (Exception e) {
-                e.printStackTrace();
-                return null;
-            }
-        }, executor);
+    private static String resolveConnectionString() {
+        String fromEnvironment = System.getenv(CONNECTION_STRING_ENV);
+        if (fromEnvironment != null && !fromEnvironment.isBlank()) return fromEnvironment.trim();
+
+        String fromConfig = ConfigManager.getManager().getMongoConnectionString();
+        if (fromConfig != null && !fromConfig.isBlank()) return fromConfig.trim();
+
+        throw new IllegalStateException("Keine MongoDB-Verbindung konfiguriert: Umgebungsvariable " + CONNECTION_STRING_ENV
+                + " setzen oder \"" + CONNECTION_STRING_CONFIG_KEY + "\" in plugins/kpub/config.json eintragen."
+                + " / No MongoDB connection configured: set the environment variable " + CONNECTION_STRING_ENV
+                + " or the key \"" + CONNECTION_STRING_CONFIG_KEY + "\" in plugins/kpub/config.json.");
     }
 
 
-    // Ressource sauber schließen, wenn Minecraft beendet wird
-    public void close() {
-        executor.shutdown();
+    /**
+     * Creates the (non-unique) lookup indexes if they are missing. Blocking, run it on a worker thread.
+     */
+    public void ensureIndexes() {
+        createIndex("player", "uuid");
+        createIndex("teams", "teamID");
+        createIndex("chunks", "chunkID");
+        createIndex("warps", "uuid");
+    }
+
+    private void createIndex(String collection, String field) {
         try {
-            if (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
-                executor.shutdownNow();
+            kpubMC.getCollection(collection).createIndex(Indexes.ascending(field));
+        } catch (MongoCommandException e) {
+            if (e.getErrorCode() == INDEX_OPTIONS_CONFLICT || e.getErrorCode() == INDEX_KEY_SPECS_CONFLICT) {
+                Main.getInstance().getSLF4JLogger().info("Index {}.{} already exists with other options, keeping it", collection, field);
+                return;
             }
-        } catch (InterruptedException ex) {
-            executor.shutdownNow();
+            Main.getInstance().getSLF4JLogger().warn("Could not create index {}.{}: {}", collection, field, e.getMessage());
+        } catch (MongoException e) {
+            Main.getInstance().getSLF4JLogger().warn("Could not create index {}.{}: {}", collection, field, e.getMessage());
         }
-        mongoClient.close();
     }
-
 
 }

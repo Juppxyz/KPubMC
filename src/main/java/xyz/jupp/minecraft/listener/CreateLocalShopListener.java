@@ -1,42 +1,52 @@
 package xyz.jupp.minecraft.listener;
 
-import org.bukkit.*;
+import org.bukkit.Bukkit;
+import org.bukkit.Material;
+import org.bukkit.OfflinePlayer;
+import org.bukkit.Sound;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.block.Chest;
 import org.bukkit.block.Sign;
-import org.bukkit.block.data.BlockData;
-import org.bukkit.entity.Player;
-import org.bukkit.event.Listener;
-import org.bukkit.block.BlockFace;
-import org.bukkit.event.EventHandler;
 import org.bukkit.block.data.type.WallSign;
+import org.bukkit.block.sign.Side;
+import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
 import org.bukkit.event.block.SignChangeEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
-import xyz.jupp.minecraft.database.PlayerCollection;
-import xyz.jupp.minecraft.utils.Logger;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
+import xyz.jupp.minecraft.database.PlayerCollection;
+import xyz.jupp.minecraft.inventory.MainThread;
+import xyz.jupp.minecraft.utils.Logger;
+import xyz.jupp.minecraft.utils.Tasks;
+import xyz.jupp.minecraft.utils.Text;
+
+import java.util.regex.Pattern;
 
 public class CreateLocalShopListener implements Listener {
 
+    private static final String SHOP_TITLE = "§6Shop von";
+    private static final Pattern AMOUNT_SUFFIX = Pattern.compile(" Stk.");
+    private static final Pattern PRICE_SUFFIX = Pattern.compile(" S.");
+
     @EventHandler
     public void onShopChestShop(PlayerInteractEvent event) {
-        Player player = event.getPlayer();
         Block clicked = event.getClickedBlock();
-        if (clicked == null || !(clicked.getState() instanceof Chest)) return;
-        BlockData blockData = clicked.getBlockData();
-        org.bukkit.block.data.type.Chest chestData = (org.bukkit.block.data.type.Chest) blockData;
-        BlockFace facing = chestData.getFacing();
+        if (clicked == null) return;
+        // the block types with a chest state, checked without creating a block state
+        Material clickedType = clicked.getType();
+        if (clickedType != Material.CHEST && clickedType != Material.TRAPPED_CHEST) return;
+        Player player = event.getPlayer();
+        BlockFace facing = ((org.bukkit.block.data.type.Chest) clicked.getBlockData()).getFacing();
 
-        Block frontBlock = clicked.getRelative(facing);
-        if (frontBlock.getState() instanceof Sign) {
-            Sign sign = (Sign) frontBlock.getState();
-            if ("§6Shop von".equals(sign.getLine(0))) {
-                if (!player.getName().equals(sign.getLine(1).replace("§6", ""))) {
-                    player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 1f);
-                    event.setCancelled(true);
-                }
+        if (clicked.getRelative(facing).getState(false) instanceof Sign sign && SHOP_TITLE.equals(line(sign, 0))) {
+            if (!player.getName().equals(line(sign, 1).replace("§6", ""))) {
+                player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 1f);
+                event.setCancelled(true);
             }
         }
     }
@@ -44,15 +54,14 @@ public class CreateLocalShopListener implements Listener {
 
     @EventHandler
     public void onLocalSignInteract(PlayerInteractEvent event) {
-        Player player = event.getPlayer();
         Block clickedBlock = event.getClickedBlock();
-        if (clickedBlock == null || !(clickedBlock.getState() instanceof Sign)) return;
-        Sign sign = (Sign) clickedBlock.getState();
+        if (clickedBlock == null || !(clickedBlock.getState(false) instanceof Sign sign)) return;
 
-        String firstLine = sign.getLine(0);
-        if (!"§6Shop von".equals(firstLine)) return;
+        String firstLine = line(sign, 0);
+        if (!SHOP_TITLE.equals(firstLine)) return;
 
-        String secondLine = sign.getLine(1);
+        Player player = event.getPlayer();
+        String secondLine = line(sign, 1);
         String shieldPlayerName = "§6" + player.getName();
 
         // basically checks if the user is the local shop owner
@@ -69,105 +78,125 @@ public class CreateLocalShopListener implements Listener {
             event.setCancelled(true);
         }
 
-        Bukkit.getScheduler().runTask(Main.getInstance(), () -> {
-
-            Block attachedChest = null;
-            for (BlockFace face : BlockFace.values()) {
-                Block adjacentBlock = clickedBlock.getRelative(face);
-                if (adjacentBlock.getType() == Material.CHEST) {
-                    attachedChest = adjacentBlock;
-                    break;
-                }
+        Block attachedChest = null;
+        for (BlockFace face : BlockFace.values()) {
+            Block adjacentBlock = clickedBlock.getRelative(face);
+            if (adjacentBlock.getType() == Material.CHEST) {
+                attachedChest = adjacentBlock;
+                break;
             }
+        }
 
-            if (attachedChest == null || !(attachedChest.getState() instanceof Chest)) return;
-            Chest chest = (Chest) attachedChest.getState();
+        if (attachedChest == null || !(attachedChest.getState(false) instanceof Chest chest)) return;
 
-            if (chest.getInventory().isEmpty()) {
-                player.sendMessage(Main.getChatPrefix() + "§fDer Shop von §6" + secondLine + " §fist aktuell leer.");
-                player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 1f);
+        if (chest.getInventory().isEmpty()) {
+            player.sendMessage(Main.getChatPrefix() + "§fDer Shop von §6" + secondLine + " §fist aktuell leer.");
+            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 1f);
+            return;
+        }
+
+        buy(player, sign, secondLine, attachedChest);
+    }
+
+
+    // the sign is read here, the checks keep their former order on the worker (balance first)
+    private static void buy(Player player, Sign sign, String secondLine, Block chestBlock) {
+        String[] splitLastLine = line(sign, 3).split(" §8- ");
+        boolean malformed = splitLastLine.length < 2;
+        int amount = malformed ? 0 : verifyNumbers(AMOUNT_SUFFIX.matcher(splitLastLine[0]).replaceAll("").replace("§a", ""));
+        int sellPrice = malformed ? 0 : verifyNumbers(PRICE_SUFFIX.matcher(splitLastLine[1]).replaceAll("").replace("§a", ""));
+        Material shopItem = Material.getMaterial(line(sign, 2).replace("§a", ""));
+        String ownerName = secondLine.replace("§6", "");
+
+        Tasks.async(() -> {
+            int currentMoney = PlayerCollection.getMoney(player);
+
+            if (currentMoney <= 0) {
+                notifyBuyer(player, "§cDein Konto ist derzeit leider leer.");
                 return;
             }
 
-            Bukkit.getScheduler().runTaskAsynchronously(Main.getInstance(), () -> {
-                PlayerCollection playerCollection = new PlayerCollection(player);
-                int currentMoney = playerCollection.getMoney();
+            // a last line without price separator: nothing happened before either (exception)
+            if (malformed) return;
 
-                if (currentMoney <= 0) {
-                    player.sendMessage(Main.getChatPrefix() + "§cDein Konto ist derzeit leider leer.");
-                    player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 1f);
-                    return;
-                }
+            if (sellPrice == 0) {
+                notifyBuyer(player, "§cUps, ein unerwarteter Fehler ist aufgetreten. (-197)");
+                return;
+            }
 
-                String[] splitLastLine = sign.getLine(3).split(" §8- ");
-                String rawAmount = splitLastLine[0].replaceAll(" Stk.", "").replace("§a", "");
-                String rawSellPrice = splitLastLine[1].replaceAll(" S.", "").replace("§a", "");
+            if (amount == 0) {
+                notifyBuyer(player, "§cUps, ein unerwarteter Fehler ist aufgetreten. (-198)");
+                return;
+            }
 
-                int sellPrice = verifyNumbers(rawSellPrice);
-                if (sellPrice == 0) {
-                    player.sendMessage(Main.getChatPrefix() + "§cUps, ein unerwarteter Fehler ist aufgetreten. (-197)");
-                    player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 1f);
-                    return;
-                }
+            int updatedMoney = currentMoney - sellPrice;
+            if (sellPrice > currentMoney || updatedMoney < 0) {
+                notifyBuyer(player, "§cDein Konto ist aktuell leider nicht ausreichend gedeckt.");
+                return;
+            }
 
-                int amount = verifyNumbers(rawAmount);
-                if (amount == 0) {
-                    player.sendMessage(Main.getChatPrefix() + "§cUps, ein unerwarteter Fehler ist aufgetreten. (-198)");
-                    player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 1f);
-                    return;
-                }
+            // possibly blocking name lookup, Bukkit rejects a blank name (nothing happened before either)
+            OfflinePlayer offlinePlayer;
+            try {
+                offlinePlayer = Bukkit.getOfflinePlayer(ownerName);
+            } catch (IllegalArgumentException e) {
+                return;
+            }
+            if (!offlinePlayer.hasPlayedBefore()) {
+                notifyBuyer(player, "§cDer Spieler war leider noch nie auf dem Server.");
+                return;
+            }
 
-                int updatedMoney = currentMoney - sellPrice;
-                if (sellPrice > currentMoney || updatedMoney < 0) {
-                    player.sendMessage(Main.getChatPrefix() + "§cDein Konto ist aktuell leider nicht ausreichend gedeckt.");
-                    player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 1f);
-                    return;
-                }
+            // pay first, so the goods are only taken out of the chest for a covered purchase
+            if (!PlayerCollection.tryWithdrawMoney(player, sellPrice)) {
+                notifyBuyer(player, "§cDein Konto ist aktuell leider nicht ausreichend gedeckt.");
+                return;
+            }
 
-                Material shopItem = Material.getMaterial(sign.getLine(2).replace("§a", ""));
-                OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(sign.getLine(1).replace("§6", ""));
-                if (offlinePlayer.getUniqueId() == null || !offlinePlayer.hasPlayedBefore()) {
-                    player.sendMessage(Main.getChatPrefix() + "§cDer Spieler war leider noch nie auf dem Server.");
-                    player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 1f);
-                    return;
-                }
+            MainThread.deliverOrRefund(player.getUniqueId(), sellPrice,
+                    () -> handOver(player, chestBlock, shopItem, amount, sellPrice, offlinePlayer, secondLine));
+        });
+    }
 
-                boolean successfullyRemoved = removeItems(chest, shopItem, amount);
-                if (!successfullyRemoved) {
-                    player.sendMessage(Main.getChatPrefix() + "§fDer Shop von §6" + secondLine + " §fist aktuell nicht ausreichend gefüllt.");
-                    player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 1f);
-                    return;
-                }
+    // main thread: takes the goods out of the chest (looked up again, it may be gone by now), the bookings run async
+    private static void handOver(Player player, Block chestBlock, @Nullable Material shopItem, int amount, int sellPrice, OfflinePlayer offlinePlayer, String secondLine) {
+        boolean successfullyRemoved = chestBlock.getState(false) instanceof Chest chest && removeItems(chest, shopItem, amount);
+        if (!successfullyRemoved) {
+            Tasks.async(() -> PlayerCollection.addMoney(player, sellPrice));
+            player.sendMessage(Main.getChatPrefix() + "§fDer Shop von §6" + secondLine + " §fist aktuell nicht ausreichend gefüllt.");
+            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 1f);
+            return;
+        }
 
-                PlayerCollection targetCollection = new PlayerCollection(offlinePlayer.getPlayer());
-                int targetMoney = targetCollection.getMoney();
-                targetCollection.updateMoney(targetMoney + sellPrice);
+        // by uuid, the shop owner may be offline
+        Tasks.async(() -> PlayerCollection.addMoney(offlinePlayer.getUniqueId(), sellPrice));
 
-                playerCollection.updateMoney(updatedMoney);
-                ItemStack itemStack = new ItemStack(shopItem, amount);
-                player.getInventory().addItem(itemStack);
-                Logger.console(String.format("%s bought %s(%d) from %s", player.getName(), shopItem.name(), amount, offlinePlayer.getPlayer().getName()));
+        player.getInventory().addItem(new ItemStack(shopItem, amount));
+        Logger.console(String.format("%s bought %s(%d) from %s", player.getName(), shopItem.name(), amount, offlinePlayer.getName()));
 
-                player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_TRADE, 1f, 1f);
-                player.sendMessage(Main.getChatPrefix() + "Du hast §6" + amount + " " + shopItem.name() + " §fvon §a" + offlinePlayer.getName() + " §ferworben.");
+        player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_TRADE, 1f, 1f);
+        player.sendMessage(Main.getChatPrefix() + "Du hast §6" + amount + " " + shopItem.name() + " §fvon §a" + offlinePlayer.getName() + " §ferworben.");
 
-                if (offlinePlayer.isOnline()) {
-                    offlinePlayer.getPlayer().playSound(player.getLocation(), Sound.ENTITY_VILLAGER_TRADE, 1f, 1f);
-                    offlinePlayer.getPlayer().sendMessage(Main.getChatPrefix() + "§a" + player.getName() + " §fhat aus deinem Shop §6"+ amount + " " + shopItem.name() + " §fgekauft.");
-                }
+        if (offlinePlayer.isOnline()) {
+            offlinePlayer.getPlayer().playSound(player.getLocation(), Sound.ENTITY_VILLAGER_TRADE, 1f, 1f);
+            offlinePlayer.getPlayer().sendMessage(Main.getChatPrefix() + "§a" + player.getName() + " §fhat aus deinem Shop §6"+ amount + " " + shopItem.name() + " §fgekauft.");
+        }
+    }
 
-            });
-
+    private static void notifyBuyer(Player player, String message) {
+        MainThread.run(() -> {
+            player.sendMessage(Main.getChatPrefix() + message);
+            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 1f);
         });
     }
 
     @EventHandler
     public void onLocalShopSignChange(SignChangeEvent event) {
         Player player = event.getPlayer();
-        String shopPrefixTitle = event.getLine(0);
+        String shopPrefixTitle = Text.section(event.line(0));
         if (shopPrefixTitle == null) return;
 
-        if ("§6Shop von".equalsIgnoreCase(shopPrefixTitle) && !event.getLine(1).equals("§6" + player.getName())) {
+        if (SHOP_TITLE.equalsIgnoreCase(shopPrefixTitle) && !("§6" + player.getName()).equals(Text.section(event.line(1)))) {
             event.setCancelled(true);
             player.sendMessage(Main.getChatPrefix() + "§cDu kannst keine fremden Shops anpassen.");
             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
@@ -181,8 +210,8 @@ public class CreateLocalShopListener implements Listener {
             return;
         }
 
-        int sellPrice = verifyNumbers(event.getLine(1));
-        int amount = verifyNumbers(event.getLine(2));
+        int sellPrice = verifyNumbers(Text.section(event.line(1)));
+        int amount = verifyNumbers(Text.section(event.line(2)));
 
         if (sellPrice <= 0 || sellPrice > 9999) {
             player.sendMessage(Main.getChatPrefix() + "§cDer Verkaufspreis muss zwischen 0 und 9999 §a" + Main.getCurrencyName() + " §cbetragen");
@@ -197,15 +226,13 @@ public class CreateLocalShopListener implements Listener {
         }
 
         Block signBlock = event.getBlock();
-        Block adjChest = null;
 
-        if (!(signBlock.getBlockData() instanceof WallSign)) {
+        if (!(signBlock.getBlockData() instanceof WallSign wallSign)) {
             event.getPlayer().sendMessage(Main.getChatPrefix() + "§cBitte platziere das Shop-Schild an der Vorderseite einer Truhe.");
             event.setCancelled(true);
             return;
         }
 
-        WallSign wallSign = (WallSign) signBlock.getBlockData();
         BlockFace attachedFace = wallSign.getFacing().getOppositeFace();
 
         Block attachedBlock = signBlock.getRelative(attachedFace);
@@ -215,15 +242,12 @@ public class CreateLocalShopListener implements Listener {
             return;
         }
 
-        adjChest = attachedBlock;
-
-        if (adjChest == null || !(adjChest.getState() instanceof Chest)) {
+        if (!(attachedBlock.getState() instanceof Chest chest)) {
             player.sendMessage(Main.getChatPrefix() + "§cBitte platziere das Shop-Schild an der Vorderseite einer normalen Truhe.");
             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
             return;
         }
 
-        Chest chest = (Chest) adjChest.getState();
         Material chestItem = hasOnlyOneMaterialType(chest) ;
         if (chestItem == null) {
             player.sendMessage(Main.getChatPrefix() + "§cDer Shop konnte nicht erstellt werden!");
@@ -239,17 +263,22 @@ public class CreateLocalShopListener implements Listener {
             return;
         }
 
-        event.setLine(0, "§6Shop von");
-        event.setLine(1, "§6" + player.getName());
-        event.setLine(2, "§a"+ chestItem.name());
-        String firstLetterOfCurrency = String.valueOf(Main.getCurrencyName().toCharArray()[0]);
-        event.setLine(3, String.format("§a%d Stk. §8- §a%d %s.", amount, sellPrice, firstLetterOfCurrency ));
+        event.line(0, Text.section(SHOP_TITLE));
+        event.line(1, Text.section("§6" + player.getName()));
+        event.line(2, Text.section("§a"+ chestItem.name()));
+        char firstLetterOfCurrency = Main.getCurrencyName().charAt(0);
+        event.line(3, Text.section(String.format("§a%d Stk. §8- §a%d %s.", amount, sellPrice, firstLetterOfCurrency)));
 
         player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f,2f);
         player.playSound(player.getLocation(), Sound.BLOCK_ANVIL_USE, 2f,2f);
     }
 
-    private int verifyNumbers(String rawNumber) {
+    // sign lines are compared as the legacy text of the front side
+    private static String line(Sign sign, int index) {
+        return Text.section(sign.getSide(Side.FRONT).line(index));
+    }
+
+    private static int verifyNumbers(String rawNumber) {
         if (rawNumber == null) return 0;
         try {
             return Integer.parseInt(rawNumber);
@@ -273,7 +302,8 @@ public class CreateLocalShopListener implements Listener {
         return firstMaterial;
     }
 
-    private static boolean removeItems(Chest chest, Material material, int amountToRemove) {
+    // main thread only
+    private static boolean removeItems(Chest chest, @Nullable Material material, int amountToRemove) {
         Inventory inventory = chest.getInventory();
         int remainingAmount = amountToRemove;
         for (ItemStack item : inventory.getContents()) {
@@ -294,10 +324,4 @@ public class CreateLocalShopListener implements Listener {
         return remainingAmount <= 0;
     }
 
-
-
 }
-
-
-
-

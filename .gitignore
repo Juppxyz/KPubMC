@@ -111,3 +111,17 @@ buildNumber.properties
 
 # Common working directory
 run/
+
+# Local test server (runtime data, worlds, logs, jars)
+server/
+
+# Local secrets (never commit)
+src/main/java/xyz/jupp/minecraft/utils/Secrets.java
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Claude Code agent worktrees
+.claude/worktrees/

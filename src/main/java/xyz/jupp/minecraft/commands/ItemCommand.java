@@ -11,43 +11,29 @@ import xyz.jupp.minecraft.utils.PermissionsUtil;
 
 public class ItemCommand implements CommandExecutor {
 
-
     @Override
     public boolean onCommand(@NotNull CommandSender commandSender, @NotNull Command command, @NotNull String s, @NotNull String[] args) {
-        if (commandSender instanceof Player) {
-            Player player = (Player) commandSender;
-            if (!PermissionsUtil.isPlayerAdmin(player)) {
-                PermissionsUtil.sendNoPermMsg(player);
-                return false;
-            } else {
-                if (args.length == 0) {
-                    player.sendMessage(Main.getChatPrefix() + "Mach das: /customItem <itemName>");
-                    return false;
-                }
-
-                String itemName = args[0].toLowerCase();
-
-
-                //leave switch for future items
-                switch (itemName) {
-                    case "sword":
-                        // Give the Sword of Lightning
-                        LightningSword lightningSword = new LightningSword();
-                        player.getInventory().addItem(lightningSword.getSword());
-                        player.sendMessage(Main.getChatPrefix() + "Du hast das STURMSCHWERT erhalten!");
-                        break;
-
-                    default:
-                        player.sendMessage(Main.getChatPrefix() + "Unbekanntes Item: " + itemName);
-                        break;
-                }
-
-
-                return true;
-
-
-            }
+        if (!(commandSender instanceof Player player)) {
+            return false;
         }
-        return false;
+        if (!PermissionsUtil.isPlayerAdmin(player)) {
+            PermissionsUtil.sendNoPermMsg(player);
+            return false;
+        }
+        if (args.length == 0) {
+            player.sendMessage(Main.getChatPrefix() + "Mach das: /customItem <itemName>");
+            return false;
+        }
+
+        String itemName = args[0].toLowerCase();
+
+        switch (itemName) {
+            case "sword" -> {
+                player.getInventory().addItem(new LightningSword().getSword());
+                player.sendMessage(Main.getChatPrefix() + "Du hast das STURMSCHWERT erhalten!");
+            }
+            default -> player.sendMessage(Main.getChatPrefix() + "Unbekanntes Item: " + itemName);
+        }
+        return true;
     }
 }
