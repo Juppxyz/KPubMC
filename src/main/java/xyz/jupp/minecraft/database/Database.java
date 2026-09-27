@@ -131,7 +131,34 @@ public final class Database {
                 player_uuid UUID,
                 created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
             )""",
-            "CREATE INDEX IF NOT EXISTS treasury_ledger_created_idx ON treasury_ledger (created_at)"
+            "CREATE INDEX IF NOT EXISTS treasury_ledger_created_idx ON treasury_ledger (created_at)",
+            // tax classes, activity for the economy measurement, daily snapshots and the price adjustment log
+            "ALTER TABLE market_items ADD COLUMN IF NOT EXISTS tax_class TEXT",
+            "ALTER TABLE players ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ",
+            """
+            CREATE TABLE IF NOT EXISTS economy_snapshots (
+                day            DATE PRIMARY KEY,
+                money_supply   BIGINT  NOT NULL,
+                active_players INTEGER NOT NULL,
+                treasury       BIGINT  NOT NULL,
+                trade_volume   BIGINT  NOT NULL,
+                factor         DOUBLE PRECISION NOT NULL,
+                note           TEXT    NOT NULL,
+                ai_summary     TEXT,
+                created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+            )""",
+            """
+            CREATE TABLE IF NOT EXISTS market_adjustments (
+                id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                day        DATE NOT NULL,
+                material   TEXT NOT NULL,
+                field      TEXT NOT NULL,
+                old_value  TEXT,
+                new_value  TEXT,
+                reason     TEXT NOT NULL,
+                source     TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )"""
     );
 
     private static volatile HikariDataSource dataSource;

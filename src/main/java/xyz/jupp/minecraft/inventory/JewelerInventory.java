@@ -7,8 +7,9 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import xyz.jupp.minecraft.economy.Taxes;
+import xyz.jupp.minecraft.economy.TaxClass;
 import xyz.jupp.minecraft.Main;
-import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.utils.Tasks;
 
 import static xyz.jupp.minecraft.utils.ItemStackUtil.createItemStack;
@@ -63,7 +64,7 @@ public class JewelerInventory {
     private static Inventory createNewJewelerShopInventory() {
         Inventory inventory = Menu.create(Menu.Type.JEWELER, 27, "§8Tresen des %s's".formatted(Main.getJewelerVillagerName()));
 
-        String currentTax = String.valueOf(Math.toIntExact(Math.round(ConfigManager.getManager().getTradeTax() * 100)));
+        String currentTax = String.valueOf(Math.round(Taxes.rate(TaxClass.LUXURY) * 100));
         String [] lores = {"§c+" + currentTax + "% Steuern"};
 
         ItemStack grayPane = createItemStack("§7---", Material.GRAY_STAINED_GLASS_PANE);

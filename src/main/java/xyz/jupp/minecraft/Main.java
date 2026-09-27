@@ -8,6 +8,7 @@ import xyz.jupp.minecraft.cache.WarpCache;
 import xyz.jupp.minecraft.commands.*;
 import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.database.Database;
+import xyz.jupp.minecraft.economy.Economy;
 import xyz.jupp.minecraft.economy.Market;
 import xyz.jupp.minecraft.economy.ShopViewListener;
 import xyz.jupp.minecraft.economy.Treasury;
@@ -122,6 +123,7 @@ public final class Main extends JavaPlugin {
         Logger.console("loaded " + warps + " warps and " + claimedChunks + " claimed chunks");
         Logger.console("init market..");
         Treasury.load();
+        Economy.load();
         Market.load();
         Logger.console("loaded " + Market.all().size() + " market items, " + Market.dailyOffers().size() + " daily offers");
         registerCommands();

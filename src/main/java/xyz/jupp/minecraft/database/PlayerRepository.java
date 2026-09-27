@@ -47,6 +47,11 @@ public final class PlayerRepository {
         }
     }
 
+    /** Remembers the login for the economy measurement (active players). */
+    public static void touch(@NotNull UUID uuid) {
+        Database.update("UPDATE players SET last_seen = now() WHERE uuid = ?", uuid);
+    }
+
     public static @Nullable PlayerData getPlayer(@NotNull UUID uuid) {
         return Database.queryOne("SELECT * FROM players WHERE uuid = ?", PlayerRepository::map, uuid);
     }

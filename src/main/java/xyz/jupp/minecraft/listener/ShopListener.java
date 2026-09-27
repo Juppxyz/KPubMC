@@ -16,6 +16,7 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.jetbrains.annotations.Nullable;
+import xyz.jupp.minecraft.economy.TaxClass;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.PlayerCacheObject;
@@ -227,7 +228,7 @@ public class ShopListener implements Listener {
 
         // price plus trade tax, the tax goes to the state treasury
         Tasks.async(() -> {
-            Taxes.Purchase purchase = Taxes.chargePurchase(player.getUniqueId(), offer.getPrice());
+            Taxes.Purchase purchase = Taxes.chargePurchase(player.getUniqueId(), offer.getPrice(), TaxClass.LUXURY);
             if (!purchase.success()) {
                 MainThread.run(() -> {
                     player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
@@ -254,8 +255,10 @@ public class ShopListener implements Listener {
 
         int costs = BlackMarketHandler.getCurrentCosts().get();
 
+        // luxury tax on top, it goes to the state treasury
         Tasks.async(() -> {
-            if (!PlayerRepository.tryWithdrawMoney(player, costs)) {
+            Taxes.Purchase purchase = Taxes.chargePurchase(player.getUniqueId(), costs, TaxClass.LUXURY);
+            if (!purchase.success()) {
                 MainThread.run(() -> {
                     player.playSound(player, Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
                     player.sendMessage(Main.getBlackMarketDealerVillagerName() + " §7» §f§oPuh, dafür will ich mehr Schillinge als du hast, verzieh dich!");
@@ -263,9 +266,10 @@ public class ShopListener implements Listener {
                 return;
             }
 
-            MainThread.deliverOrRefund(player.getUniqueId(), costs, () -> {
+            MainThread.deliverOrRefund(player.getUniqueId(), purchase.total(), () -> {
                 player.getInventory().addItem(offeredItem);
-                player.sendMessage(Main.getChatPrefix() + "§c-%d%s".formatted(costs, Main.getCurrencyName()));
+                player.sendMessage(Main.getChatPrefix() + "§c-%d %s §8(%d + %d Steuer → Staatskasse)".formatted(
+                        purchase.total(), Main.getCurrencyName(), purchase.net(), purchase.tax()));
                 player.sendMessage(Main.getBlackMarketDealerVillagerName() + " §7» §f§oBesuche mich gerne bald wieder! Viel Spaß damit.");
                 player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.4f,0.2f);
                 player.playSound(player.getLocation(), Sound.ENTITY_ITEM_PICKUP, 2f,2f);

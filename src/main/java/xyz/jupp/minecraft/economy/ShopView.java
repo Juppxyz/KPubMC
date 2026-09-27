@@ -166,7 +166,10 @@ public final class ShopView implements InventoryHolder {
 
         inventory.setItem(SLOT_BALANCE, named(Material.GOLD_NUGGET, "§fDein Konto: " + Main.getCurrencyName(balance), List.of()));
         inventory.setItem(SLOT_TREASURY, named(Material.GOLD_BLOCK, "§6Staatskasse: " + Main.getCurrencyName((int) Math.min(Integer.MAX_VALUE, Treasury.balance())),
-                List.of("§7Alle Steuern fließen hierhin.", "§7Handelssteuer: §a" + percent(Taxes.tradeRate()), "§8/staatskasse")));
+                List.of("§7Alle Steuern fließen hierhin.",
+                        "§7Steuern: §a" + classRates(),
+                        "§7Konjunktur: " + factorText(),
+                        "§8/staatskasse")));
     }
 
 
@@ -237,8 +240,9 @@ public final class ShopView implements InventoryHolder {
         lore.add("§7Paket: §f" + item.amount() + " Stück");
         if (item.buyable()) {
             int net = item.buyTotal(1, daily ? Market.dailyDiscount() : 0);
-            int tax = Taxes.tradeTaxOn(net);
+            int tax = Taxes.taxOn(net, item.taxClass());
             lore.add("§7Kaufen: " + Main.getCurrencyName(net + tax) + " §8(" + net + " + " + tax + " Steuer)");
+            lore.add("§7Steuerklasse: §f" + item.taxClass().label() + " §8(" + percent(Taxes.rate(item.taxClass())) + ")");
         } else {
             lore.add("§7Kaufen: §8nicht hier" + (item.description() != null ? " §8(" + item.description() + ")" : ""));
         }
@@ -271,15 +275,29 @@ public final class ShopView implements InventoryHolder {
                 "§7Ankaufpreise steigen nie über",
                 "§7den Basispreis.")));
 
-        List<String> taxes = new ArrayList<>(List.of(
-                "§fHandel: §a" + percent(Taxes.tradeRate()) + " §7(Käufe, Abheben)",
-                "§fTod: §a" + percent(Taxes.deathRate()) + " §7(ab 250 Schilling)",
-                "§fNether-Transfer §7(gestaffelt):"));
+        List<String> taxes = new ArrayList<>();
+        for (TaxClass taxClass : TaxClass.values()) {
+            taxes.add("§f" + taxClass.label() + ": §a" + percent(Taxes.rate(taxClass)) + " §7" + switch (taxClass) {
+                case BASIC -> "(Nahrung, Farm)";
+                case STANDARD -> "(Blöcke, Rohstoffe, Abheben)";
+                case LUXURY -> "(Seltenes, Juwelier, Schwarzmarkt)";
+            });
+        }
+        taxes.add("§fTod: §a" + percent(Taxes.deathRate()) + " §7(ab 250 Schilling)");
+        taxes.add("§fNether-Transfer §7(gestaffelt):");
         for (TaxBracket bracket : Taxes.netherBrackets()) {
             taxes.add("§7  ab " + bracket.from() + ": §a" + percent(bracket.rate()));
         }
         taxes.add("§8Alle Steuern gehen an die Staatskasse.");
         inventory.setItem(22, named(Material.PAPER, "§cSteuern", taxes));
+
+        inventory.setItem(31, named(Material.COMPARATOR, "§bKonjunktur " + factorText(), List.of(
+                "§7Jeden Tag um 0 Uhr wird die Geldmenge",
+                "§7pro aktivem Spieler gemessen.",
+                "§7Wächst sie zu schnell, steigen die Steuern,",
+                "§7bei Flaute oder voller Staatskasse sinken sie.",
+                "§7Faktor: §f×" + String.format(java.util.Locale.GERMANY, "%.2f", Economy.factor()) + " §8(auf alle Steuersätze)",
+                "§8" + Economy.note())));
 
         ZonedDateTime now = ZonedDateTime.now(Market.ZONE);
         Duration untilReset = Duration.between(now, LocalDate.now(Market.ZONE).plusDays(1).atStartOfDay(Market.ZONE));
@@ -324,7 +342,7 @@ public final class ShopView implements InventoryHolder {
             for (int i = 0; i < options.size() && i < BUY_SLOTS.length; i++) {
                 int bundles = options.get(i);
                 int net = item.buyTotal(bundles, discount);
-                int tax = Taxes.tradeTaxOn(net);
+                int tax = Taxes.taxOn(net, item.taxClass());
                 List<String> buttonLore = new ArrayList<>();
                 buttonLore.add("§7" + bundles + (bundles == 1 ? " Paket" : " Pakete") + " à " + item.amount() + " Stück");
                 buttonLore.add("§7Preis: " + Main.getCurrencyName(net + tax) + " §8(" + net + " + " + tax + " Steuer)");
@@ -380,7 +398,7 @@ public final class ShopView implements InventoryHolder {
     private void renderRandom() {
         inventory.setItem(SLOT_BACK, named(Material.ARROW, "§f◀ Zurück", List.of("§7zu " + tab.label)));
         int net = Market.randomItemPrice();
-        int tax = Taxes.tradeTaxOn(net);
+        int tax = Taxes.taxOn(net, TaxClass.STANDARD);
         inventory.setItem(SLOT_GOOD, named(Material.EXPERIENCE_BOTTLE, "§5§oZufall", List.of(
                 "§7Du bekommst ein zufälliges Paket",
                 "§7aus den heutigen Tagesangeboten.",
@@ -565,7 +583,7 @@ public final class ShopView implements InventoryHolder {
         Tasks.async(() -> {
             MarketRepository.Trade trade;
             try {
-                trade = MarketRepository.buyFixed(player.getUniqueId(), item.material(), item.amount(), net);
+                trade = MarketRepository.buyFixed(player.getUniqueId(), item.material(), item.amount(), net, TaxClass.STANDARD);
             } catch (RuntimeException e) {
                 unavailable(player, e, null, 0);
                 return;
@@ -693,6 +711,14 @@ public final class ShopView implements InventoryHolder {
         if (!lore.isEmpty()) meta.lore(Text.lore(lore));
         item.setItemMeta(meta);
         return item;
+    }
+
+    static String classRates() {
+        return percent(Taxes.rate(TaxClass.BASIC)) + "§8/§a" + percent(Taxes.rate(TaxClass.STANDARD)) + "§8/§a" + percent(Taxes.rate(TaxClass.LUXURY));
+    }
+
+    static String factorText() {
+        return "§f×" + String.format(java.util.Locale.GERMANY, "%.2f", Economy.factor()) + " " + Economy.trendSymbol();
     }
 
     static String percent(double rate) {

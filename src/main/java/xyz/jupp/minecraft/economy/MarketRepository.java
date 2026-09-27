@@ -45,10 +45,11 @@ public final class MarketRepository {
             Map.entry("kaufbar", "buyable"),
             Map.entry("verkaufbar", "sellable"),
             Map.entry("name", "display_name"),
-            Map.entry("beschreibung", "description"));
+            Map.entry("beschreibung", "description"),
+            Map.entry("steuerklasse", "tax_class"));
 
     private static final String COLUMNS = "material, category, display_name, description, amount, base_price, min_price, "
-            + "max_price, elasticity, sell_ratio, buyable, sellable, core, rotation_weight, enabled, demand";
+            + "max_price, elasticity, sell_ratio, buyable, sellable, core, rotation_weight, enabled, demand, tax_class";
 
     private static @Nullable MarketItem map(ResultSet row) throws SQLException {
         Material material = Material.matchMaterial(row.getString("material"));
@@ -72,7 +73,8 @@ public final class MarketRepository {
                 row.getBoolean("core"),
                 row.getInt("rotation_weight"),
                 row.getBoolean("enabled"),
-                row.getDouble("demand"));
+                row.getDouble("demand"),
+                TaxClass.parse(row.getString("tax_class")));
     }
 
 
@@ -90,11 +92,12 @@ public final class MarketRepository {
 
     /** Inserts the item unless the material already exists; true if inserted. */
     public static boolean insert(@NotNull MarketItem item) {
-        return Database.update("INSERT INTO market_items (" + COLUMNS + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+        return Database.update("INSERT INTO market_items (" + COLUMNS + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
                         + "ON CONFLICT (material) DO NOTHING",
                 item.material().name(), item.category().name(), item.displayName(), item.description(), item.amount(),
                 item.basePrice(), item.minPrice(), item.maxPrice(), item.elasticity(), item.sellRatio(), item.buyable(),
-                item.sellable(), item.core(), item.rotationWeight(), item.enabled(), item.demand()) > 0;
+                item.sellable(), item.core(), item.rotationWeight(), item.enabled(), item.demand(),
+                item.taxClassOverride() == null ? null : item.taxClassOverride().name()) > 0;
     }
 
     /** Sets one editable column (see {@link #EDITABLE_COLUMNS}); false if the material is not in the catalog. */
@@ -156,7 +159,7 @@ public final class MarketRepository {
             if (item == null || !item.enabled() || !item.buyable()) return new Trade(Outcome.UNAVAILABLE, 0, 0, item);
 
             int net = item.buyTotal(bundles, discount);
-            int tax = Taxes.tradeTaxOn(net);
+            int tax = Taxes.taxOn(net, item.taxClass());
             if (expectedNet != null && expectedNet != net) return new Trade(Outcome.PRICE_CHANGED, net, tax, item);
 
             if (Database.update(connection, "UPDATE players SET money = money - ? WHERE uuid = ? AND money >= ?",
@@ -193,8 +196,8 @@ public final class MarketRepository {
     }
 
     /** A purchase with a fixed price that does not move the market (random item). */
-    public static Trade buyFixed(@NotNull UUID player, @NotNull Material material, int quantity, int net) {
-        int tax = Taxes.tradeTaxOn(net);
+    public static Trade buyFixed(@NotNull UUID player, @NotNull Material material, int quantity, int net, @NotNull TaxClass taxClass) {
+        int tax = Taxes.taxOn(net, taxClass);
         Trade trade = Database.inTransaction(connection -> {
             if (Database.update(connection, "UPDATE players SET money = money - ? WHERE uuid = ? AND money >= ?",
                     net + tax, player, net + tax) == 0) {
@@ -213,6 +216,31 @@ public final class MarketRepository {
         Database.update(connection, "INSERT INTO market_transactions (player_uuid, material, kind, quantity, net, tax) VALUES (?, ?, ?, ?, ?, ?)",
                 player, material.name(), kind, quantity, net, tax);
     }
+
+    /* adjustment log: every change by the AI review or /shopadmin set */
+
+    public record Adjustment(long id, LocalDate day, String material, String field, String oldValue, String newValue,
+                             String reason, String source) {}
+
+    private static Adjustment mapAdjustment(ResultSet row) throws SQLException {
+        return new Adjustment(row.getLong("id"), row.getDate("day").toLocalDate(), row.getString("material"), row.getString("field"),
+                row.getString("old_value"), row.getString("new_value"), row.getString("reason"), row.getString("source"));
+    }
+
+    public static void logAdjustment(@NotNull LocalDate day, @NotNull Material material, @NotNull String column,
+                                     @Nullable Object oldValue, @Nullable Object newValue, @NotNull String reason, @NotNull String source) {
+        Database.update("INSERT INTO market_adjustments (day, material, field, old_value, new_value, reason, source) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                Date.valueOf(day), material.name(), column, MarketReview.text(oldValue), MarketReview.text(newValue), reason, source);
+    }
+
+    public static List<Adjustment> recentAdjustments(int limit) {
+        return Database.query("SELECT * FROM market_adjustments ORDER BY id DESC LIMIT ?", MarketRepository::mapAdjustment, limit);
+    }
+
+    public static @Nullable Adjustment adjustment(long id) {
+        return Database.queryOne("SELECT * FROM market_adjustments WHERE id = ?", MarketRepository::mapAdjustment, id);
+    }
+
 
     /** Traded quantities per material in the last days (for /shopadmin info). */
     public static List<long[]> volumeSince(@NotNull Material material, int days) {

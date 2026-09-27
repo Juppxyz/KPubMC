@@ -1,6 +1,10 @@
 {
   "serverMOTD": "§6§lKlotzscherPub §f§lMinecraft Server",
-  "tradeTax": 0.24,
+  "taxClasses": {
+    "BASIC": 0.1,
+    "STANDARD": 0.2,
+    "LUXURY": 0.35
+  },
   "deathTax": 0.15,
   "netherTransferTaxBrackets": [
     {
@@ -23,5 +27,11 @@
   "dailyOffers": 7,
   "dailyDiscount": 0.15,
   "demandHalfLifeHours": 6,
+  "economyFactorMin": 0.7,
+  "economyFactorMax": 1.3,
+  "economyTargetGrowth": 0.02,
+  "treasuryTargetPerPlayer": 20000,
+  "aiReview": true,
+  "openAiModel": "gpt-5-mini",
   "databaseUrl": "jdbc:postgresql://localhost:5432/kpubmc?user=kpubmc&password=CHANGE_ME"
 }

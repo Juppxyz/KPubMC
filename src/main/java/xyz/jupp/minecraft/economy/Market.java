@@ -11,6 +11,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.config.ConfigManager;
+import xyz.jupp.minecraft.utils.TabListUtil;
 import xyz.jupp.minecraft.utils.Tasks;
 import xyz.jupp.minecraft.utils.Text;
 
@@ -28,6 +29,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 
 /**
@@ -47,6 +49,7 @@ public final class Market {
     private static final Map<Material, MarketItem> items = new ConcurrentHashMap<>();
     private static volatile List<Material> dailyOffers = List.of();
     private static volatile LocalDate offersDay = null;
+    private static final AtomicBoolean updating = new AtomicBoolean();
 
 
     /* lifecycle (blocking parts run in onEnable or on workers) */
@@ -74,7 +77,7 @@ public final class Market {
     public static void startTasks() {
         long period = 20L * 60 * DECAY_INTERVAL_MINUTES;
         Bukkit.getScheduler().runTaskTimerAsynchronously(Main.getInstance(), Market::decay, period, period);
-        Bukkit.getScheduler().runTaskTimerAsynchronously(Main.getInstance(), Market::rotateOnNewDay, 20L * 60, 20L * 60);
+        Bukkit.getScheduler().runTaskTimerAsynchronously(Main.getInstance(), Market::dailyUpdate, 20L * 30, 20L * 60);
     }
 
     private static void decay() {
@@ -85,17 +88,34 @@ public final class Market {
         Tasks.sync(ShopView::refreshAll);
     }
 
-    private static void rotateOnNewDay() {
-        if (LocalDate.now(ZONE).equals(offersDay)) return;
-        List<Material> offers = rotate();
-        Tasks.sync(() -> {
-            if (!offers.isEmpty()) {
-                Component announcement = Text.section(Main.getChatPrefix() + "§6Der Händler hat neue Tagesangebote! §8(§a-"
-                        + Math.round(dailyDiscount() * 100) + "%§8)");
-                Bukkit.broadcast(announcement);
+    /**
+     * The daily update (worker thread, checked every minute): measure the economy and set the tax factor, let the AI
+     * review the catalog, then draw the new daily offers. Each step runs once per day, also after a restart.
+     */
+    private static void dailyUpdate() {
+        LocalDate today = LocalDate.now(ZONE);
+        if (today.equals(offersDay) && Economy.isMeasured(today)) return;
+        if (!updating.compareAndSet(false, true)) return;
+        try {
+            if (!Economy.isMeasured(today)) {
+                Economy.Snapshot snapshot = Economy.measure(today);
+                reload();
+                MarketReview.run(today, snapshot);
             }
-            ShopView.refreshAll();
-        });
+            boolean newOffers = !today.equals(offersDay);
+            List<Material> offers = newOffers ? rotate() : List.of();
+            Tasks.sync(() -> {
+                if (!offers.isEmpty()) {
+                    Component announcement = Text.section(Main.getChatPrefix() + "§6Der Händler hat neue Tagesangebote! §8(§a-"
+                            + Math.round(dailyDiscount() * 100) + "%§8)");
+                    Bukkit.broadcast(announcement);
+                }
+                ShopView.refreshAll();
+                TabListUtil.updateTabForAll();
+            });
+        } finally {
+            updating.set(false);
+        }
     }
 
     /** Draws today's offers from the rotation pool and stores them (blocking). */
@@ -242,7 +262,8 @@ public final class Market {
                 !json.has("core") || json.get("core").getAsBoolean(),
                 json.has("weight") ? json.get("weight").getAsInt() : 1,
                 true,
-                0);
+                0,
+                json.has("taxClass") ? TaxClass.parse(json.get("taxClass").getAsString()) : null);
     }
 
     public static double defaultElasticity(Category category) {

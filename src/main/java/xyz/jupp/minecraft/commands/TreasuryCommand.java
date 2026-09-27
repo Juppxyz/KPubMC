@@ -4,6 +4,8 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.jetbrains.annotations.NotNull;
+import xyz.jupp.minecraft.economy.TaxClass;
+import xyz.jupp.minecraft.economy.Economy;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.economy.Taxes;
 import xyz.jupp.minecraft.economy.Treasury;
@@ -13,6 +15,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 // /staatskasse: balance and inflows of the state treasury
@@ -31,7 +34,15 @@ public class TreasuryCommand implements CommandExecutor {
             for (Treasury.Source source : Treasury.Source.values()) {
                 lines.add("§8» §7" + source.label() + "§8: §a" + day.getOrDefault(source, 0L) + " §8/ §a" + week.getOrDefault(source, 0L));
             }
-            lines.add("§7Handelssteuer aktuell: §a" + Math.round(Taxes.tradeRate() * 100) + "%");
+            lines.add("§fSteuern aktuell§8:");
+            for (TaxClass taxClass : TaxClass.values()) {
+                lines.add("§8» §7" + taxClass.label() + "§8: §a" + Math.round(Taxes.rate(taxClass) * 100) + "%");
+            }
+            lines.add("§8» §7Tod§8: §a" + Math.round(Taxes.deathRate() * 100) + "% §8| §7Transfer§8: §abis " + Math.round(Taxes.topNetherRate() * 100) + "%");
+            lines.add("§fKonjunktur§8: §f×" + String.format(Locale.GERMANY, "%.2f", Economy.factor()) + " " + Economy.trendSymbol()
+                    + " §8(" + Economy.note() + ")");
+            String report = Economy.latestAiSummary();
+            if (report != null) lines.add("§fWirtschaftsbericht§8: §7§o" + report);
             return lines;
         }, lines -> lines.forEach(sender::sendMessage));
         return true;

@@ -27,8 +27,14 @@ public record MarketItem(
         boolean core,
         int rotationWeight,
         boolean enabled,
-        double demand
+        double demand,
+        @Nullable TaxClass taxClassOverride
 ) {
+
+    /** The item's own tax class, else the default of its category. */
+    public TaxClass taxClass() {
+        return taxClassOverride != null ? taxClassOverride : TaxClass.forCategory(category);
+    }
 
     public int effectiveMinPrice() {
         return minPrice != null ? minPrice : Math.max(1, (int) Math.ceil(basePrice * 0.25));
@@ -79,7 +85,7 @@ public record MarketItem(
 
     public MarketItem withDemand(double newDemand) {
         return new MarketItem(material, category, displayName, description, amount, basePrice, minPrice, maxPrice,
-                elasticity, sellRatio, buyable, sellable, core, rotationWeight, enabled, newDemand);
+                elasticity, sellRatio, buyable, sellable, core, rotationWeight, enabled, newDemand, taxClassOverride);
     }
 
 }

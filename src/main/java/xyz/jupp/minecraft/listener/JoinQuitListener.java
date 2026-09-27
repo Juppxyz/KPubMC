@@ -31,6 +31,7 @@ public class JoinQuitListener implements Listener {
     public void onPreLogin(AsyncPlayerPreLoginEvent event) {
         UUID uuid = event.getUniqueId();
         PlayerRepository.createIfAbsent(uuid);
+        PlayerRepository.touch(uuid);
         if (event.getLoginResult() == AsyncPlayerPreLoginEvent.Result.ALLOWED) {
             CacheHandler.getInstance().preloadPlayer(uuid);
         }

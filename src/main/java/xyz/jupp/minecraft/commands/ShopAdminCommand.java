@@ -10,16 +10,20 @@ import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.database.DatabaseException;
 import xyz.jupp.minecraft.economy.Category;
+import xyz.jupp.minecraft.economy.Economy;
 import xyz.jupp.minecraft.economy.Market;
 import xyz.jupp.minecraft.economy.MarketItem;
 import xyz.jupp.minecraft.economy.MarketRepository;
 import xyz.jupp.minecraft.economy.ShopView;
+import xyz.jupp.minecraft.economy.TaxClass;
 import xyz.jupp.minecraft.utils.PermissionsUtil;
 import xyz.jupp.minecraft.utils.Tasks;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 import java.util.function.Supplier;
 
@@ -28,7 +32,7 @@ import java.util.function.Supplier;
  */
 public class ShopAdminCommand implements TabExecutor {
 
-    private static final List<String> SUBCOMMANDS = List.of("info", "set", "add", "remove", "rotate", "reset", "reload");
+    private static final List<String> SUBCOMMANDS = List.of("info", "set", "add", "remove", "rotate", "reset", "reload", "verlauf", "undo");
 
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
@@ -66,6 +70,8 @@ public class ShopAdminCommand implements TabExecutor {
                 }, "§fNachfrage zurückgesetzt.");
             }
             case "reload" -> change(sender, () -> true, "§fKatalog neu geladen.");
+            case "verlauf" -> history(sender);
+            case "undo" -> undo(sender, args);
             default -> help(sender);
         }
         return true;
@@ -80,6 +86,8 @@ public class ShopAdminCommand implements TabExecutor {
         sender.sendMessage("§8» §a/shopadmin rotate §8- neue Tagesangebote ziehen");
         sender.sendMessage("§8» §a/shopadmin reset <Material|alle> §8- Nachfrage zurücksetzen");
         sender.sendMessage("§8» §a/shopadmin reload §8- nach Änderungen in der Datenbank");
+        sender.sendMessage("§8» §a/shopadmin verlauf §8- letzte Anpassungen (KI und Admins)");
+        sender.sendMessage("§8» §a/shopadmin undo <Nr> §8- Anpassung rückgängig machen");
     }
 
     private static void info(CommandSender sender, Material material) {
@@ -122,7 +130,80 @@ public class ShopAdminCommand implements TabExecutor {
             sender.sendMessage(Main.getChatPrefix() + "§cUngültiger Wert: §7" + e.getMessage());
             return;
         }
-        change(sender, () -> MarketRepository.update(material, column, value), "§f" + material + ": §a" + args[2] + " §f= §a" + raw);
+        String admin = sender.getName();
+        change(sender, () -> {
+            Object oldValue = currentValue(material, column);
+            if (!MarketRepository.update(material, column, value)) return false;
+            MarketRepository.logAdjustment(LocalDate.now(Market.ZONE), material, column, oldValue, value, "per /shopadmin set", admin);
+            return true;
+        }, "§f" + material + ": §a" + args[2] + " §f= §a" + raw);
+    }
+
+    // value before a change, for the history (worker thread, reloads the catalog first)
+    private static @Nullable Object currentValue(Material material, String column) {
+        Market.reload();
+        MarketItem item = Market.get(material);
+        if (item == null) return null;
+        return switch (column) {
+            case "base_price" -> item.basePrice();
+            case "min_price" -> item.minPrice();
+            case "max_price" -> item.maxPrice();
+            case "amount" -> item.amount();
+            case "sell_ratio" -> item.sellRatio();
+            case "elasticity" -> item.elasticity();
+            case "category" -> item.category().name();
+            case "core" -> item.core();
+            case "rotation_weight" -> item.rotationWeight();
+            case "enabled" -> item.enabled();
+            case "buyable" -> item.buyable();
+            case "sellable" -> item.sellable();
+            case "display_name" -> item.displayName();
+            case "description" -> item.description();
+            case "tax_class" -> item.taxClassOverride() == null ? null : item.taxClassOverride().name();
+            default -> null;
+        };
+    }
+
+    private static void history(CommandSender sender) {
+        Tasks.supplyAsync(() -> {
+            List<String> lines = new ArrayList<>();
+            lines.add("§8=-- §aAnpassungen §8--=");
+            String report = Economy.latestAiSummary();
+            if (report != null) lines.add("§7KI-Bericht: §o" + report);
+            for (MarketRepository.Adjustment adjustment : MarketRepository.recentAdjustments(12)) {
+                lines.add("§8#" + adjustment.id() + " §7" + adjustment.day() + " §f" + adjustment.material() + " §7" + fieldName(adjustment.field())
+                        + " §c" + adjustment.oldValue() + " §7→ §a" + adjustment.newValue() + " §8(" + adjustment.source() + ": " + adjustment.reason() + ")");
+            }
+            if (lines.size() == 1) lines.add("§7Noch keine Anpassungen.");
+            return lines;
+        }, lines -> lines.forEach(sender::sendMessage));
+    }
+
+    private static void undo(CommandSender sender, String[] args) {
+        long id;
+        try {
+            id = Long.parseLong(args.length > 1 ? args[1].replace("#", "") : "");
+        } catch (NumberFormatException e) {
+            sender.sendMessage(Main.getChatPrefix() + "§c/shopadmin undo <Nr> §8(Nr aus /shopadmin verlauf)");
+            return;
+        }
+        String admin = sender.getName();
+        run(sender, () -> {
+            MarketRepository.Adjustment adjustment = MarketRepository.adjustment(id);
+            Material material = adjustment == null ? null : Material.matchMaterial(adjustment.material());
+            if (material == null) return "§cAnpassung #" + id + " nicht gefunden.";
+            Object restored = parse(adjustment.field(), adjustment.oldValue());
+            Object current = currentValue(material, adjustment.field());
+            MarketRepository.update(material, adjustment.field(), restored);
+            MarketRepository.logAdjustment(LocalDate.now(Market.ZONE), material, adjustment.field(), current, restored, "Rückgängig #" + id, admin);
+            Market.reload();
+            return "§f" + material + " " + fieldName(adjustment.field()) + " §fist wieder §a" + adjustment.oldValue() + "§f.";
+        });
+    }
+
+    private static String fieldName(String column) {
+        return MarketRepository.EDITABLE_COLUMNS.entrySet().stream().filter(entry -> entry.getValue().equals(column))
+                .map(Map.Entry::getKey).findFirst().orElse(column);
     }
 
     private static @Nullable Object parse(String column, String raw) {
@@ -142,6 +223,12 @@ public class ShopAdminCommand implements TabExecutor {
                 yield category.name();
             }
             case "display_name", "description" -> none ? null : raw.replace('&', '§');
+            case "tax_class" -> {
+                if (none) yield null;
+                TaxClass taxClass = TaxClass.parse(raw);
+                if (taxClass == null) throw new IllegalArgumentException("grundbedarf, standard, luxus oder auto");
+                yield taxClass.name();
+            }
             default -> throw new IllegalArgumentException(column);
         };
     }
@@ -168,7 +255,7 @@ public class ShopAdminCommand implements TabExecutor {
             return;
         }
         MarketItem item = new MarketItem(material, category, null, null, amount, price, null, null,
-                Market.defaultElasticity(category), 0.5, true, false, true, 1, true, 0);
+                Market.defaultElasticity(category), 0.5, true, false, true, 1, true, 0, null);
         change(sender, () -> MarketRepository.insert(item), "§f" + material + " ist im Katalog §8(verkaufbar per set ... verkaufbar ja)§f.");
     }
 
@@ -196,6 +283,8 @@ public class ShopAdminCommand implements TabExecutor {
                 return work.get();
             } catch (DatabaseException e) {
                 return "§cDatenbank-Fehler: §7" + e.getMessage();
+            } catch (RuntimeException e) {
+                return "§cFehler: §7" + e.getMessage();
             }
         }, message -> {
             sender.sendMessage(Main.getChatPrefix() + message);
