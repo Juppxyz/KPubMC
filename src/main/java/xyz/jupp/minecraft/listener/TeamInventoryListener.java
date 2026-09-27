@@ -35,7 +35,7 @@ public class TeamInventoryListener implements Listener {
     // same price that /team neu announces and checks
     public static final int TEAM_CREATION_COST = 2500;
     // XP level the founder needs, it is not used up
-    public static final int TEAM_CREATION_LEVEL = 40;
+    public static final int TEAM_CREATION_LEVEL = 30;
 
     private static final Set<Menu.Type> TEAM_MENUS = EnumSet.of(
             Menu.Type.TEAM_CREATE, Menu.Type.TEAM_MAIN, Menu.Type.TEAM_ROLES, Menu.Type.TEAM_INVITE, Menu.Type.TEAM_AREA);
