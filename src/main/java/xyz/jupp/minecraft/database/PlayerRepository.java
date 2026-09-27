@@ -137,6 +137,12 @@ public final class PlayerRepository {
         log().info("unset jail for {}", uuid);
     }
 
+    /** Wanted until the given time (the same end field the escape uses). */
+    public static void setWantedUntil(@NotNull UUID uuid, long wantedEnd) {
+        Database.update("UPDATE players SET is_wanted = TRUE, jail_end = ? WHERE uuid = ?", wantedEnd, uuid);
+        log().info("set wanted for {} until {}", uuid, wantedEnd);
+    }
+
     public static void setIsWanted(@NotNull UUID uuid, boolean isWanted) {
         Database.update("UPDATE players SET is_wanted = ? WHERE uuid = ?", isWanted, uuid);
         log().info("set wanted for {} to {}", uuid, isWanted);

@@ -80,6 +80,21 @@ public final class JailHandler {
     }
 
 
+    /** Wanted for the given hours (e.g. caught at the black market), with the usual broadcast. */
+    public static void markWanted(@NotNull Player player, int hours, @NotNull String reason) {
+        PlayerCacheObject pco = cache(player);
+        wantedPlayers.add(player.getUniqueId());
+        long wantedEnd = System.currentTimeMillis() + hours * 60L * 60L * 1000L;
+        offMainThread(() -> {
+            synchronized (LOCK) {
+                pco.setWantedUntil(wantedEnd);
+            }
+            refreshPlayerName(player, pco);
+        });
+        playerWantedBroadcast(player, reason);
+    }
+
+
     private static void refreshPlayerName(@NotNull Player player, @NotNull PlayerCacheObject pco) {
         onMainThread(() -> {
             String finalName = teamFormattedName(player, pco);
@@ -236,6 +251,17 @@ public final class JailHandler {
                     wantedPlayers.add(player.getUniqueId());
                 } else {
                     wantedPlayers.remove(player.getUniqueId());
+                }
+
+                // a wanted status ends when its time is over
+                if (pco.isWanted() && !pco.isJail() && pco.getJailEnd() > 0 && now >= pco.getJailEnd()) {
+                    synchronized (LOCK) {
+                        pco.unsetJail(false);
+                    }
+                    wantedPlayers.remove(player.getUniqueId());
+                    refreshPlayerName(player, pco);
+                    onMainThread(() -> player.sendMessage(Main.getChatPrefix() + "§aDie Fahndung nach dir wurde eingestellt."));
+                    continue;
                 }
 
                 if (pco.isJail()) {

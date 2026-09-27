@@ -6,10 +6,6 @@ import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
-import xyz.jupp.minecraft.economy.Taxes;
-import xyz.jupp.minecraft.economy.TaxClass;
-import xyz.jupp.minecraft.Main;
-import xyz.jupp.minecraft.utils.BlackMarketHandler;
 import xyz.jupp.minecraft.utils.Text;
 
 import java.util.ArrayList;
@@ -41,9 +37,6 @@ abstract class BlackMarketItem implements CustomItemsInterface {
         meta.customName(Text.of(itemName));
 
         List<String> lore = new ArrayList<>(baseLore);
-        int net = BlackMarketHandler.getCurrentCosts().get();
-        int tax = Taxes.taxOn(net, TaxClass.LUXURY);
-        lore.add("§fPreis: " + Main.getCurrencyName(net + tax) + " §8(inkl. " + tax + " Steuer)");
         meta.lore(Text.lore(lore));
 
         item.setItemMeta(meta);

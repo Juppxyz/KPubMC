@@ -157,6 +157,13 @@ public class PlayerCacheObject {
     public boolean isWanted() {
         return isWanted;
     }
+    // wanted for a limited time (black market), ends like an escape
+    public void setWantedUntil(long wantedEnd) {
+        this.isWanted = true;
+        this.jailEnd = wantedEnd;
+        PlayerRepository.setWantedUntil(uuid, wantedEnd);
+    }
+
     public void setWanted(boolean wanted) {
         isWanted = wanted;
         PlayerRepository.setIsWanted(uuid, wanted);
