@@ -10,14 +10,16 @@ public class ShopViewListener implements Listener {
 
     @EventHandler
     public void onClick(InventoryClickEvent event) {
-        if (event.getWhoClicked() instanceof Player player && event.getInventory().getHolder(false) instanceof ShopView view) {
-            view.handleClick(event, player);
-        }
+        if (!(event.getWhoClicked() instanceof Player player)) return;
+        if (event.getInventory().getHolder(false) instanceof ShopView view) view.handleClick(event, player);
+        if (event.getInventory().getHolder(false) instanceof NomadView view) view.handleClick(event, player);
     }
 
     @EventHandler
     public void onDrag(InventoryDragEvent event) {
-        if (event.getInventory().getHolder(false) instanceof ShopView) event.setCancelled(true);
+        if (event.getInventory().getHolder(false) instanceof ShopView || event.getInventory().getHolder(false) instanceof NomadView) {
+            event.setCancelled(true);
+        }
     }
 
 }

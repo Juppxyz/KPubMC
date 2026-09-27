@@ -5,6 +5,12 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerPortalEvent;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
+import xyz.jupp.minecraft.utils.EndAccess;
 import xyz.jupp.minecraft.economy.Taxes;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.utils.Tasks;
@@ -14,6 +20,18 @@ public class NetherTransferListener implements Listener {
     @EventHandler
     public void onEnterNether(PlayerPortalEvent event) {
         Player player = event.getPlayer();
+
+        // the End opens some days after the season start
+        if (event.getTo() != null && event.getTo().getWorld() != null
+                && event.getTo().getWorld().getEnvironment() == World.Environment.THE_END && !EndAccess.isOpen()) {
+            event.setCancelled(true);
+            LocalDateTime unlock = EndAccess.unlock();
+            long daysLeft = ChronoUnit.DAYS.between(LocalDate.now(ZoneId.of("Europe/Berlin")), unlock.toLocalDate());
+            player.sendMessage(Main.getChatPrefix() + "§cDas End ist noch gesperrt.§f Es öffnet am §e"
+                    + unlock.format(DateTimeFormatter.ofPattern("dd.MM.yyyy")) + " §fum §e"
+                    + unlock.format(DateTimeFormatter.ofPattern("HH:mm")) + " Uhr §8(noch " + daysLeft + (daysLeft == 1 ? " Tag)" : " Tage)"));
+            return;
+        }
         if (player.getWorld().getEnvironment() != World.Environment.NORMAL) return;
 
         // progressive tax on the balance, booked into the state treasury; database on a worker, the message on the main thread

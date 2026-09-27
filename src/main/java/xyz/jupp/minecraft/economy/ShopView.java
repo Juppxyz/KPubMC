@@ -824,7 +824,7 @@ public final class ShopView implements InventoryHolder {
     }
 
     // only plain items count (no names, enchantments or damage), so cash notes and named items are never sold
-    private static int countPlain(Player player, Material material) {
+    static int countPlain(Player player, Material material) {
         ItemStack plain = new ItemStack(material);
         int count = 0;
         for (ItemStack stack : player.getInventory().getStorageContents()) {
@@ -848,7 +848,7 @@ public final class ShopView implements InventoryHolder {
         return space;
     }
 
-    private static void takePlain(Player player, Material material, int quantity) {
+    static void takePlain(Player player, Material material, int quantity) {
         ItemStack plain = new ItemStack(material);
         ItemStack[] contents = player.getInventory().getStorageContents();
         for (int i = 0; i < contents.length && quantity > 0; i++) {
@@ -861,7 +861,7 @@ public final class ShopView implements InventoryHolder {
         player.getInventory().setStorageContents(contents);
     }
 
-    private static void give(Player player, Material material, int quantity) {
+    static void give(Player player, Material material, int quantity) {
         int maxStack = material.getMaxStackSize();
         while (quantity > 0) {
             int amount = Math.min(quantity, maxStack);
@@ -883,12 +883,12 @@ public final class ShopView implements InventoryHolder {
         return Text.section(Main.getChatPrefix() + before).append(name(item)).append(Text.section(after));
     }
 
-    private static void fail(Player player, String message) {
+    static void fail(Player player, String message) {
         player.sendMessage(Main.getChatPrefix() + message);
         player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
     }
 
-    private static ItemStack pane(Material material) {
+    static ItemStack pane(Material material) {
         ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();
         meta.setHideTooltip(true);
@@ -896,7 +896,7 @@ public final class ShopView implements InventoryHolder {
         return item;
     }
 
-    private static ItemStack named(Material material, String name, List<String> lore) {
+    static ItemStack named(Material material, String name, List<String> lore) {
         ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();
         meta.customName(Text.of(name));

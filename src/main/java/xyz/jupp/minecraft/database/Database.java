@@ -177,7 +177,47 @@ public final class Database {
                 sort             INTEGER NOT NULL DEFAULT 0,
                 enabled          BOOLEAN NOT NULL DEFAULT TRUE,
                 demand           DOUBLE PRECISION NOT NULL DEFAULT 0
-            )"""
+            )""",
+            // Nomad: team contracts, the open redemption list, hot items of the day and the weekly race
+            """
+            CREATE TABLE IF NOT EXISTS nomad_contracts (
+                id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                slot       INTEGER NOT NULL,
+                material   TEXT    NOT NULL,
+                required   INTEGER NOT NULL CHECK (required > 0),
+                reward     INTEGER NOT NULL CHECK (reward > 0),
+                ends_at    TIMESTAMPTZ NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )""",
+            "CREATE INDEX IF NOT EXISTS nomad_contracts_ends_idx ON nomad_contracts (ends_at)",
+            """
+            CREATE TABLE IF NOT EXISTS nomad_progress (
+                contract_id BIGINT  NOT NULL REFERENCES nomad_contracts (id) ON DELETE CASCADE,
+                team_id     TEXT    NOT NULL REFERENCES teams (team_id) ON DELETE CASCADE,
+                delivered   INTEGER NOT NULL DEFAULT 0,
+                completed   BOOLEAN NOT NULL DEFAULT FALSE,
+                PRIMARY KEY (contract_id, team_id)
+            )""",
+            """
+            CREATE TABLE IF NOT EXISTS nomad_redeemables (
+                material TEXT PRIMARY KEY,
+                points   INTEGER NOT NULL CHECK (points > 0),
+                enabled  BOOLEAN NOT NULL DEFAULT TRUE
+            )""",
+            "CREATE TABLE IF NOT EXISTS nomad_hot (day DATE NOT NULL, material TEXT NOT NULL, PRIMARY KEY (day, material))",
+            """
+            CREATE TABLE IF NOT EXISTS nomad_deliveries (
+                id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                team_id     TEXT    NOT NULL,
+                player_uuid UUID,
+                kind        TEXT    NOT NULL CHECK (kind IN ('CONTRACT', 'REDEEM', 'RACE')),
+                material    TEXT,
+                quantity    INTEGER NOT NULL DEFAULT 0,
+                points      INTEGER NOT NULL,
+                created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+            )""",
+            "CREATE INDEX IF NOT EXISTS nomad_deliveries_created_idx ON nomad_deliveries (created_at)",
+            "CREATE TABLE IF NOT EXISTS nomad_race_payouts (week TEXT PRIMARY KEY, paid_at TIMESTAMPTZ NOT NULL DEFAULT now())"
     );
 
     private static volatile HikariDataSource dataSource;

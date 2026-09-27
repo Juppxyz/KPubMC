@@ -1,6 +1,5 @@
 package xyz.jupp.minecraft.listener;
 
-import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.entity.Entity;
@@ -18,10 +17,8 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.economy.TaxClass;
 import xyz.jupp.minecraft.Main;
-import xyz.jupp.minecraft.cache.CacheHandler;
-import xyz.jupp.minecraft.cache.PlayerCacheObject;
 import xyz.jupp.minecraft.database.PlayerRepository;
-import xyz.jupp.minecraft.database.TeamRepository;
+import xyz.jupp.minecraft.economy.NomadView;
 import xyz.jupp.minecraft.economy.ShopView;
 import xyz.jupp.minecraft.economy.Taxes;
 import xyz.jupp.minecraft.inventory.JewelerInventory;
@@ -29,7 +26,6 @@ import xyz.jupp.minecraft.inventory.MainThread;
 import xyz.jupp.minecraft.inventory.Menu;
 import xyz.jupp.minecraft.utils.BlackMarketHandler;
 import xyz.jupp.minecraft.utils.Logger;
-import xyz.jupp.minecraft.utils.RedeemableItems;
 import xyz.jupp.minecraft.utils.Tasks;
 import xyz.jupp.minecraft.utils.Text;
 
@@ -72,7 +68,7 @@ public class ShopListener implements Listener {
 
         if (entityType == EntityType.WANDERING_TRADER && Main.getTeamPointsDealerVillagerName().equals(visibleName(interactedEntity))) {
             event.setCancelled(true);
-            redeemForTeamPoints(event.getPlayer());
+            NomadView.open(event.getPlayer());
         }
     }
 
@@ -134,46 +130,6 @@ public class ShopListener implements Listener {
         player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.4f, 1.2f);
         player.playSound(player.getLocation(), Sound.BLOCK_ENCHANTMENT_TABLE_USE, 0.7f, 0.8f);
         player.openInventory(blackMarketInventory);
-    }
-
-
-    // Nomad: the items in the main hand become team points
-    private static void redeemForTeamPoints(Player player) {
-        PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
-        String teamID = playerCacheObject.getTeamID();
-        if (teamID == null) {
-            player.sendMessage(Main.getChatPrefix() + "§fNur Mitglieder eines Teams können Items gegen Punkte tauschen.");
-            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 1f, 1f);
-            return;
-        }
-
-        ItemStack itemStack = player.getInventory().getItemInMainHand();
-        int teamPoints = RedeemableItems.getPoints(itemStack.getType());
-
-        if (itemStack.getType() == Material.AIR || teamPoints == -1) {
-            player.sendMessage(Main.getChatPrefix() + "§cDu hast nix in der Hand, was du eintauschen kannst!");
-            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 1f, 1f);
-            return;
-        }
-
-        int earnedTeamPoints = itemStack.getAmount() * teamPoints;
-
-        player.getInventory().setItemInMainHand(null);
-
-        Tasks.async(() -> {
-            if (!TeamRepository.addTeamPoints(teamID, earnedTeamPoints)) return;
-            Logger.console("add teampoints +" + earnedTeamPoints + " (" + player.getUniqueId() + ")");
-
-            MainThread.run(() -> {
-                player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f, 2f);
-                for (Player online : Bukkit.getOnlinePlayers()) {
-                    if (teamID.equals(CacheHandler.getInstance().getPlayerInCache(online).getTeamID())) {
-                        online.sendMessage(Main.getChatPrefix() + playerCacheObject.getTeamColor() + player.getName() + " §fhat §a+" + earnedTeamPoints + " Team-Punkte §fbeim Händler eingetauscht!");
-                        online.playSound(online.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.4f, 0.2f);
-                    }
-                }
-            });
-        });
     }
 
 

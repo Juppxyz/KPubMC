@@ -9,6 +9,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import xyz.jupp.minecraft.utils.EndAccess;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.utils.TabListUtil;
@@ -96,7 +97,7 @@ public final class Market {
      */
     private static void dailyUpdate() {
         LocalDate today = LocalDate.now(ZONE);
-        if (today.equals(offersDay) && Economy.isMeasured(today)) return;
+        if (today.equals(offersDay) && Economy.isMeasured(today) && Nomad.isUpToDate(today)) return;
         if (!updating.compareAndSet(false, true)) return;
         try {
             if (!Economy.isMeasured(today)) {
@@ -106,7 +107,9 @@ public final class Market {
             }
             boolean newOffers = !today.equals(offersDay);
             List<Material> offers = newOffers ? rotate() : List.of();
+            List<Component> nomadNews = Nomad.isUpToDate(today) ? List.of() : Nomad.dailyUpdate(today);
             Tasks.sync(() -> {
+                nomadNews.forEach(Bukkit::broadcast);
                 if (!offers.isEmpty()) {
                     Component announcement = Text.section(Main.getChatPrefix() + "§6Der Händler hat neue Tagesangebote! §8(§a-"
                             + Math.round(dailyDiscount() * 100) + "%§8)");
@@ -135,6 +138,7 @@ public final class Market {
     private static List<Material> drawOffers(int count) {
         List<MarketItem> pool = items.values().stream()
                 .filter(item -> item.enabled() && !item.core() && item.rotationWeight() > 0 && (item.buyable() || item.sellable()))
+                .filter(item -> EndAccess.isAvailable(item.material()))
                 .toList();
         List<Material> picked = new ArrayList<>();
         Set<Material> used = new HashSet<>();
@@ -187,6 +191,7 @@ public final class Market {
     public static List<MarketItem> category(@NotNull Category category) {
         return items.values().stream()
                 .filter(item -> item.enabled() && item.core() && item.category() == category && (item.buyable() || item.sellable()))
+                .filter(item -> EndAccess.isAvailable(item.material()))
                 .sorted(Comparator.comparingInt(MarketItem::basePrice).thenComparing(item -> item.material().name()))
                 .toList();
     }

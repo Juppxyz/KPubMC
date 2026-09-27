@@ -6,6 +6,9 @@ import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 import org.bukkit.Bukkit;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.economy.TaxBracket;
 import xyz.jupp.minecraft.economy.TaxClass;
@@ -46,6 +49,7 @@ public class ConfigManager {
     private static volatile int treasuryTargetPerPlayer = 20_000;
     private static volatile boolean aiReview = true;
     private static volatile String openAiModel = "gpt-5-mini";
+    private static volatile LocalDateTime endUnlock = null;
     // progressive nether transfer tax, sorted by 'from'; immutable list, replaced as a whole on reload
     private static final List<TaxBracket> DEFAULT_NETHER_BRACKETS = List.of(
             new TaxBracket(0, 0.0), new TaxBracket(500, 0.5), new TaxBracket(5_000, 0.65), new TaxBracket(20_000, 0.7));
@@ -82,6 +86,7 @@ public class ConfigManager {
             treasuryTargetPerPlayer = Math.max(0, optInt(config, "treasuryTargetPerPlayer", 20_000));
             aiReview = !"false".equalsIgnoreCase(optString(config, "aiReview", "true"));
             openAiModel = optString(config, "openAiModel", "gpt-5-mini");
+            endUnlock = parseDateTime(optString(config, "endUnlock", ""));
             netherTransferTaxBrackets = parseBrackets(config.get("netherTransferTaxBrackets"));
 
             Logger.console("loaded config successfully");
@@ -135,6 +140,18 @@ public class ConfigManager {
     public int getTreasuryTargetPerPlayer() { return treasuryTargetPerPlayer; }
     public boolean isAiReview() { return aiReview; }
     public String getOpenAiModel() { return openAiModel; }
+    public LocalDateTime getEndUnlock() { return endUnlock; }
+
+    // "2026-10-10T16:00" or "2026-10-10"; empty or invalid -> null
+    private static LocalDateTime parseDateTime(String value) {
+        if (value == null || value.isBlank()) return null;
+        try {
+            return value.contains("T") ? LocalDateTime.parse(value.trim()) : LocalDate.parse(value.trim()).atStartOfDay();
+        } catch (DateTimeParseException e) {
+            Main.getInstance().getSLF4JLogger().warn("Invalid endUnlock '{}', the End stays open", value);
+            return null;
+        }
+    }
 
     // {"BASIC": 0.10, "STANDARD": 0.20, "LUXURY": 0.35}; missing classes keep their default,
     // an old flat "tradeTax" becomes the standard rate
