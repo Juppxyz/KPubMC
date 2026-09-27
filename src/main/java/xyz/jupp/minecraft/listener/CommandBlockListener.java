@@ -20,7 +20,7 @@ public class CommandBlockListener implements Listener {
             "/money", "/geld", "/schilling", "/config", "/hilfe", "/help", "/sc", "/slimechunk",
             "/einladungen", "/invites", "/team", "/ranking", "/warp", "/head", "/kopf", "/donate",
             "/spenden", "/spawn", "/regeln", "/rules", "/ec", "/enderchest", "/wanted", "/sit",
-            "/ursprung", "/origin", "/removechunk"
+            "/ursprung", "/origin", "/removechunk", "/staatskasse", "/kasse"
     );
 
     private static boolean isAllowedForNormalPlayer(String msg) {

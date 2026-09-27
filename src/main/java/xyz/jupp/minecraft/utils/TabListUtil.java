@@ -3,13 +3,14 @@ package xyz.jupp.minecraft.utils;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
-import xyz.jupp.minecraft.config.ConfigManager;
+import xyz.jupp.minecraft.economy.Taxes;
+import xyz.jupp.minecraft.economy.Treasury;
 
 // main thread only
 public class TabListUtil {
 
     private static final String HEADER = "Auslastung: ";
-    private static final String FOOTER = "\n§fHandel: §a%d%% §8| §fTod: §a%d%% §8| §fTransfer: §a%d%%";
+    private static final String FOOTER = "\n§fHandel: §a%d%% §8| §fTod: §a%d%% §8| §fTransfer: §abis %d%%\n§6Staatskasse: §a%d Schilling";
 
 
     public static void updateTabForAll() {
@@ -29,8 +30,8 @@ public class TabListUtil {
     }
 
     private static Component footer() {
-        ConfigManager config = ConfigManager.getManager();
-        return Component.text(FOOTER.formatted(Math.round(config.getTradeTax()*100), Math.round(config.getDeathTax()*100), Math.round(config.getNetherTransferTax()*100)));
+        return Component.text(FOOTER.formatted(Math.round(Taxes.tradeRate() * 100), Math.round(Taxes.deathRate() * 100),
+                Math.round(Taxes.topNetherRate() * 100), Treasury.balance()));
     }
 
     private static String currentPerformance() {

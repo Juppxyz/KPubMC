@@ -14,10 +14,10 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
 import org.jetbrains.annotations.Nullable;
+import xyz.jupp.minecraft.economy.Taxes;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.PlayerCacheObject;
-import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.inventory.MainThread;
 import xyz.jupp.minecraft.inventory.Menu;
@@ -165,16 +165,16 @@ public class MoneyInventoryListener implements Listener {
     // withdrawn async, the cash is handed out on the main thread
     private static void withdrawCash(Player player, int selectedAmount) {
         Tasks.async(() -> {
-            if (!PlayerRepository.tryWithdrawMoney(player, selectedAmount)) {
+            // cash minus trade tax; the tax goes to the state treasury, a rest below 10 stays on the account
+            Taxes.CashWithdrawal withdrawal = Taxes.withdrawCash(player.getUniqueId(), selectedAmount);
+            if (!withdrawal.success()) {
                 MainThread.run(() -> player.sendMessage(Main.getChatPrefix() + "Du hast nicht genügend " + Main.getCurrencyName() + "§f."));
                 return;
             }
+            int netAmount = withdrawal.cash();
+            Logger.console("withdraw from " + player.getUniqueId() + " (" + netAmount + " cash, " + withdrawal.tax() + " tax)");
 
-            // Steuerberechnung
-            int netAmount = (int) Math.floor(selectedAmount * (1 - ConfigManager.getManager().getTradeTax()));
-            Logger.console("withdraw from " + player.getUniqueId() + " (" + selectedAmount + " before tax, " + netAmount + " after tax)");
-
-            MainThread.deliverOrRefund(player.getUniqueId(), selectedAmount, () -> {
+            MainThread.deliverOrRefund(player.getUniqueId(), netAmount + withdrawal.tax(), () -> {
                 int amountOfCash = netAmount / 10;
                 while (amountOfCash > 0) {
                     int stackAmount = Math.min(amountOfCash, 64);
@@ -185,7 +185,7 @@ public class MoneyInventoryListener implements Listener {
                     amountOfCash -= stackAmount;
                 }
                 player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f, 2f);
-                player.sendMessage(Main.getChatPrefix() + "§fDu hast §2" + netAmount + " " + Main.getCurrencyName() + " §fabgehoben");
+                player.sendMessage(Main.getChatPrefix() + "§fDu hast §2" + netAmount + " " + Main.getCurrencyName() + " §fabgehoben §8(+ " + withdrawal.tax() + " Steuer → Staatskasse)");
             });
         });
     }

@@ -50,3 +50,6 @@ commands:
     aliases: [ursprung]
     usage: /<command>
   removechunk:
+  staatskasse:
+    aliases: [kasse]
+  shopadmin:

@@ -82,7 +82,56 @@ public final class Database {
                 command     TEXT NOT NULL,
                 created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
             )""",
-            "CREATE INDEX IF NOT EXISTS command_log_player_idx ON command_log (player_uuid, created_at)"
+            "CREATE INDEX IF NOT EXISTS command_log_player_idx ON command_log (player_uuid, created_at)",
+            // economy: catalog with the current demand, daily offers, trades and the state treasury
+            """
+            CREATE TABLE IF NOT EXISTS market_items (
+                material        TEXT PRIMARY KEY,
+                category        TEXT NOT NULL,
+                display_name    TEXT,
+                description     TEXT,
+                amount          INTEGER NOT NULL DEFAULT 1 CHECK (amount BETWEEN 1 AND 64),
+                base_price      INTEGER NOT NULL CHECK (base_price > 0),
+                min_price       INTEGER CHECK (min_price > 0),
+                max_price       INTEGER CHECK (max_price > 0),
+                elasticity      DOUBLE PRECISION NOT NULL DEFAULT 0.02 CHECK (elasticity >= 0),
+                sell_ratio      DOUBLE PRECISION NOT NULL DEFAULT 0.5 CHECK (sell_ratio >= 0 AND sell_ratio <= 0.9),
+                buyable         BOOLEAN NOT NULL DEFAULT TRUE,
+                sellable        BOOLEAN NOT NULL DEFAULT FALSE,
+                core            BOOLEAN NOT NULL DEFAULT TRUE,
+                rotation_weight INTEGER NOT NULL DEFAULT 1 CHECK (rotation_weight >= 0),
+                enabled         BOOLEAN NOT NULL DEFAULT TRUE,
+                demand          DOUBLE PRECISION NOT NULL DEFAULT 0,
+                updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+            )""",
+            """
+            CREATE TABLE IF NOT EXISTS market_rotation (
+                day      DATE    NOT NULL,
+                slot     INTEGER NOT NULL,
+                material TEXT    NOT NULL REFERENCES market_items (material) ON DELETE CASCADE,
+                PRIMARY KEY (day, slot)
+            )""",
+            """
+            CREATE TABLE IF NOT EXISTS market_transactions (
+                id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                player_uuid UUID    NOT NULL,
+                material    TEXT    NOT NULL,
+                kind        TEXT    NOT NULL CHECK (kind IN ('BUY', 'SELL')),
+                quantity    INTEGER NOT NULL,
+                net         INTEGER NOT NULL,
+                tax         INTEGER NOT NULL DEFAULT 0,
+                created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+            )""",
+            "CREATE INDEX IF NOT EXISTS market_transactions_material_idx ON market_transactions (material, created_at)",
+            """
+            CREATE TABLE IF NOT EXISTS treasury_ledger (
+                id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                source      TEXT   NOT NULL,
+                amount      BIGINT NOT NULL,
+                player_uuid UUID,
+                created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+            )""",
+            "CREATE INDEX IF NOT EXISTS treasury_ledger_created_idx ON treasury_ledger (created_at)"
     );
 
     private static volatile HikariDataSource dataSource;

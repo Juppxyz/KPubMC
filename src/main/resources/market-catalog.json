@@ -1,0 +1,1047 @@
+[
+ {
+  "material": "WHEAT",
+  "category": "FARMING",
+  "amount": 32,
+  "price": 60,
+  "sellable": true
+ },
+ {
+  "material": "CARROT",
+  "category": "FARMING",
+  "amount": 32,
+  "price": 60,
+  "sellable": true
+ },
+ {
+  "material": "POTATO",
+  "category": "FARMING",
+  "amount": 32,
+  "price": 60,
+  "sellable": true
+ },
+ {
+  "material": "BEETROOT",
+  "category": "FARMING",
+  "amount": 32,
+  "price": 60,
+  "sellable": true
+ },
+ {
+  "material": "SUGAR_CANE",
+  "category": "FARMING",
+  "amount": 32,
+  "price": 70,
+  "sellable": true
+ },
+ {
+  "material": "PUMPKIN",
+  "category": "FARMING",
+  "amount": 16,
+  "price": 80,
+  "sellable": true
+ },
+ {
+  "material": "MELON_SLICE",
+  "category": "FARMING",
+  "amount": 32,
+  "price": 50,
+  "sellable": true
+ },
+ {
+  "material": "CACTUS",
+  "category": "FARMING",
+  "amount": 32,
+  "price": 60,
+  "sellable": true
+ },
+ {
+  "material": "BAMBOO",
+  "category": "FARMING",
+  "amount": 64,
+  "price": 40,
+  "sellable": true
+ },
+ {
+  "material": "COCOA_BEANS",
+  "category": "FARMING",
+  "amount": 32,
+  "price": 80,
+  "sellable": true
+ },
+ {
+  "material": "NETHER_WART",
+  "category": "FARMING",
+  "amount": 32,
+  "price": 120,
+  "sellable": true
+ },
+ {
+  "material": "SWEET_BERRIES",
+  "category": "FARMING",
+  "amount": 32,
+  "price": 50,
+  "sellable": true
+ },
+ {
+  "material": "KELP",
+  "category": "FARMING",
+  "amount": 64,
+  "price": 40,
+  "sellable": true
+ },
+ {
+  "material": "LEATHER",
+  "category": "FARMING",
+  "amount": 16,
+  "price": 120,
+  "sellable": true
+ },
+ {
+  "material": "WHITE_WOOL",
+  "category": "FARMING",
+  "amount": 16,
+  "price": 80,
+  "sellable": true
+ },
+ {
+  "material": "STRING",
+  "category": "FARMING",
+  "amount": 32,
+  "price": 90,
+  "sellable": true
+ },
+ {
+  "material": "EGG",
+  "category": "FARMING",
+  "amount": 16,
+  "price": 40,
+  "sellable": true
+ },
+ {
+  "material": "FEATHER",
+  "category": "FARMING",
+  "amount": 32,
+  "price": 60,
+  "sellable": true
+ },
+ {
+  "material": "BONE",
+  "category": "FARMING",
+  "amount": 32,
+  "price": 80,
+  "sellable": true
+ },
+ {
+  "material": "GUNPOWDER",
+  "category": "FARMING",
+  "amount": 16,
+  "price": 160,
+  "sellable": true
+ },
+ {
+  "material": "SLIME_BALL",
+  "category": "FARMING",
+  "amount": 16,
+  "price": 240,
+  "sellable": true
+ },
+ {
+  "material": "HONEY_BOTTLE",
+  "category": "FARMING",
+  "amount": 8,
+  "price": 120,
+  "sellable": true
+ },
+ {
+  "material": "WHEAT_SEEDS",
+  "category": "FARMING",
+  "amount": 32,
+  "price": 20
+ },
+ {
+  "material": "OAK_LOG",
+  "category": "BLOCKS",
+  "amount": 32,
+  "price": 120,
+  "sellable": true,
+  "sellRatio": 0.4
+ },
+ {
+  "material": "SPRUCE_LOG",
+  "category": "BLOCKS",
+  "amount": 32,
+  "price": 120,
+  "sellable": true,
+  "sellRatio": 0.4
+ },
+ {
+  "material": "BIRCH_LOG",
+  "category": "BLOCKS",
+  "amount": 32,
+  "price": 120,
+  "sellable": true,
+  "sellRatio": 0.4
+ },
+ {
+  "material": "JUNGLE_LOG",
+  "category": "BLOCKS",
+  "amount": 32,
+  "price": 130,
+  "sellable": true,
+  "sellRatio": 0.4
+ },
+ {
+  "material": "ACACIA_LOG",
+  "category": "BLOCKS",
+  "amount": 32,
+  "price": 130,
+  "sellable": true,
+  "sellRatio": 0.4
+ },
+ {
+  "material": "DARK_OAK_LOG",
+  "category": "BLOCKS",
+  "amount": 32,
+  "price": 140,
+  "sellable": true,
+  "sellRatio": 0.4
+ },
+ {
+  "material": "MANGROVE_LOG",
+  "category": "BLOCKS",
+  "amount": 32,
+  "price": 150,
+  "sellable": true,
+  "sellRatio": 0.4
+ },
+ {
+  "material": "CHERRY_LOG",
+  "category": "BLOCKS",
+  "amount": 32,
+  "price": 160,
+  "sellable": true,
+  "sellRatio": 0.4
+ },
+ {
+  "material": "DIRT",
+  "category": "BLOCKS",
+  "amount": 64,
+  "price": 20
+ },
+ {
+  "material": "NETHERRACK",
+  "category": "BLOCKS",
+  "amount": 64,
+  "price": 20
+ },
+ {
+  "material": "COBBLESTONE",
+  "category": "BLOCKS",
+  "amount": 64,
+  "price": 30
+ },
+ {
+  "material": "COBBLED_DEEPSLATE",
+  "category": "BLOCKS",
+  "amount": 64,
+  "price": 40
+ },
+ {
+  "material": "GRAVEL",
+  "category": "BLOCKS",
+  "amount": 64,
+  "price": 50
+ },
+ {
+  "material": "STONE",
+  "category": "BLOCKS",
+  "amount": 64,
+  "price": 60
+ },
+ {
+  "material": "SAND",
+  "category": "BLOCKS",
+  "amount": 64,
+  "price": 70
+ },
+ {
+  "material": "TUFF",
+  "category": "BLOCKS",
+  "amount": 64,
+  "price": 80
+ },
+ {
+  "material": "GRASS_BLOCK",
+  "category": "BLOCKS",
+  "amount": 32,
+  "price": 80
+ },
+ {
+  "material": "SNOW_BLOCK",
+  "category": "BLOCKS",
+  "amount": 32,
+  "price": 80
+ },
+ {
+  "material": "RED_SAND",
+  "category": "BLOCKS",
+  "amount": 64,
+  "price": 90
+ },
+ {
+  "material": "GLASS",
+  "category": "BLOCKS",
+  "amount": 32,
+  "price": 90
+ },
+ {
+  "material": "BLACKSTONE",
+  "category": "BLOCKS",
+  "amount": 64,
+  "price": 90
+ },
+ {
+  "material": "CLAY",
+  "category": "BLOCKS",
+  "amount": 32,
+  "price": 100
+ },
+ {
+  "material": "STONE_BRICKS",
+  "category": "BLOCKS",
+  "amount": 64,
+  "price": 100
+ },
+ {
+  "material": "MOSS_BLOCK",
+  "category": "BLOCKS",
+  "amount": 32,
+  "price": 100
+ },
+ {
+  "material": "ICE",
+  "category": "BLOCKS",
+  "amount": 32,
+  "price": 100
+ },
+ {
+  "material": "SMOOTH_STONE",
+  "category": "BLOCKS",
+  "amount": 64,
+  "price": 110
+ },
+ {
+  "material": "TERRACOTTA",
+  "category": "BLOCKS",
+  "amount": 32,
+  "price": 120
+ },
+ {
+  "material": "SOUL_SAND",
+  "category": "BLOCKS",
+  "amount": 32,
+  "price": 120
+ },
+ {
+  "material": "CALCITE",
+  "category": "BLOCKS",
+  "amount": 32,
+  "price": 120
+ },
+ {
+  "material": "WHITE_CONCRETE",
+  "category": "BLOCKS",
+  "amount": 32,
+  "price": 140
+ },
+ {
+  "material": "MUD_BRICKS",
+  "category": "BLOCKS",
+  "amount": 32,
+  "price": 140
+ },
+ {
+  "material": "BRICKS",
+  "category": "BLOCKS",
+  "amount": 32,
+  "price": 160
+ },
+ {
+  "material": "END_STONE",
+  "category": "BLOCKS",
+  "amount": 32,
+  "price": 160
+ },
+ {
+  "material": "PACKED_ICE",
+  "category": "BLOCKS",
+  "amount": 16,
+  "price": 160
+ },
+ {
+  "material": "PRISMARINE",
+  "category": "BLOCKS",
+  "amount": 16,
+  "price": 200
+ },
+ {
+  "material": "OBSIDIAN",
+  "category": "BLOCKS",
+  "amount": 16,
+  "price": 320
+ },
+ {
+  "material": "QUARTZ_BLOCK",
+  "category": "BLOCKS",
+  "amount": 16,
+  "price": 480
+ },
+ {
+  "material": "COAL",
+  "category": "ORES",
+  "amount": 32,
+  "price": 100,
+  "sellable": true
+ },
+ {
+  "material": "COAL_BLOCK",
+  "category": "ORES",
+  "amount": 16,
+  "price": 300
+ },
+ {
+  "material": "IRON_INGOT",
+  "category": "ORES",
+  "amount": 16,
+  "price": 320,
+  "sellable": true,
+  "sellRatio": 0.3
+ },
+ {
+  "material": "COPPER_INGOT",
+  "category": "ORES",
+  "amount": 32,
+  "price": 160,
+  "sellable": true,
+  "sellRatio": 0.4
+ },
+ {
+  "material": "REDSTONE",
+  "category": "ORES",
+  "amount": 32,
+  "price": 120,
+  "sellable": true
+ },
+ {
+  "material": "REDSTONE_BLOCK",
+  "category": "ORES",
+  "amount": 16,
+  "price": 400
+ },
+ {
+  "material": "QUARTZ",
+  "category": "ORES",
+  "amount": 32,
+  "price": 200,
+  "sellable": true
+ },
+ {
+  "material": "GLOWSTONE_DUST",
+  "category": "ORES",
+  "amount": 32,
+  "price": 160,
+  "sellable": true
+ },
+ {
+  "material": "ENDER_PEARL",
+  "category": "ORES",
+  "amount": 4,
+  "price": 240,
+  "sellable": true
+ },
+ {
+  "material": "BLAZE_ROD",
+  "category": "ORES",
+  "amount": 8,
+  "price": 320,
+  "sellable": true
+ },
+ {
+  "material": "GOLD_INGOT",
+  "category": "ORES",
+  "amount": 4,
+  "price": 400,
+  "sellable": true,
+  "buyable": false,
+  "description": "Kaufen beim Juwelier"
+ },
+ {
+  "material": "DIAMOND",
+  "category": "ORES",
+  "amount": 1,
+  "price": 250,
+  "sellable": true,
+  "buyable": false,
+  "description": "Kaufen beim Juwelier"
+ },
+ {
+  "material": "NETHERITE_INGOT",
+  "category": "ORES",
+  "amount": 1,
+  "price": 1000,
+  "sellable": true,
+  "buyable": false,
+  "description": "Kaufen beim Juwelier"
+ },
+ {
+  "material": "AMETHYST_SHARD",
+  "category": "ORES",
+  "amount": 4,
+  "price": 800,
+  "sellable": true,
+  "buyable": false,
+  "description": "Kaufen beim Juwelier"
+ },
+ {
+  "material": "RESIN_CLUMP",
+  "category": "ORES",
+  "amount": 4,
+  "price": 1200,
+  "sellable": true,
+  "buyable": false,
+  "description": "Kaufen beim Juwelier"
+ },
+ {
+  "material": "LAPIS_LAZULI",
+  "category": "ORES",
+  "amount": 16,
+  "price": 800,
+  "sellable": true,
+  "buyable": false,
+  "description": "Kaufen beim Juwelier"
+ },
+ {
+  "material": "MUSHROOM_STEW",
+  "category": "FOOD",
+  "amount": 4,
+  "price": 60
+ },
+ {
+  "material": "APPLE",
+  "category": "FOOD",
+  "amount": 16,
+  "price": 80
+ },
+ {
+  "material": "BREAD",
+  "category": "FOOD",
+  "amount": 32,
+  "price": 90
+ },
+ {
+  "material": "COOKED_CHICKEN",
+  "category": "FOOD",
+  "amount": 16,
+  "price": 90
+ },
+ {
+  "material": "BAKED_POTATO",
+  "category": "FOOD",
+  "amount": 32,
+  "price": 90
+ },
+ {
+  "material": "COOKED_COD",
+  "category": "FOOD",
+  "amount": 16,
+  "price": 90
+ },
+ {
+  "material": "COOKED_MUTTON",
+  "category": "FOOD",
+  "amount": 16,
+  "price": 100
+ },
+ {
+  "material": "COOKED_SALMON",
+  "category": "FOOD",
+  "amount": 16,
+  "price": 110
+ },
+ {
+  "material": "COOKED_BEEF",
+  "category": "FOOD",
+  "amount": 16,
+  "price": 120,
+  "sellable": true,
+  "sellRatio": 0.4
+ },
+ {
+  "material": "COOKED_PORKCHOP",
+  "category": "FOOD",
+  "amount": 16,
+  "price": 120,
+  "sellable": true,
+  "sellRatio": 0.4
+ },
+ {
+  "material": "PUMPKIN_PIE",
+  "category": "FOOD",
+  "amount": 16,
+  "price": 120
+ },
+ {
+  "material": "CAKE",
+  "category": "FOOD",
+  "amount": 1,
+  "price": 120
+ },
+ {
+  "material": "GOLDEN_CARROT",
+  "category": "FOOD",
+  "amount": 32,
+  "price": 250,
+  "sellable": true,
+  "sellRatio": 0.4
+ },
+ {
+  "material": "GOLDEN_APPLE",
+  "category": "FOOD",
+  "amount": 1,
+  "price": 900
+ },
+ {
+  "material": "TORCH",
+  "category": "MISC",
+  "amount": 64,
+  "price": 60
+ },
+ {
+  "material": "BONE_MEAL",
+  "category": "MISC",
+  "amount": 64,
+  "price": 60
+ },
+ {
+  "material": "PAPER",
+  "category": "MISC",
+  "amount": 64,
+  "price": 100
+ },
+ {
+  "material": "CHEST",
+  "category": "MISC",
+  "amount": 16,
+  "price": 100
+ },
+ {
+  "material": "ARROW",
+  "category": "MISC",
+  "amount": 64,
+  "price": 120
+ },
+ {
+  "material": "BARREL",
+  "category": "MISC",
+  "amount": 16,
+  "price": 120
+ },
+ {
+  "material": "COMPASS",
+  "category": "MISC",
+  "amount": 1,
+  "price": 120
+ },
+ {
+  "material": "LEAD",
+  "category": "MISC",
+  "amount": 4,
+  "price": 160
+ },
+ {
+  "material": "BOOK",
+  "category": "MISC",
+  "amount": 16,
+  "price": 200
+ },
+ {
+  "material": "LANTERN",
+  "category": "MISC",
+  "amount": 16,
+  "price": 200
+ },
+ {
+  "material": "FIREWORK_ROCKET",
+  "category": "MISC",
+  "amount": 32,
+  "price": 250
+ },
+ {
+  "material": "RAIL",
+  "category": "MISC",
+  "amount": 64,
+  "price": 300
+ },
+ {
+  "material": "CLOCK",
+  "category": "MISC",
+  "amount": 1,
+  "price": 300
+ },
+ {
+  "material": "BOOKSHELF",
+  "category": "MISC",
+  "amount": 8,
+  "price": 320
+ },
+ {
+  "material": "HOPPER",
+  "category": "MISC",
+  "amount": 4,
+  "price": 400
+ },
+ {
+  "material": "POWERED_RAIL",
+  "category": "MISC",
+  "amount": 16,
+  "price": 800
+ },
+ {
+  "material": "CHORUS_FRUIT",
+  "category": "FARMING",
+  "amount": 32,
+  "price": 160,
+  "sellable": true,
+  "core": false,
+  "weight": 2
+ },
+ {
+  "material": "GLOW_BERRIES",
+  "category": "FARMING",
+  "amount": 32,
+  "price": 120,
+  "sellable": true,
+  "core": false,
+  "weight": 2
+ },
+ {
+  "material": "BROWN_MUSHROOM",
+  "category": "FARMING",
+  "amount": 32,
+  "price": 120,
+  "sellable": true,
+  "core": false,
+  "weight": 2
+ },
+ {
+  "material": "RED_MUSHROOM",
+  "category": "FARMING",
+  "amount": 32,
+  "price": 120,
+  "sellable": true,
+  "core": false,
+  "weight": 2
+ },
+ {
+  "material": "HONEYCOMB",
+  "category": "FARMING",
+  "amount": 16,
+  "price": 200,
+  "sellable": true,
+  "core": false,
+  "weight": 3
+ },
+ {
+  "material": "RABBIT_HIDE",
+  "category": "FARMING",
+  "amount": 16,
+  "price": 120,
+  "sellable": true,
+  "core": false,
+  "weight": 2
+ },
+ {
+  "material": "INK_SAC",
+  "category": "FARMING",
+  "amount": 32,
+  "price": 120,
+  "sellable": true,
+  "core": false,
+  "weight": 3
+ },
+ {
+  "material": "GLOW_INK_SAC",
+  "category": "FARMING",
+  "amount": 16,
+  "price": 320,
+  "sellable": true,
+  "core": false,
+  "weight": 2
+ },
+ {
+  "material": "PRISMARINE_SHARD",
+  "category": "FARMING",
+  "amount": 32,
+  "price": 240,
+  "sellable": true,
+  "core": false,
+  "weight": 2
+ },
+ {
+  "material": "PITCHER_POD",
+  "category": "FARMING",
+  "amount": 4,
+  "price": 400,
+  "sellable": true,
+  "core": false,
+  "weight": 1
+ },
+ {
+  "material": "PUFFERFISH",
+  "category": "FOOD",
+  "amount": 16,
+  "price": 500,
+  "sellable": true,
+  "core": false,
+  "weight": 2
+ },
+ {
+  "material": "TROPICAL_FISH",
+  "category": "FOOD",
+  "amount": 16,
+  "price": 240,
+  "sellable": true,
+  "core": false,
+  "weight": 2
+ },
+ {
+  "material": "COOKIE",
+  "category": "FOOD",
+  "amount": 32,
+  "price": 90,
+  "core": false,
+  "weight": 3
+ },
+ {
+  "material": "RABBIT_STEW",
+  "category": "FOOD",
+  "amount": 4,
+  "price": 160,
+  "core": false,
+  "weight": 2
+ },
+ {
+  "material": "SPONGE",
+  "category": "BLOCKS",
+  "amount": 4,
+  "price": 1600,
+  "core": false,
+  "weight": 2
+ },
+ {
+  "material": "SEA_LANTERN",
+  "category": "BLOCKS",
+  "amount": 16,
+  "price": 480,
+  "core": false,
+  "weight": 3
+ },
+ {
+  "material": "SADDLE",
+  "category": "MISC",
+  "amount": 1,
+  "price": 600,
+  "core": false,
+  "weight": 3
+ },
+ {
+  "material": "NAME_TAG",
+  "category": "MISC",
+  "amount": 1,
+  "price": 800,
+  "core": false,
+  "weight": 3
+ },
+ {
+  "material": "EXPERIENCE_BOTTLE",
+  "category": "MISC",
+  "amount": 16,
+  "price": 800,
+  "core": false,
+  "weight": 3
+ },
+ {
+  "material": "PHANTOM_MEMBRANE",
+  "category": "MISC",
+  "amount": 8,
+  "price": 480,
+  "sellable": true,
+  "core": false,
+  "weight": 3
+ },
+ {
+  "material": "RABBIT_FOOT",
+  "category": "MISC",
+  "amount": 4,
+  "price": 320,
+  "sellable": true,
+  "core": false,
+  "weight": 3
+ },
+ {
+  "material": "GHAST_TEAR",
+  "category": "MISC",
+  "amount": 4,
+  "price": 600,
+  "sellable": true,
+  "core": false,
+  "weight": 3
+ },
+ {
+  "material": "GLISTERING_MELON_SLICE",
+  "category": "MISC",
+  "amount": 8,
+  "price": 400,
+  "core": false,
+  "weight": 2
+ },
+ {
+  "material": "ELYTRA",
+  "category": "RARE",
+  "amount": 1,
+  "price": 100000,
+  "core": false,
+  "weight": 1,
+  "name": "§5§lSchwingen des Äthers"
+ },
+ {
+  "material": "NETHER_STAR",
+  "category": "RARE",
+  "amount": 1,
+  "price": 20000,
+  "core": false,
+  "weight": 2,
+  "name": "§e§lFunke der Unterwelt"
+ },
+ {
+  "material": "HEAVY_CORE",
+  "category": "RARE",
+  "amount": 1,
+  "price": 15000,
+  "core": false,
+  "weight": 1
+ },
+ {
+  "material": "ENCHANTED_GOLDEN_APPLE",
+  "category": "RARE",
+  "amount": 1,
+  "price": 12000,
+  "core": false,
+  "weight": 1
+ },
+ {
+  "material": "TOTEM_OF_UNDYING",
+  "category": "RARE",
+  "amount": 1,
+  "price": 8000,
+  "core": false,
+  "weight": 2
+ },
+ {
+  "material": "TRIDENT",
+  "category": "RARE",
+  "amount": 1,
+  "price": 7000,
+  "core": false,
+  "weight": 1
+ },
+ {
+  "material": "HEART_OF_THE_SEA",
+  "category": "RARE",
+  "amount": 1,
+  "price": 6000,
+  "core": false,
+  "weight": 2
+ },
+ {
+  "material": "WITHER_SKELETON_SKULL",
+  "category": "RARE",
+  "amount": 1,
+  "price": 5000,
+  "core": false,
+  "weight": 1
+ },
+ {
+  "material": "SNIFFER_EGG",
+  "category": "RARE",
+  "amount": 1,
+  "price": 5000,
+  "core": false,
+  "weight": 1
+ },
+ {
+  "material": "MUSIC_DISC_PIGSTEP",
+  "category": "RARE",
+  "amount": 1,
+  "price": 4000,
+  "core": false,
+  "weight": 1
+ },
+ {
+  "material": "SHULKER_SHELL",
+  "category": "RARE",
+  "amount": 2,
+  "price": 3000,
+  "core": false,
+  "weight": 3
+ },
+ {
+  "material": "ECHO_SHARD",
+  "category": "RARE",
+  "amount": 4,
+  "price": 2400,
+  "core": false,
+  "weight": 2
+ },
+ {
+  "material": "DRAGON_BREATH",
+  "category": "RARE",
+  "amount": 4,
+  "price": 1600,
+  "core": false,
+  "weight": 2
+ },
+ {
+  "material": "TRIAL_KEY",
+  "category": "RARE",
+  "amount": 1,
+  "price": 1500,
+  "core": false,
+  "weight": 2
+ },
+ {
+  "material": "BREEZE_ROD",
+  "category": "RARE",
+  "amount": 8,
+  "price": 1200,
+  "core": false,
+  "weight": 2
+ },
+ {
+  "material": "NAUTILUS_SHELL",
+  "category": "RARE",
+  "amount": 2,
+  "price": 1200,
+  "core": false,
+  "weight": 2
+ },
+ {
+  "material": "TURTLE_SCUTE",
+  "category": "RARE",
+  "amount": 4,
+  "price": 800,
+  "core": false,
+  "weight": 2
+ }
+]

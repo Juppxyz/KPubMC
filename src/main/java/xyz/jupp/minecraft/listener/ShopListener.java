@@ -9,7 +9,6 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageEvent;
-import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
@@ -20,30 +19,21 @@ import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.PlayerCacheObject;
-import xyz.jupp.minecraft.config.ConfigManager;
-import xyz.jupp.minecraft.config.ShopItem;
 import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.database.TeamRepository;
+import xyz.jupp.minecraft.economy.ShopView;
+import xyz.jupp.minecraft.economy.Taxes;
 import xyz.jupp.minecraft.inventory.JewelerInventory;
 import xyz.jupp.minecraft.inventory.MainThread;
 import xyz.jupp.minecraft.inventory.Menu;
-import xyz.jupp.minecraft.inventory.ShopInventory;
 import xyz.jupp.minecraft.utils.BlackMarketHandler;
 import xyz.jupp.minecraft.utils.Logger;
 import xyz.jupp.minecraft.utils.RedeemableItems;
 import xyz.jupp.minecraft.utils.Tasks;
 import xyz.jupp.minecraft.utils.Text;
 
-import java.util.List;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class ShopListener implements Listener {
-
-    // price in the first lore line of a shop item
-    private static final Pattern PRICE_PATTERN = Pattern.compile("§fPreis: §a(\\d+) Schilling");
-
 
     @EventHandler
     public void onInteractWithShopVillager(PlayerInteractEntityEvent event) {
@@ -54,7 +44,7 @@ public class ShopListener implements Listener {
             String villagerName = visibleName(interactedEntity);
             if (Main.getShopVillagerName().equals(villagerName)) {
                 event.setCancelled(true);
-                ShopInventory.openInventory(event.getPlayer());
+                ShopView.open(event.getPlayer());
                 return;
             }
 
@@ -214,101 +204,10 @@ public class ShopListener implements Listener {
         if (menu == null) return;
 
         switch (menu.getType()) {
-            case SHOP -> onShopClick(event, player);
             case JEWELER -> onJewelerClick(event, player);
             case BLACK_MARKET -> onBlackMarketClick(event, player);
             default -> {}
         }
-    }
-
-
-    // the click is evaluated on the main thread (sold stacks are taken here), only the bookings run async
-    private static void onShopClick(InventoryClickEvent event, Player player) {
-        event.setCancelled(true);
-        ItemStack clickedItem = event.getCurrentItem();
-        if (clickedItem == null) return;
-        ItemMeta clickedMeta = clickedItem.getItemMeta();
-        if (clickedMeta == null) return;
-        String displayName = Text.legacy(clickedMeta.customName());
-        if (displayName.equals("§7---")) return;
-
-        List<String> lore = Text.legacyLore(clickedMeta.lore());
-        int parsedPrice = 0;
-        if (lore != null && !lore.isEmpty()) {
-            Matcher matcher = PRICE_PATTERN.matcher(lore.get(0));
-            if (matcher.find()) parsedPrice = Integer.parseInt(matcher.group(1));
-        }
-        if (parsedPrice < 1) return;
-        int price = parsedPrice;
-
-        if (displayName.equals("§5§oZufall")) {
-            buyRandomItem(player, price);
-            return;
-        }
-
-        int amount = clickedItem.getAmount();
-        Material material = clickedItem.getType();
-        if (event.getClick() == ClickType.RIGHT && lore.size() > 1 && lore.get(1).startsWith("§fVerkaufen")) {
-            // taken synchronously, so fast clicks cannot sell the same stack twice
-            if (!takeItemsToSell(player, material, amount)) {
-                player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
-                return;
-            }
-            int sellPrice = price / 2;
-            Tasks.async(() -> {
-                PlayerRepository.addMoney(player, sellPrice);
-                Logger.console("player §a" + player.getUniqueId() + " §fhas §6sold §f" + material.name() + " for §a" + sellPrice);
-                MainThread.run(() -> {
-                    player.sendMessage(Main.getChatPrefix() + "§a" + Main.getCurrencyName(sellPrice));
-                    player.playSound(player.getLocation(), Sound.BLOCK_LAVA_POP, 2f,2f);
-                    player.sendMessage(Main.getChatPrefix() + String.format("Du hast §e%d §6%s §fverkauft.", amount, material.name()));
-                });
-            });
-            return;
-        }
-
-        Tasks.async(() -> {
-            if (!PlayerRepository.tryWithdrawMoney(player, price)) {
-                MainThread.run(() -> {
-                    player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
-                    player.updateInventory();
-                });
-                return;
-            }
-            MainThread.deliverOrRefund(player.getUniqueId(), price, () -> {
-                player.sendMessage(Main.getChatPrefix() + "§c-" + price + " Schilling");
-                player.getInventory().addItem(new ItemStack(material, amount));
-                Logger.console("player §a" + player.getUniqueId() + " §fhas §abought §f" + material.name() + " for §a" + price);
-                player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f,2f);
-                player.updateInventory();
-            });
-        });
-    }
-
-
-    private static void buyRandomItem(Player player, int price) {
-        Tasks.async(() -> {
-            List<ShopItem> shopItems = ConfigManager.getShopItems();
-            ShopItem shopItem = shopItems.isEmpty() ? null : shopItems.get(ThreadLocalRandom.current().nextInt(shopItems.size()));
-            Material material = shopItem == null ? null : Material.getMaterial(shopItem.material());
-            if (material == null) {
-                // no usable item in the config: nothing is bought, as before (exception after the balance check)
-                if (PlayerRepository.getMoney(player) < price) MainThread.run(() -> player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f));
-                return;
-            }
-
-            if (!PlayerRepository.tryWithdrawMoney(player, price)) {
-                MainThread.run(() -> player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f));
-                return;
-            }
-            MainThread.deliverOrRefund(player.getUniqueId(), price, () -> {
-                player.getInventory().addItem(new ItemStack(material, shopItem.amount()));
-                player.sendMessage(Main.getChatPrefix() + "§c-" + price + " " + Main.getCurrencyName());
-                player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f,2f);
-                player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f,2f);
-                Logger.console("player §a" + player.getUniqueId() + " §fhas §abought §f" + shopItem.material() + " for §a" + price);
-            });
-        });
     }
 
 
@@ -323,25 +222,24 @@ public class ShopListener implements Listener {
         JewelerInventory.Offer offer = JewelerInventory.Offer.byItemName(displayName);
         if (offer == null) return;
 
-        // tax
-        double tax = offer.getPrice() + (ConfigManager.getManager().getTradeTax() * offer.getPrice());
-        int cost = Math.toIntExact(Math.round(tax));
         String itemName = displayName.split(" ")[0];
         Material material = offer.getMaterial();
 
+        // price plus trade tax, the tax goes to the state treasury
         Tasks.async(() -> {
-            if (!PlayerRepository.tryWithdrawMoney(player, cost)) {
+            Taxes.Purchase purchase = Taxes.chargePurchase(player.getUniqueId(), offer.getPrice());
+            if (!purchase.success()) {
                 MainThread.run(() -> {
                     player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
                     player.sendMessage(Main.getChatPrefix() + "§cDu hast leider nicht genügend Geld.");
                 });
                 return;
             }
-            MainThread.deliverOrRefund(player.getUniqueId(), cost, () -> {
+            MainThread.deliverOrRefund(player.getUniqueId(), purchase.total(), () -> {
                 player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f,2f);
                 player.getInventory().addItem(new ItemStack(material, 1));
                 player.sendMessage(Main.getChatPrefix() + "§fDu hast erfolgreich " + itemName + " §fgekauft!");
-                player.sendMessage(Main.getChatPrefix() + "§c-" + cost + " Schilling");
+                player.sendMessage(Main.getChatPrefix() + "§c-" + purchase.total() + " Schilling §8(" + purchase.net() + " + " + purchase.tax() + " Steuer → Staatskasse)");
             });
         });
     }
@@ -375,28 +273,6 @@ public class ShopListener implements Listener {
                 BlackMarketHandler.forceReroll();
             });
         });
-    }
-
-
-    // main thread only: removes the sold amount from the first matching stack, the credit is booked by the caller
-    private static boolean takeItemsToSell(Player player, Material material, int amount) {
-        Inventory inventory = player.getInventory();
-        int foundIndex = -1;
-        for (int i = 0; i < 46; i++) {
-            ItemStack itemStack = inventory.getItem(i);
-            if (itemStack == null || itemStack.getType() == Material.AIR) continue;
-            if (itemStack.getType() == material && (itemStack.getAmount() >= amount)) {
-                foundIndex = i;
-                break;
-            }
-        }
-        if (foundIndex == -1) return false;
-        ItemStack foundItem = inventory.getItem(foundIndex);
-        if (foundItem == null) return false;
-        ItemMeta meta = foundItem.getItemMeta();
-        if (meta != null && "§5Bargeld".equals(Text.legacy(meta.customName()))) return false;
-        foundItem.setAmount(foundItem.getAmount() - amount);
-        return true;
     }
 
 }

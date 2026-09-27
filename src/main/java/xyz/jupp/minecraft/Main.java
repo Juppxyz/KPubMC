@@ -8,6 +8,9 @@ import xyz.jupp.minecraft.cache.WarpCache;
 import xyz.jupp.minecraft.commands.*;
 import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.database.Database;
+import xyz.jupp.minecraft.economy.Market;
+import xyz.jupp.minecraft.economy.ShopViewListener;
+import xyz.jupp.minecraft.economy.Treasury;
 import xyz.jupp.minecraft.listener.*;
 import xyz.jupp.minecraft.utils.*;
 
@@ -60,6 +63,8 @@ public final class Main extends JavaPlugin {
         this.getCommand("wanted").setExecutor(new WantedCommand());
         this.getCommand("origin").setExecutor(new NullpointCommand());
         this.getCommand("removechunk").setExecutor(new RemoveChunkCommand());
+        this.getCommand("staatskasse").setExecutor(new TreasuryCommand());
+        this.getCommand("shopadmin").setExecutor(new ShopAdminCommand());
     }
 
     private void registerListener() {
@@ -72,6 +77,7 @@ public final class Main extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new NetherTransferListener(), this);
         Bukkit.getPluginManager().registerEvents(new DeathListener(), this);
         Bukkit.getPluginManager().registerEvents(new ShopListener(), this);
+        Bukkit.getPluginManager().registerEvents(new ShopViewListener(), this);
         Bukkit.getPluginManager().registerEvents(new WarpInventoryListener(), this);
         Bukkit.getPluginManager().registerEvents(new CreateLocalShopListener(), this);
         Bukkit.getPluginManager().registerEvents(new MobLimiterListener(), this);
@@ -90,6 +96,7 @@ public final class Main extends JavaPlugin {
     private void registerTasks() {
         Logger.console("register tasks..");
         new PlayerUpdaterTask().startTask();
+        Market.startTasks();
     }
 
 
@@ -113,6 +120,10 @@ public final class Main extends JavaPlugin {
         int warps = WarpCache.getInstance().load();
         int claimedChunks = ChunkCache.getInstance().load();
         Logger.console("loaded " + warps + " warps and " + claimedChunks + " claimed chunks");
+        Logger.console("init market..");
+        Treasury.load();
+        Market.load();
+        Logger.console("loaded " + Market.all().size() + " market items, " + Market.dailyOffers().size() + " daily offers");
         registerCommands();
         registerListener();
         registerTasks();

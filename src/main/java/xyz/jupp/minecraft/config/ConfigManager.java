@@ -7,6 +7,7 @@ import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 import org.bukkit.Bukkit;
 import xyz.jupp.minecraft.Main;
+import xyz.jupp.minecraft.economy.TaxBracket;
 import xyz.jupp.minecraft.utils.Logger;
 
 import java.io.IOException;
@@ -16,6 +17,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 public class ConfigManager {
@@ -28,10 +30,15 @@ public class ConfigManager {
     private static volatile String serverMOTD = "";
     private static volatile float tradeTax = 0.0f;
     private static volatile float deathTax = 0.0f;
-    private static volatile float netherTransferTax = 0.0f;
     private static volatile String databaseUrl = "";
-    // immutable list, replaced as a whole on reload
-    private static volatile List<ShopItem> shopItems = List.of();
+    // market
+    private static volatile int dailyOfferCount = 7;
+    private static volatile double dailyDiscount = 0.15;
+    private static volatile double demandHalfLifeHours = 6.0;
+    // progressive nether transfer tax, sorted by 'from'; immutable list, replaced as a whole on reload
+    private static final List<TaxBracket> DEFAULT_NETHER_BRACKETS = List.of(
+            new TaxBracket(0, 0.0), new TaxBracket(500, 0.5), new TaxBracket(5_000, 0.65), new TaxBracket(20_000, 0.7));
+    private static volatile List<TaxBracket> netherTransferTaxBrackets = DEFAULT_NETHER_BRACKETS;
 
     // singleton pattern
     private static final ConfigManager instance = new ConfigManager();
@@ -53,29 +60,12 @@ public class ConfigManager {
             Bukkit.getServer().setMotd(serverMOTD);
 
             tradeTax = (float) optDouble(config, "tradeTax", 0.0);
-            netherTransferTax = (float) optDouble(config, "netherTransferTax", 0.0);
             deathTax = (float) optDouble(config, "deathTax", 0.0);
             databaseUrl = optString(config, "databaseUrl", "");
-
-            JsonElement jsonShopItems = config.get("shopItems");
-            if (jsonShopItems != null && jsonShopItems.isJsonArray()) {
-                List<ShopItem> loadedShopItems = new ArrayList<>();
-                for (JsonElement element : jsonShopItems.getAsJsonArray()) {
-                    if (!element.isJsonObject()) {
-                        Main.getInstance().getSLF4JLogger().warn("Skipping invalid shop item in config: {}", element);
-                        continue;
-                    }
-                    JsonObject jsonItem = element.getAsJsonObject();
-                    String name = optString(jsonItem, "name", "");
-                    int price = optInt(jsonItem, "price", 0);
-                    boolean sell = optBoolean(jsonItem, "sell", false);
-                    int amount = optInt(jsonItem, "amount", 0);
-                    String description = optString(jsonItem, "description", "");
-                    String material = optString(jsonItem, "material", "");
-                    loadedShopItems.add(new ShopItem(name, material, price, sell, amount, description));
-                }
-                shopItems = List.copyOf(loadedShopItems);
-            }
+            dailyOfferCount = Math.max(0, optInt(config, "dailyOffers", 7));
+            dailyDiscount = Math.min(0.9, Math.max(0.0, optDouble(config, "dailyDiscount", 0.15)));
+            demandHalfLifeHours = Math.max(0.1, optDouble(config, "demandHalfLifeHours", 6.0));
+            netherTransferTaxBrackets = parseBrackets(config.get("netherTransferTaxBrackets"));
 
             Logger.console("loaded config successfully");
             return true;
@@ -116,12 +106,31 @@ public class ConfigManager {
     }
 
     public float getTradeTax() { return tradeTax; }
-    public float getNetherTransferTax() { return netherTransferTax; }
     public float getDeathTax() { return deathTax; }
     public String getDatabaseUrl() { return databaseUrl; }
+    public int getDailyOfferCount() { return dailyOfferCount; }
+    public double getDailyDiscount() { return dailyDiscount; }
+    public double getDemandHalfLifeHours() { return demandHalfLifeHours; }
+    public List<TaxBracket> getNetherTransferTaxBrackets() { return netherTransferTaxBrackets; }
 
-    public static List<ShopItem> getShopItems() {
-        return shopItems;
+    // [{"from": 0, "rate": 0.0}, {"from": 500, "rate": 0.5}, ...]; missing or broken -> the default brackets
+    private static List<TaxBracket> parseBrackets(JsonElement element) {
+        if (element == null || !element.isJsonArray()) return DEFAULT_NETHER_BRACKETS;
+        List<TaxBracket> brackets = new ArrayList<>();
+        for (JsonElement entry : element.getAsJsonArray()) {
+            if (!entry.isJsonObject()) continue;
+            JsonObject bracket = entry.getAsJsonObject();
+            double rate = optDouble(bracket, "rate", -1);
+            int from = optInt(bracket, "from", -1);
+            if (from < 0 || rate < 0 || rate > 1) {
+                Main.getInstance().getSLF4JLogger().warn("Skipping invalid nether tax bracket {}", entry);
+                continue;
+            }
+            brackets.add(new TaxBracket(from, rate));
+        }
+        if (brackets.isEmpty()) return DEFAULT_NETHER_BRACKETS;
+        brackets.sort(Comparator.comparingInt(TaxBracket::from));
+        return List.copyOf(brackets);
     }
 
 
@@ -150,18 +159,6 @@ public class ConfigManager {
     private static int optInt(JsonObject object, String key, int defaultValue) {
         Number number = optNumber(object, key);
         return number == null ? defaultValue : number.intValue();
-    }
-
-    private static boolean optBoolean(JsonObject object, String key, boolean defaultValue) {
-        JsonElement element = object.get(key);
-        if (element == null || !element.isJsonPrimitive()) return defaultValue;
-        JsonPrimitive primitive = element.getAsJsonPrimitive();
-        if (primitive.isBoolean()) return primitive.getAsBoolean();
-        if (primitive.isString()) {
-            if ("true".equalsIgnoreCase(primitive.getAsString())) return true;
-            if ("false".equalsIgnoreCase(primitive.getAsString())) return false;
-        }
-        return defaultValue;
     }
 
     private static String optString(JsonObject object, String key, String defaultValue) {
