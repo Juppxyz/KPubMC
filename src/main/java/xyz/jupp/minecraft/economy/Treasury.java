@@ -2,6 +2,8 @@ package xyz.jupp.minecraft.economy;
 
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.database.Database;
+import xyz.jupp.minecraft.inventory.MainThread;
+import xyz.jupp.minecraft.utils.TabListUtil;
 
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -10,6 +12,7 @@ import java.time.Instant;
 import java.util.EnumMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -38,6 +41,7 @@ public final class Treasury {
     }
 
     private static final AtomicLong balance = new AtomicLong();
+    private static final AtomicBoolean tabRefreshPending = new AtomicBoolean();
 
     /** Blocking, called in onEnable. */
     public static void load() {
@@ -58,7 +62,15 @@ public final class Treasury {
 
     // after the commit of a booking; negative for refunds
     static void committed(long amount) {
-        if (amount != 0) balance.addAndGet(amount);
+        if (amount == 0) return;
+        balance.addAndGet(amount);
+        // the tab list shows the balance: redraw it on the next tick, bookings in the same tick share one redraw
+        if (tabRefreshPending.compareAndSet(false, true)) {
+            MainThread.run(() -> {
+                tabRefreshPending.set(false);
+                TabListUtil.updateTabForAll();
+            });
+        }
     }
 
     /** Blocking: sum of the inflows since the given time per source. */
