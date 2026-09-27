@@ -9,17 +9,19 @@ import java.util.UUID;
 
 /**
  * Haggling with Morpheus (main thread only). The item has a secret minimum price; Morpheus opens with a higher asking
- * price. An offer at or above the secret price is accepted. An offer slightly below it gets a counter offer and costs
- * patience. A far too low offer, or running out of patience, ends the talk: Morpheus refuses to sell to this player
- * until his next visit.
+ * price. He gives in step by step: the first offer needs the secret price plus 20 %, the second plus 10 %, only the
+ * last one may hit the secret price itself. A lower offer gets a counter offer and costs patience. A far too low
+ * offer, or running out of patience, ends the talk: Morpheus refuses to sell to this player until his next visit.
  */
 final class Haggle {
 
     private Haggle() {}
 
     // offers below this share of the secret price are an insult
-    static final double INSULT_SHARE = 0.6;
+    static final double INSULT_SHARE = 0.7;
     static final int PATIENCE = 3;
+    // what he wants above the secret price per patience left beyond the last try (3 left: +20 %, 2: +10 %, 1: +0 %)
+    static final double GIVE_IN_STEP = 0.1;
 
     enum Answer { DEAL, COUNTER, INSULTED, GAVE_UP }
 
@@ -50,7 +52,7 @@ final class Haggle {
         Talk talk = talk(player);
         int secret = BlackMarketHandler.getSecretPrice();
         if (amount >= talk.asking()) return new Result(Answer.DEAL, talk.asking());
-        if (amount >= secret) return new Result(Answer.DEAL, amount);
+        if (amount >= wants(secret, talk.patience())) return new Result(Answer.DEAL, amount);
         if (amount < secret * INSULT_SHARE) {
             refuse(player);
             return new Result(Answer.INSULTED, 0);
@@ -60,10 +62,16 @@ final class Haggle {
             refuse(player);
             return new Result(Answer.GAVE_UP, 0);
         }
-        // he comes closer, but never below his secret price
-        int asking = Math.max(secret, (int) (Math.round((talk.asking() + amount) / 2.0 / 50.0) * 50));
+        // he comes closer, but never below what he wants in the next round
+        int middle = (int) (Math.round((talk.asking() + amount) / 2.0 / 50.0) * 50);
+        int asking = Math.min(talk.asking(), Math.max(wants(secret, patience), middle));
         talks.put(player, new Talk(talk.offerId(), asking, amount, patience));
         return new Result(Answer.COUNTER, asking);
+    }
+
+    // the lowest offer he accepts with this much patience left
+    private static int wants(int secret, int patience) {
+        return (int) Math.ceil(secret * (1 + GIVE_IN_STEP * (patience - 1)));
     }
 
     private static void refuse(UUID player) {

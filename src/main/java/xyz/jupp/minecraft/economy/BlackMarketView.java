@@ -90,7 +90,8 @@ public final class BlackMarketView implements InventoryHolder {
             return;
         }
         Haggle.Talk talk = Haggle.talk(player.getUniqueId());
-        int start = talk.lastOffer() > 0 ? talk.lastOffer() : (int) (Math.round(talk.asking() * 0.5 / 100.0) * 100);
+        // the suggested first offer stays above the insult line
+        int start = talk.lastOffer() > 0 ? talk.lastOffer() : (int) (Math.round(talk.asking() * 0.7 / 100.0) * 100);
         BlackMarketView view = new BlackMarketView(player, talk.offerId(), start);
         view.render();
         player.openInventory(view.inventory);

@@ -69,8 +69,8 @@ public final class BlackMarketHandler {
         int minPrice = blackMarketItems.get(idx).getMinCost();
         int secret = Math.toIntExact(Math.round(minPrice + (randomProbabilitySkewed() * minPrice)));
         secretPrice.set(secret);
-        // he opens 30-60 % above his secret price
-        double markup = 1.3 + ThreadLocalRandom.current().nextDouble() * 0.3;
+        // he opens 20-40 % above his secret price
+        double markup = 1.2 + ThreadLocalRandom.current().nextDouble() * 0.2;
         askingPrice.set((int) (Math.round(secret * markup / 100.0) * 100));
         offer.incrementAndGet();
     }
