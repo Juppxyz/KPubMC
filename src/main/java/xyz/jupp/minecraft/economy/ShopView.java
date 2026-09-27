@@ -463,7 +463,8 @@ public final class ShopView implements InventoryHolder {
         String price = "§7Preis: " + Main.getCurrencyName(net + tax) + " §8(inkl. " + tax + " Steuer)";
         switch (offer.kind()) {
             case EFFECT -> {
-                lore.add("§7Dauer: §f" + minutes(offer.durationSeconds()) + " §8(bis " + minutes(offer.maxSeconds()) + ")");
+                lore.add("§7Wirkt §f" + minutes(offer.durationSeconds()));
+                lore.add("§8Nochmal kaufen verlängert (max. " + minutes(offer.maxSeconds()) + ")");
                 lore.add(price);
             }
             case REPAIR -> {
@@ -577,7 +578,7 @@ public final class ShopView implements InventoryHolder {
     }
 
     private static String minutes(int seconds) {
-        return seconds >= 3600 && seconds % 3600 == 0 ? seconds / 3600 + " h" : Math.round(seconds / 60.0) + " min";
+        return seconds >= 3600 && seconds % 3600 == 0 ? seconds / 3600 + (seconds == 3600 ? " Stunde" : " Stunden") : Math.round(seconds / 60.0) + " Minuten";
     }
 
 
