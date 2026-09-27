@@ -489,7 +489,8 @@
   "material": "NETHERITE_INGOT",
   "category": "ORES",
   "amount": 1,
-  "price": 1000,
+  "price": 1500,
+  "sellRatio": 0.33,
   "sellable": true,
   "buyable": false,
   "description": "Kaufen beim Juwelier"

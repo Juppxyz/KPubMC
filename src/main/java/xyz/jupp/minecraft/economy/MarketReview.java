@@ -54,6 +54,7 @@ public final class MarketReview {
             (Basispreis oder Ankaufquote zu hoch, Gelddruckmaschine); ein Item wird nie gekauft, weil es zu teuer ist;
             Preise passen nicht zueinander (z. B. ein Block billiger als seine Bestandteile); Arbitrage zwischen Kauf- und
             Verkaufspreisen. Items mit 'Kaufen beim Juwelier' verkauft der Juwelier zum Kaufpreis pro Stück.
+            NETHERITE_INGOT ist bewusst teuer (selten): Basispreis dort nicht senken.
             Regeln: Ändere nur, was klar begründet ist, lieber keine Änderung als eine unnötige. Höchstens 10 Änderungen.
             Erlaubte Felder: base_price (ganze Zahl, höchstens ±20 %), min_price, max_price (ganze Zahlen),
             sell_ratio (0 bis 0.9), elasticity (0 bis 0.3). Mache die Anpassungen der letzten Tage ('recentAdjustments')
