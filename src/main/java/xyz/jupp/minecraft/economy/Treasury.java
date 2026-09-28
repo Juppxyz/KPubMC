@@ -34,6 +34,10 @@ public final class Treasury {
         // Basil's loans: the treasury's share of the interest, and what a defaulted loan pays beyond the borrowed amount
         LOAN_INTEREST("Kreditzinsen"),
         LOAN_PENALTY("Kreditstrafe"),
+        // while the state is broke: the emergency sale (the whole price), bonds sold (owed) and bonds paid back
+        EMERGENCY_SALE("Notverkauf"),
+        BOND_SALE("Staatsanleihen"),
+        BOND_REPAY("Anleihen zurückgezahlt"),
         // paid out: interest on Basil's fixed deposits
         INTEREST("Zinsen");
 

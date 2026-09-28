@@ -74,6 +74,7 @@ public final class ShopView implements InventoryHolder {
     private static final int CONTENT_START = 18;
     private static final int CONTENT_SIZE = 27;
     private static final int SLOT_PREVIOUS = 45;
+    private static final int SLOT_EMERGENCY = 46;
     private static final int SLOT_RANDOM = 47;
     private static final int SLOT_BALANCE = 49;
     private static final int SLOT_TREASURY = 51;
@@ -178,10 +179,24 @@ public final class ShopView implements InventoryHolder {
         }
 
         inventory.setItem(SLOT_BALANCE, named(Material.GOLD_NUGGET, "§fDein Konto: " + Main.getCurrencyName(balance), List.of()));
-        inventory.setItem(SLOT_TREASURY, named(Material.GOLD_BLOCK, "§6Staatskasse: " + Main.getCurrencyName((int) Math.min(Integer.MAX_VALUE, Treasury.balance())),
-                List.of("§7Hier landen alle Steuern.",
-                        "§7Steuern gerade: " + Economy.levelWord(),
-                        "§8/staatskasse")));
+        if (Bankruptcy.isBroke()) {
+            inventory.setItem(SLOT_TREASURY, named(Material.REDSTONE_BLOCK, "§4§lStaatspleite!", List.of(
+                    "§cDie Steuern sind erhöht.",
+                    "§7Mehr Rabatt auf Tagesangebote,",
+                    "§7Notverkauf unten links,",
+                    "§7Staatsanleihen bei Basil.",
+                    "§8/staatskasse")));
+            List<String> sale = new ArrayList<>(EmergencySaleView.summary());
+            sale.addFirst("§7Der Staat verkauft heute günstiger:");
+            sale.add("");
+            sale.add("§e» Klicken zum Kaufen");
+            inventory.setItem(SLOT_EMERGENCY, named(Material.BELL, "§4§lNotverkauf", sale));
+        } else {
+            inventory.setItem(SLOT_TREASURY, named(Material.GOLD_BLOCK, "§6Staatskasse: " + Main.getCurrencyName((int) Math.min(Integer.MAX_VALUE, Treasury.balance())),
+                    List.of("§7Hier landen alle Steuern.",
+                            "§7Steuern gerade: " + Economy.levelWord(),
+                            "§8/staatskasse")));
+        }
     }
 
 
@@ -593,6 +608,10 @@ public final class ShopView implements InventoryHolder {
         // only plain clicks: no shift, double, number key, drop or swap clicks
         if (click != ClickType.LEFT && click != ClickType.RIGHT) return;
         int slot = event.getRawSlot();
+        if (slot == SLOT_EMERGENCY && Bankruptcy.isBroke()) {
+            EmergencySaleView.open(player);
+            return;
+        }
 
         switch (view) {
             case OVERVIEW -> clickOverview(player, slot);
@@ -872,7 +891,7 @@ public final class ShopView implements InventoryHolder {
         }
     }
 
-    private static Component name(MarketItem item) {
+    static Component name(MarketItem item) {
         if (item.displayName() != null) {
             Component name = Text.of(item.displayName());
             if (name != null) return name;

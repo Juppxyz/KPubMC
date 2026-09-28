@@ -3,6 +3,7 @@ package xyz.jupp.minecraft.utils;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
+import xyz.jupp.minecraft.economy.Bankruptcy;
 import xyz.jupp.minecraft.economy.Economy;
 import xyz.jupp.minecraft.economy.Treasury;
 
@@ -31,6 +32,10 @@ public class TabListUtil {
     }
 
     private static Component footer() {
+        if (Bankruptcy.isBroke()) {
+            return Component.text("\n§4§lSTAATSPLEITE §8| §6Kasse: §c" + Treasury.balance() + "\n§7Steuern: " + Economy.levelWord()
+                    + " §8| §7Notverkauf im Shop");
+        }
         return Component.text(FOOTER.formatted(Treasury.balance(), Economy.levelWord()));
     }
 

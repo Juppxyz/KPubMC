@@ -411,7 +411,7 @@ public final class HondoView implements InventoryHolder {
     /* delivery: a Player object from before a logout is never saved again, so the goods go to the player online now */
 
     // main thread
-    private static void deliver(UUID uuid, Material material, int quantity) {
+    static void deliver(UUID uuid, Material material, int quantity) {
         Player online = Bukkit.getPlayer(uuid);
         if (online != null) {
             give(online, material, quantity);
@@ -421,7 +421,7 @@ public final class HondoView implements InventoryHolder {
     }
 
     // worker thread: stored until the next join
-    private static void keepForLater(UUID uuid, Material material, int quantity) {
+    static void keepForLater(UUID uuid, Material material, int quantity) {
         try {
             HondoRepository.addPending(uuid, material, quantity);
             Main.getInstance().getSLF4JLogger().info("Hondo keeps {}x {} for {} until the next join", quantity, material, uuid);

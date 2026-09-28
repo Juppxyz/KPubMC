@@ -50,7 +50,8 @@ public final class Economy {
     }
 
     public static double factor() {
-        return factor;
+        // the state is broke: taxes at the highest factor until it has recovered
+        return Bankruptcy.isBroke() ? Math.max(factor, ConfigManager.getManager().getEconomyFactorMax()) : factor;
     }
 
     /** ▲, ▼ or ● compared with the previous day. */
@@ -66,8 +67,9 @@ public final class Economy {
 
     /** The tax level in plain words for players: gesenkt, normal or erhöht (with colour code). */
     public static String levelWord() {
-        if (factor <= 0.95) return "§agesenkt";
-        if (factor >= 1.05) return "§cerhöht";
+        double current = factor();
+        if (current <= 0.95) return "§agesenkt";
+        if (current >= 1.05) return "§cerhöht";
         return "§fnormal";
     }
 

@@ -68,7 +68,10 @@ public record MarketItem(
     public int buyTotal(int bundles, double discount) {
         long total = 0;
         for (int i = 0; i < bundles; i++) total += buyPriceAt(demand + i);
-        return (int) Math.round(total * (1.0 - discount));
+        int price = (int) Math.round(total * (1.0 - discount));
+        // a discount (daily offers, more of it while the state is broke) never goes below what the shop pays back
+        if (discount > 0 && sellable) price = (int) Math.max(price, bundles * (Math.round(basePrice * sellRatio) + 1));
+        return price;
     }
 
     /** Payout for selling n bundles one after another, each lowering the demand. */

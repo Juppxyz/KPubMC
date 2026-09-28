@@ -303,6 +303,21 @@ public final class Database {
             )""",
             "CREATE UNIQUE INDEX IF NOT EXISTS bank_loans_active_idx ON bank_loans (player_uuid) WHERE state IN ('OPEN', 'DEFAULTED')",
             "CREATE INDEX IF NOT EXISTS bank_loans_due_idx ON bank_loans (due_at) WHERE state = 'OPEN'",
+            // the state's emergency: bonds, the items of the emergency sale per day and who bought what
+            """
+            CREATE TABLE IF NOT EXISTS state_bonds (
+                id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                player_uuid UUID    NOT NULL,
+                amount      INTEGER NOT NULL CHECK (amount > 0),
+                payout      INTEGER NOT NULL,
+                bought_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+                repaid      BOOLEAN NOT NULL DEFAULT FALSE,
+                repaid_at   TIMESTAMPTZ
+            )""",
+            "CREATE INDEX IF NOT EXISTS state_bonds_open_idx ON state_bonds (bought_at) WHERE NOT repaid",
+            "CREATE TABLE IF NOT EXISTS emergency_sale (day DATE NOT NULL, material TEXT NOT NULL, PRIMARY KEY (day, material))",
+            "CREATE TABLE IF NOT EXISTS emergency_purchases (day DATE NOT NULL, player_uuid UUID NOT NULL, material TEXT NOT NULL, PRIMARY KEY (day, player_uuid, material))",
+            "ALTER TABLE market_items ADD COLUMN IF NOT EXISTS emergency_sale BOOLEAN NOT NULL DEFAULT FALSE",
             """
             CREATE TABLE IF NOT EXISTS bank_vaults (
                 player_uuid UUID  PRIMARY KEY,

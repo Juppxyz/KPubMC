@@ -8,6 +8,7 @@ import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
+import xyz.jupp.minecraft.database.Database;
 import xyz.jupp.minecraft.database.DatabaseException;
 import xyz.jupp.minecraft.economy.Category;
 import xyz.jupp.minecraft.economy.Economy;
@@ -165,6 +166,8 @@ public class ShopAdminCommand implements TabExecutor {
             case "display_name" -> item.displayName();
             case "description" -> item.description();
             case "tax_class" -> item.taxClassOverride() == null ? null : item.taxClassOverride().name();
+            case "emergency_sale" -> Database.queryOne("SELECT emergency_sale FROM market_items WHERE material = ?",
+                    row -> row.getBoolean(1), material.name());
             default -> null;
         };
     }
@@ -271,7 +274,7 @@ public class ShopAdminCommand implements TabExecutor {
             case "min_price", "max_price" -> none ? null : Integer.parseInt(raw);
             case "base_price", "amount", "rotation_weight" -> Integer.parseInt(raw);
             case "sell_ratio", "elasticity" -> Double.parseDouble(raw.replace(',', '.'));
-            case "core", "enabled", "buyable", "sellable" -> switch (raw.toLowerCase(Locale.ROOT)) {
+            case "core", "enabled", "buyable", "sellable", "emergency_sale" -> switch (raw.toLowerCase(Locale.ROOT)) {
                 case "ja", "true", "an" -> true;
                 case "nein", "false", "aus" -> false;
                 default -> throw new IllegalArgumentException("ja/nein erwartet");

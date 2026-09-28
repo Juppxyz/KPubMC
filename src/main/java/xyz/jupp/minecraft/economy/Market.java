@@ -89,6 +89,29 @@ public final class Market {
         reload();
         Services.reload();
         Tasks.sync(ShopView::refreshAll);
+        checkState();
+    }
+
+    // is the state broke or has it recovered, and can it pay bonds back
+    private static void checkState() {
+        Component announcement;
+        List<Bonds.Repaid> repaid;
+        try {
+            announcement = Bankruptcy.check();
+            repaid = Bonds.repayDue();
+        } catch (RuntimeException e) {
+            Main.getInstance().getSLF4JLogger().warn("State check failed: {}", e.toString());
+            return;
+        }
+        if (announcement == null && repaid.isEmpty()) return;
+        Tasks.sync(() -> {
+            if (announcement != null) {
+                Bukkit.broadcast(announcement);
+                TabListUtil.updateTabForAll();
+                ShopView.refreshAll();
+            }
+            repaid.forEach(Bank::announceBond);
+        });
     }
 
     /**
@@ -131,7 +154,8 @@ public final class Market {
     /** Draws today's offers from the rotation pool and stores them (blocking). */
     public static List<Material> rotate() {
         LocalDate today = LocalDate.now(ZONE);
-        List<Material> offers = drawOffers(ConfigManager.getManager().getDailyOfferCount());
+        int count = ConfigManager.getManager().getDailyOfferCount() + (Bankruptcy.isBroke() ? Bankruptcy.EXTRA_OFFERS : 0);
+        List<Material> offers = drawOffers(count);
         MarketRepository.saveRotation(today, offers);
         dailyOffers = offers;
         offersDay = today;
@@ -215,7 +239,8 @@ public final class Market {
     }
 
     public static double dailyDiscount() {
-        return ConfigManager.getManager().getDailyDiscount();
+        double discount = ConfigManager.getManager().getDailyDiscount();
+        return Bankruptcy.isBroke() ? Math.min(0.9, discount + Bankruptcy.EXTRA_DISCOUNT) : discount;
     }
 
     /** Net price of the random item, 0 if there is nothing to buy today. */
@@ -227,7 +252,10 @@ public final class Market {
     }
 
     public static @Nullable MarketItem randomDailyOffer() {
-        List<MarketItem> buyable = dailyOffers().stream().filter(MarketItem::buyable).toList();
+        // the price is an average: an item the shop pays more for than that is never the random item
+        int price = randomItemPrice();
+        List<MarketItem> buyable = dailyOffers().stream().filter(MarketItem::buyable)
+                .filter(item -> !item.sellable() || Math.round(item.basePrice() * item.sellRatio()) < price).toList();
         return buyable.isEmpty() ? null : buyable.get(ThreadLocalRandom.current().nextInt(buyable.size()));
     }
 

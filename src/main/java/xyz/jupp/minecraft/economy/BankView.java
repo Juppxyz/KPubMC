@@ -52,6 +52,7 @@ public final class BankView implements InventoryHolder {
     private static final int RUNNING_START = 23;
     private static final int SLOT_STATEMENT = 29;
     private static final int SLOT_VAULT = 31;
+    private static final int SLOT_BONDS = 33;
     private static final int STATEMENT_LINES = 10;
     // loans: info, the amounts (or the open loan and its button)
     private static final int SLOT_LOAN_INFO = 36;
@@ -74,7 +75,7 @@ public final class BankView implements InventoryHolder {
     private long ignoreClicksUntil;
 
     private record State(int balance, List<Bank.Term> terms, List<Bank.Entry> statement, List<Bank.Payout> payouts, Bank.Offer offer,
-                         Loans.@Nullable Loan loan, double loanRate) {}
+                         Loans.@Nullable Loan loan, double loanRate, Bonds.Holding bonds) {}
 
     private BankView(Player viewer, State state) {
         this.viewer = viewer;
@@ -106,7 +107,7 @@ public final class BankView implements InventoryHolder {
     private static State load(UUID uuid) {
         List<Bank.Payout> payouts = Bank.payoutDue(uuid);
         return new State(PlayerRepository.getMoney(uuid), Bank.terms(uuid), Bank.statement(uuid, STATEMENT_LINES), payouts, Bank.offer(uuid),
-                Loans.current(uuid), Loans.rateNow());
+                Loans.current(uuid), Loans.rateNow(), Bonds.holding(uuid));
     }
 
     // worker after a booking, then the view is drawn again
@@ -213,6 +214,55 @@ public final class BankView implements InventoryHolder {
                 "",
                 "§e» Linksklick: öffnen")));
         renderLoan();
+        renderBonds();
+    }
+
+    private void renderBonds() {
+        Bonds.Holding bonds = state.bonds();
+        if (Bankruptcy.isBroke()) {
+            List<String> lore = new ArrayList<>(List.of(
+                    "§7Der Staat ist pleite. Leih ihm Geld,",
+                    "§7er zahlt dir §a" + Math.round((1 + Bonds.RETURN) * 100) + " % §7zurück, sobald",
+                    "§7er sich erholt hat und es sich leisten kann."));
+            if (bonds.amount() > 0) lore.add("§7Deine Anleihen: §f" + format(bonds.amount()) + " §7→ zurück §a" + format(bonds.payout()));
+            lore.add("§8Höchstens " + format(Bonds.MAX_TOTAL) + " pro Spieler.");
+            lore.add("");
+            lore.add("§e» Linksklick: " + format(Bonds.AMOUNTS[0]) + " kaufen");
+            lore.add("§e» Rechtsklick: " + format(Bonds.AMOUNTS[1]) + " kaufen");
+            inventory.setItem(SLOT_BONDS, named(Material.GOLD_BLOCK, "§6Staatsanleihe", lore));
+        } else if (bonds.amount() > 0) {
+            inventory.setItem(SLOT_BONDS, named(Material.GOLD_BLOCK, "§6Deine Staatsanleihen", List.of(
+                    "§7Angelegt: §f" + format(bonds.amount()) + " §7→ zurück §a" + format(bonds.payout()),
+                    "§7Der Staat zahlt, sobald er genug hat.")));
+        }
+    }
+
+    private void buyBond(Player player, int amount) {
+        UUID uuid = player.getUniqueId();
+        busy = true;
+        Tasks.async(() -> {
+            Bonds.Outcome outcome;
+            try {
+                outcome = Bonds.buy(uuid, amount);
+            } catch (RuntimeException e) {
+                outcome = Bonds.Outcome.UNAVAILABLE;
+            }
+            Bonds.Outcome result = outcome;
+            MainThread.run(() -> {
+                switch (result) {
+                    case OK -> {
+                        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f, 1.4f);
+                        player.sendMessage(Bank.PREFIX + "Danke! Der Staat schuldet dir jetzt §a"
+                                + format(amount + Math.round(amount * Bonds.RETURN)) + " Schilling§f.");
+                    }
+                    case NOT_BROKE -> fail(player, "§fDer Staat braucht gerade keine Anleihen.");
+                    case LIMIT -> fail(player, "§fMehr als " + format(Bonds.MAX_TOTAL) + " Schilling Anleihen nimmt der Staat nicht.");
+                    case INSUFFICIENT_FUNDS -> fail(player, notEnough());
+                    default -> fail(player, "§fBasil kann gerade nichts buchen, versuch es gleich nochmal.");
+                }
+            });
+            reload();
+        });
     }
 
 
@@ -430,6 +480,8 @@ public final class BankView implements InventoryHolder {
             case BankLog.LOAN_REPAY -> "Kredit zurückgezahlt" + (entry.note() == null ? "" : " (" + entry.note() + " Zinsen)");
             case BankLog.LOAN_DEFAULT -> "Kredit eingezogen";
             case BankLog.LOAN_APOLOGY -> "Entschuldigung an Basil";
+            case BankLog.BOND_BUY -> "Staatsanleihe gekauft";
+            case BankLog.BOND_REPAY -> "Staatsanleihe zurückgezahlt";
             case "TAX_DEATH_TAX" -> "Todessteuer";
             case "TAX_NETHER_TAX" -> "Nether-Steuer";
             default -> kind;
@@ -502,6 +554,8 @@ public final class BankView implements InventoryHolder {
             if (index < state.terms().size()) cancelTerm(player, state.terms().get(index));
         } else if (slot == SLOT_VAULT && click == ClickType.LEFT) {
             openVault(player);
+        } else if (slot == SLOT_BONDS && Bankruptcy.isBroke()) {
+            buyBond(player, click == ClickType.LEFT ? Bonds.AMOUNTS[0] : Bonds.AMOUNTS[1]);
         } else if (click == ClickType.LEFT && slot >= LOAN_START && slot < LOAN_START + Loans.AMOUNTS.length) {
             clickLoan(player, slot);
         }

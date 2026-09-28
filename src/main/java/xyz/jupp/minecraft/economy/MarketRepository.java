@@ -46,7 +46,8 @@ public final class MarketRepository {
             Map.entry("verkaufbar", "sellable"),
             Map.entry("name", "display_name"),
             Map.entry("beschreibung", "description"),
-            Map.entry("steuerklasse", "tax_class"));
+            Map.entry("steuerklasse", "tax_class"),
+            Map.entry("notverkauf", "emergency_sale"));
 
     private static final String COLUMNS = "material, category, display_name, description, amount, base_price, min_price, "
             + "max_price, elasticity, sell_ratio, buyable, sellable, core, rotation_weight, enabled, demand, tax_class";

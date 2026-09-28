@@ -6,6 +6,8 @@ import org.bukkit.command.CommandSender;
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.economy.TaxClass;
 import xyz.jupp.minecraft.economy.Bank;
+import xyz.jupp.minecraft.economy.Bankruptcy;
+import xyz.jupp.minecraft.economy.Bonds;
 import xyz.jupp.minecraft.economy.Economy;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.economy.Taxes;
@@ -28,7 +30,10 @@ public class TreasuryCommand implements CommandExecutor {
     // everything that came in; fixed deposits are owed to the players and the interest went out
     private static long income(Map<Treasury.Source, Long> inflow) {
         return inflow.entrySet().stream()
-                .filter(entry -> entry.getKey() != Treasury.Source.INTEREST && entry.getKey() != Treasury.Source.FIXED_DEPOSIT)
+                .filter(entry -> switch (entry.getKey()) {
+                    case INTEREST, FIXED_DEPOSIT, BOND_SALE, BOND_REPAY -> false;
+                    default -> true;
+                })
                 .mapToLong(Map.Entry::getValue).sum();
     }
 
@@ -40,6 +45,10 @@ public class TreasuryCommand implements CommandExecutor {
             Map<Treasury.Source, Long> week = Treasury.inflowSince(now.minus(Duration.ofDays(7)));
             List<String> lines = new ArrayList<>();
             lines.add("§8=-- §6§lStaatskasse §8--=");
+            if (Bankruptcy.isBroke()) {
+                lines.add("§4§lDer Staat ist pleite! §cSteuern erhöht.");
+                lines.add("§7Hilf mit: Notverkauf im Shop, Staatsanleihen bei Basil.");
+            }
             long owed = Bank.owedDeposits();
             lines.add("§fStand: " + Main.getCurrencyName((int) Math.min(Integer.MAX_VALUE, Treasury.balance()))
                     + (owed > 0 ? " §8(davon " + owed + " Festgeld der Spieler)" : ""));
@@ -48,6 +57,8 @@ public class TreasuryCommand implements CommandExecutor {
             lines.add("§fEingenommen: §a" + today + " §7heute§8, §a" + lastWeek + " §7diese Woche");
             long interest = -week.getOrDefault(Treasury.Source.INTEREST, 0L);
             if (interest > 0) lines.add("§fZinsen an Sparer: §c" + interest + " §7diese Woche");
+            long bonds = Bonds.owed();
+            if (bonds > 0) lines.add("§fStaatsanleihen offen: §c" + bonds + " Schilling");
             lines.add("§fSteuern gerade: " + Economy.levelWord());
             lines.add("§8» §7Essen & Farm-Sachen: §a" + percent(Taxes.rate(TaxClass.BASIC))
                     + " §8| §7Normale Waren: §a" + percent(Taxes.rate(TaxClass.STANDARD))

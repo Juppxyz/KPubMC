@@ -27,6 +27,8 @@ public final class BankLog {
     public static final String LOAN_REPAY = "LOAN_REPAY";
     public static final String LOAN_DEFAULT = "LOAN_DEFAULT";
     public static final String LOAN_APOLOGY = "LOAN_APOLOGY";
+    public static final String BOND_BUY = "BOND_BUY";
+    public static final String BOND_REPAY = "BOND_REPAY";
 
     /**
      * SQL for the part of the account an open loan locks (borrowed amount plus its full interest): it may be spent, but

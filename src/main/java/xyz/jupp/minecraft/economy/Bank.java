@@ -49,7 +49,7 @@ public final class Bank {
     public static final int VAULT_FEE = 250;
 
     // serializes the interest payouts, so two of them never spend the same treasury money
-    private static final long INTEREST_LOCK = 0x4B7075624261L;
+    static final long INTEREST_LOCK = 0x4B7075624261L;
     private static final long PAYOUT_PERIOD_TICKS = 20L * 60 * 5;
 
 
@@ -161,7 +161,7 @@ public final class Bank {
                 SELECT (SELECT COALESCE(SUM(amount), 0) FROM treasury_ledger)
                            - (SELECT COALESCE(SUM(amount), 0) FROM bank_deposits WHERE NOT paid_out AND in_treasury),
                        (SELECT COALESCE(SUM(amount), 0) FROM treasury_ledger
-                            WHERE amount > 0 AND source NOT IN ('INTEREST', 'FIXED_DEPOSIT') AND created_at >= now() - make_interval(days => ?)),
+                            WHERE amount > 0 AND source NOT IN ('INTEREST', 'FIXED_DEPOSIT', 'BOND_SALE') AND created_at >= now() - make_interval(days => ?)),
                        (SELECT COALESCE(SUM(amount * rate), 0) FROM bank_deposits WHERE NOT paid_out),
                        (SELECT COALESCE(SUM(amount * rate), 0) FROM bank_deposits WHERE NOT paid_out AND player_uuid = ?)""",
                 row -> {
@@ -323,6 +323,13 @@ public final class Bank {
             String name = Bukkit.getOfflinePlayer(due.player()).getName();
             JailHandler.broadcastWanted(name == null ? "?" : name, reason);
         }
+    }
+
+
+    // main thread: the recovered state paid a bond back
+    static void announceBond(@NotNull Bonds.Repaid repaid) {
+        Player player = Bukkit.getPlayer(repaid.player());
+        if (player != null) player.sendMessage(PREFIX + "Der Staat zahlt deine Anleihe zurück: §a+" + repaid.payout() + " Schilling§f. Danke für deine Hilfe!");
     }
 
 
