@@ -95,6 +95,26 @@ public final class JailHandler {
     }
 
 
+    /** Wanted until a player catches them (no end), e.g. for an unpaid loan; with the usual broadcast. */
+    public static void markWantedUntilCaught(@NotNull Player player, @NotNull String reason) {
+        PlayerCacheObject pco = cache(player);
+        wantedPlayers.add(player.getUniqueId());
+        offMainThread(() -> {
+            synchronized (LOCK) {
+                pco.setWantedUntil(0);
+            }
+            refreshPlayerName(player, pco);
+        });
+        playerWantedBroadcast(player, reason);
+    }
+
+    /** The wanted broadcast for a player who is offline (their status is already in the database). */
+    public static void broadcastWanted(@NotNull String name, @NotNull String reason) {
+        String msg = Main.getChatPrefix() + "§4§lGESUCHT §c" + name + " §7(" + reason + "§7)";
+        onMainThread(() -> Bukkit.getOnlinePlayers().forEach(p -> p.sendMessage(msg)));
+        Logger.console("Wanted-Broadcast: " + name + " - " + reason);
+    }
+
     // team name plus the jail/wanted prefix, every name refresh has to go through here or the prefix is lost
     public static void refreshPlayerName(@NotNull Player player, @NotNull PlayerCacheObject pco) {
         onMainThread(() -> {

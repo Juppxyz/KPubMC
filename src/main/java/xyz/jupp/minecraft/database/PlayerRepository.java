@@ -111,7 +111,9 @@ public final class PlayerRepository {
     /** Moves money from one player to another in one transaction. */
     public static TransferResult transferMoney(@NotNull UUID from, @NotNull UUID to, int amount) {
         TransferResult result = Database.inTransaction(connection -> {
-            if (Database.update(connection, "UPDATE players SET money = money - ? WHERE uuid = ? AND money >= ?", amount, from, amount) == 0) {
+            // borrowed money stays on the account while the loan runs
+            if (Database.update(connection, "UPDATE players SET money = money - ? WHERE uuid = ? AND money - ? >= " + BankLog.LOAN_LOCK,
+                    amount, from, amount, from) == 0) {
                 return TransferResult.INSUFFICIENT_FUNDS;
             }
             if (Database.update(connection, "UPDATE players SET money = money + ? WHERE uuid = ?", amount, to) == 0) {

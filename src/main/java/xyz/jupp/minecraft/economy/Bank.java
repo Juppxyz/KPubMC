@@ -8,6 +8,7 @@ import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.database.BankLog;
 import xyz.jupp.minecraft.database.Database;
 import xyz.jupp.minecraft.inventory.MainThread;
+import xyz.jupp.minecraft.utils.JailHandler;
 import xyz.jupp.minecraft.utils.Tasks;
 
 import java.sql.Timestamp;
@@ -170,6 +171,11 @@ public final class Bank {
                 }, TERM_DAYS, player);
     }
 
+    // the rate a fixed deposit would get right now (a loan adds the treasury's share)
+    static double depositRate(java.sql.Connection connection) throws java.sql.SQLException {
+        return budget(connection, new UUID(0, 0)).rate();
+    }
+
     public static Offer offer(@NotNull UUID player) {
         return Database.withConnection(connection -> budget(connection, player).offer());
     }
@@ -203,7 +209,9 @@ public final class Bank {
             if (running != null && running >= MAX_TERMS) return Outcome.LIMIT;
             Offer offer = budget(connection, player).offer();
             if (!offer.accepts(amount)) return offer.playerLimited() ? Outcome.LIMIT : Outcome.CLOSED;
-            if (Database.update(connection, "UPDATE players SET money = money - ? WHERE uuid = ? AND money >= ?", amount, player, amount) == 0) {
+            // borrowed money cannot be put into a fixed deposit
+            if (Database.update(connection, "UPDATE players SET money = money - ? WHERE uuid = ? AND money - ? >= " + BankLog.LOAN_LOCK,
+                    amount, player, amount, player) == 0) {
                 return Outcome.INSUFFICIENT_FUNDS;
             }
             Database.update(connection, "INSERT INTO bank_deposits (player_uuid, amount, rate, ends_at, in_treasury) VALUES (?, ?, ?, ?, TRUE)",
@@ -275,13 +283,18 @@ public final class Bank {
     public static void startTasks() {
         Bukkit.getScheduler().runTaskTimerAsynchronously(Main.getInstance(), () -> {
             List<Payout> payouts;
+            List<Loans.Due> loans;
             try {
                 payouts = payoutDue(null);
+                loans = Loans.processDue();
             } catch (RuntimeException e) {
-                Main.getInstance().getSLF4JLogger().warn("Fixed deposit payout failed: {}", e.toString());
+                Main.getInstance().getSLF4JLogger().warn("Fixed deposit or loan processing failed: {}", e.toString());
                 return;
             }
-            if (!payouts.isEmpty()) MainThread.run(() -> payouts.forEach(Bank::announce));
+            if (!payouts.isEmpty() || !loans.isEmpty()) MainThread.run(() -> {
+                payouts.forEach(Bank::announce);
+                loans.forEach(Bank::announceLoan);
+            });
         }, 20L * 40, PAYOUT_PERIOD_TICKS);
     }
 
@@ -291,6 +304,25 @@ public final class Bank {
         if (player == null) return;
         player.sendMessage(PREFIX + "Dein Festgeld ist fällig: §a+" + (payout.amount() + payout.interest()) + " Schilling §8(davon "
                 + payout.interest() + " Zinsen)");
+    }
+
+
+    // main thread: a due loan was collected, or it defaulted and the player is wanted until someone catches them
+    static void announceLoan(@NotNull Loans.Due due) {
+        Player player = Bukkit.getPlayer(due.player());
+        if (!due.defaulted()) {
+            if (player != null) player.sendMessage(PREFIX + "Dein Kredit war fällig, ich habe §c" + due.amount() + " Schilling §feingezogen. Danke!");
+            return;
+        }
+        String reason = "Kredit nicht zurückgezahlt";
+        if (player != null) {
+            JailHandler.markWantedUntilCaught(player, reason);
+            player.sendMessage(PREFIX + "§cDu hast deinen Kredit nicht zurückgezahlt. Ich habe " + due.amount() + " Schilling eingezogen,");
+            player.sendMessage(PREFIX + "§cjetzt wirst du gesucht. Neue Kredite erst nach deiner Strafe und einer Entschuldigung.");
+        } else {
+            String name = Bukkit.getOfflinePlayer(due.player()).getName();
+            JailHandler.broadcastWanted(name == null ? "?" : name, reason);
+        }
     }
 
 

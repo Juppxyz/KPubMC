@@ -288,6 +288,22 @@ public final class Database {
             // the deposited amount lies in the treasury (deposits from before were booked in by Bank.load)
             "ALTER TABLE bank_deposits ADD COLUMN IF NOT EXISTS in_treasury BOOLEAN NOT NULL DEFAULT FALSE",
             """
+            CREATE TABLE IF NOT EXISTS bank_loans (
+                id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                player_uuid    UUID    NOT NULL,
+                principal      INTEGER NOT NULL CHECK (principal > 0),
+                rate           DOUBLE PRECISION NOT NULL,
+                treasury_share DOUBLE PRECISION NOT NULL,
+                locked         INTEGER NOT NULL,
+                state          TEXT    NOT NULL CHECK (state IN ('OPEN', 'REPAID', 'DEFAULTED', 'SETTLED')),
+                paid           BIGINT  NOT NULL DEFAULT 0,
+                taken_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+                due_at         TIMESTAMPTZ NOT NULL,
+                closed_at      TIMESTAMPTZ
+            )""",
+            "CREATE UNIQUE INDEX IF NOT EXISTS bank_loans_active_idx ON bank_loans (player_uuid) WHERE state IN ('OPEN', 'DEFAULTED')",
+            "CREATE INDEX IF NOT EXISTS bank_loans_due_idx ON bank_loans (due_at) WHERE state = 'OPEN'",
+            """
             CREATE TABLE IF NOT EXISTS bank_vaults (
                 player_uuid UUID  PRIMARY KEY,
                 items       BYTEA NOT NULL,

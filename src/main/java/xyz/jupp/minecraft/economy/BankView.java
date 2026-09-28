@@ -16,6 +16,8 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
+import xyz.jupp.minecraft.cache.CacheHandler;
+import xyz.jupp.minecraft.cache.PlayerCacheObject;
 import xyz.jupp.minecraft.database.BankLog;
 import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.inventory.MainThread;
@@ -40,7 +42,7 @@ import static xyz.jupp.minecraft.economy.ShopView.pane;
  */
 public final class BankView implements InventoryHolder {
 
-    private static final int SIZE = 36;
+    private static final int SIZE = 45;
     private static final int SLOT_BALANCE = 4;
     private static final int SLOT_CLOSE = 8;
     private static final int SLOT_DEPOSIT = 10;
@@ -51,6 +53,15 @@ public final class BankView implements InventoryHolder {
     private static final int SLOT_STATEMENT = 29;
     private static final int SLOT_VAULT = 31;
     private static final int STATEMENT_LINES = 10;
+    // loans: info, the amounts (or the open loan and its button)
+    private static final int SLOT_LOAN_INFO = 36;
+    private static final int LOAN_START = 38;
+    private static final int SLOT_LOAN_STATUS = 38;
+    private static final int SLOT_LOAN_ACTION = 42;
+    // the rules page before a loan
+    private static final int SLOT_RULES = 13;
+    private static final int SLOT_CONFIRM = 29;
+    private static final int SLOT_CANCEL = 33;
     private static final long CLICK_COOLDOWN_MILLIS = 300;
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("dd.MM. HH:mm").withZone(Market.ZONE);
 
@@ -58,9 +69,12 @@ public final class BankView implements InventoryHolder {
     private final Inventory inventory;
     private State state;
     private boolean busy;
+    // 0: the counter, otherwise the loan whose rules are shown
+    private int confirmLoan;
     private long ignoreClicksUntil;
 
-    private record State(int balance, List<Bank.Term> terms, List<Bank.Entry> statement, List<Bank.Payout> payouts, Bank.Offer offer) {}
+    private record State(int balance, List<Bank.Term> terms, List<Bank.Entry> statement, List<Bank.Payout> payouts, Bank.Offer offer,
+                         Loans.@Nullable Loan loan, double loanRate) {}
 
     private BankView(Player viewer, State state) {
         this.viewer = viewer;
@@ -91,7 +105,8 @@ public final class BankView implements InventoryHolder {
     // worker: due fixed deposits are paid out first, so the account is up to date
     private static State load(UUID uuid) {
         List<Bank.Payout> payouts = Bank.payoutDue(uuid);
-        return new State(PlayerRepository.getMoney(uuid), Bank.terms(uuid), Bank.statement(uuid, STATEMENT_LINES), payouts, Bank.offer(uuid));
+        return new State(PlayerRepository.getMoney(uuid), Bank.terms(uuid), Bank.statement(uuid, STATEMENT_LINES), payouts, Bank.offer(uuid),
+                Loans.current(uuid), Loans.rateNow());
     }
 
     // worker after a booking, then the view is drawn again
@@ -119,6 +134,10 @@ public final class BankView implements InventoryHolder {
         ignoreClicksUntil = System.currentTimeMillis() + CLICK_COOLDOWN_MILLIS;
         ItemStack frame = pane(Material.BLACK_STAINED_GLASS_PANE);
         for (int slot = 0; slot < SIZE; slot++) inventory.setItem(slot, frame);
+        if (confirmLoan > 0) {
+            renderLoanRules();
+            return;
+        }
 
         long cash = Cash.total(viewer);
         long legacy = legacyCash();
@@ -193,6 +212,179 @@ public final class BankView implements InventoryHolder {
                 "§7Kostet §f" + Bank.VAULT_FEE + " Schilling §7pro Öffnen.",
                 "",
                 "§e» Linksklick: öffnen")));
+        renderLoan();
+    }
+
+
+    /* loans */
+
+    private void renderLoan() {
+        Loans.Loan loan = state.loan();
+        int max = Loans.maxFor(state.balance());
+        inventory.setItem(SLOT_LOAN_INFO, named(Material.WRITABLE_BOOK, "§cKredit", List.of(
+                "§7Geld sofort, zurück in §f" + Loans.DAYS + " Tagen§7.",
+                "§7Zinsen gerade: §f" + rate(state.loanRate()) + " §7pro Woche,",
+                "§7je früher zurück, desto weniger.",
+                "§7Für dich bis zu §f" + format(max) + " Schilling §8(nach Kontostand)",
+                "§8Vor dem Kredit zeigt Basil dir alle Regeln.")));
+        Instant now = Instant.now();
+        if (loan != null && loan.state() == Loans.State.OPEN) {
+            inventory.setItem(SLOT_LOAN_STATUS, named(Material.PAPER, "§6Offener Kredit: " + format(loan.principal()) + " Schilling", List.of(
+                    "§7Heute zurückzahlen: §f" + format(loan.debt(now)) + " Schilling",
+                    "§7Am " + Loans.DAYS + ". Tag: §f" + format(loan.debt(loan.dueAt())) + " Schilling",
+                    "§7Fällig in: §f" + remaining(loan.dueAt()),
+                    "§8Gesperrt bis dahin: " + format(loan.locked()) + " Schilling",
+                    "§8(nicht überweisen, abheben oder festlegen)")));
+            inventory.setItem(SLOT_LOAN_ACTION, named(Material.LIME_CONCRETE, "§a§lJetzt zurückzahlen", List.of(
+                    "§7Kostet heute §f" + format(loan.debt(now)) + " Schilling",
+                    "",
+                    "§e» Linksklick: zurückzahlen")));
+            return;
+        }
+        if (loan != null && loan.state() == Loans.State.DEFAULTED) {
+            boolean free = !isWantedOrJailed();
+            inventory.setItem(SLOT_LOAN_STATUS, named(Material.REDSTONE, "§4Kredit geplatzt", free
+                    ? List.of("§7Deine Strafe ist vorbei. Für neue Kredite", "§7erwartet Basil eine Entschuldigung.")
+                    : List.of("§cDu wirst gesucht oder sitzt im Gefängnis.", "§7Erst nach deiner Strafe kannst du", "§7dich bei Basil entschuldigen.")));
+            inventory.setItem(SLOT_LOAN_ACTION, free
+                    ? named(Material.GOLD_BLOCK, "§6Entschuldigung zahlen", List.of(
+                            "§7Kostet §f" + format(loan.apologyLeft()) + " Schilling §8(" + Loans.APOLOGY_FACTOR + "-fach, abzüglich eingezogen)",
+                            "§7Danach sind wieder Kredite möglich.",
+                            "",
+                            "§e» Linksklick: zahlen"))
+                    : named(Material.GRAY_DYE, "§7Entschuldigung erst nach der Strafe", List.of()));
+            return;
+        }
+        for (int i = 0; i < Loans.AMOUNTS.length; i++) {
+            int amount = Loans.AMOUNTS[i];
+            if (amount > max) {
+                inventory.setItem(LOAN_START + i, named(Material.GRAY_DYE, "§7Kredit: " + format(amount) + " Schilling",
+                        List.of("§7Dafür ist dein Kontostand zu niedrig.")));
+                continue;
+            }
+            inventory.setItem(LOAN_START + i, named(Material.EMERALD, "§cKredit: " + format(amount) + " Schilling", List.of(
+                    "§7Zurück in " + Loans.DAYS + " Tagen, höchstens §f" + format(amount + (int) Math.ceil(amount * state.loanRate())),
+                    "",
+                    "§e» Linksklick: Regeln ansehen")));
+        }
+    }
+
+    private void renderLoanRules() {
+        int amount = confirmLoan;
+        double rate = state.loanRate();
+        int tomorrow = amount + (int) Math.ceil(amount * rate / Loans.DAYS);
+        int full = amount + (int) Math.ceil(amount * rate);
+        inventory.setItem(4, named(Material.EMERALD, "§cKredit über " + format(amount) + " Schilling", List.of()));
+        inventory.setItem(SLOT_RULES, named(Material.WRITABLE_BOOK, "§fKredit-Regeln und Folgen", List.of(
+                "§a1. §fDu bekommst §a" + format(amount) + " Schilling §fsofort.",
+                "§a2. §fZurück in §f" + Loans.DAYS + " Tagen§f, je früher desto billiger:",
+                "   §7nach 1 Tag §f" + format(tomorrow) + "§7, am " + Loans.DAYS + ". Tag §f" + format(full) + " Schilling",
+                "§a3. §fBis dahin ist das geliehene Geld gesperrt:",
+                "   §7ausgeben ja, überweisen, abheben, festlegen nein.",
+                "§a4. §fAm " + Loans.DAYS + ". Tag holt Basil es sich vom Konto.",
+                "§c5. §fReicht dein Geld nicht, nimmt er was da ist,",
+                "   §cund du wirst gesucht§f, bis dich jemand erwischt.",
+                "   §fDann §c72 Stunden Gefängnis§f.",
+                "§c6. §fNeue Kredite erst nach einer Entschuldigung",
+                "   §fvon §c" + format(Loans.apology(amount)) + " Schilling §8(" + Loans.APOLOGY_FACTOR + "-fach)§f.")));
+        inventory.setItem(SLOT_CONFIRM, named(Material.LIME_CONCRETE, "§a§lJa, Kredit aufnehmen", List.of(
+                "§7Zinsen: §f" + rate(rate) + " §7pro Woche")));
+        inventory.setItem(SLOT_CANCEL, named(Material.RED_CONCRETE, "§cAbbrechen", List.of()));
+    }
+
+    // an open loan locks the borrowed money, the player should know why
+    private String notEnough() {
+        Loans.Loan loan = state.loan();
+        return loan != null && loan.state() == Loans.State.OPEN
+                ? "§fSo viel geht nicht: geliehenes Geld bleibt bis zur Rückzahlung gesperrt."
+                : "§fSo viel hast du nicht auf dem Konto.";
+    }
+
+    private boolean isWantedOrJailed() {
+        PlayerCacheObject pco = CacheHandler.getInstance().getPlayerInCache(viewer);
+        return pco.isWanted() || pco.isJail();
+    }
+
+    private void takeLoan(Player player, int amount) {
+        UUID uuid = player.getUniqueId();
+        double rate = state.loanRate();
+        busy = true;
+        Tasks.async(() -> {
+            Loans.Outcome outcome;
+            try {
+                outcome = Loans.take(uuid, amount, rate);
+            } catch (RuntimeException e) {
+                outcome = Loans.Outcome.UNAVAILABLE;
+            }
+            Loans.Outcome result = outcome;
+            MainThread.run(() -> {
+                confirmLoan = 0;
+                switch (result) {
+                    case OK -> {
+                        player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_YES, 1f, 1f);
+                        player.sendMessage(Bank.PREFIX + "Hier sind §a" + format(amount) + " Schilling§f. In " + Loans.DAYS + " Tagen will ich sie zurück.");
+                    }
+                    case HAS_LOAN -> fail(player, "§fDu hast schon einen Kredit.");
+                    case NOT_ALLOWED -> fail(player, "§fErst die Entschuldigung, dann ein neuer Kredit.");
+                    case TOO_HIGH -> fail(player, "§fSo viel leiht Basil dir bei deinem Kontostand nicht.");
+                    case WANTED -> fail(player, "§fGesuchten und Häftlingen leiht Basil nichts.");
+                    case RATE_CHANGED -> fail(player, "§fDer Zins hat sich gerade geändert, schau ihn dir nochmal an.");
+                    default -> fail(player, "§fBasil kann gerade nichts buchen, versuch es gleich nochmal.");
+                }
+            });
+            reload();
+        });
+    }
+
+    private void repayLoan(Player player) {
+        UUID uuid = player.getUniqueId();
+        busy = true;
+        Tasks.async(() -> {
+            Loans.Outcome outcome;
+            try {
+                outcome = Loans.repay(uuid);
+            } catch (RuntimeException e) {
+                outcome = Loans.Outcome.UNAVAILABLE;
+            }
+            Loans.Outcome result = outcome;
+            MainThread.run(() -> {
+                switch (result) {
+                    case OK -> {
+                        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f, 2f);
+                        player.sendMessage(Bank.PREFIX + "Kredit zurückgezahlt. Mit dir mache ich gern Geschäfte.");
+                    }
+                    case INSUFFICIENT_FUNDS -> fail(player, "§fDafür reicht dein Konto gerade nicht.");
+                    default -> fail(player, "§fDa ist kein offener Kredit.");
+                }
+            });
+            reload();
+        });
+    }
+
+    private void apologize(Player player) {
+        UUID uuid = player.getUniqueId();
+        busy = true;
+        Tasks.async(() -> {
+            Loans.Outcome outcome;
+            try {
+                outcome = Loans.apologize(uuid);
+            } catch (RuntimeException e) {
+                outcome = Loans.Outcome.UNAVAILABLE;
+            }
+            Loans.Outcome result = outcome;
+            MainThread.run(() -> {
+                switch (result) {
+                    case OK -> {
+                        player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_CELEBRATE, 1f, 1f);
+                        player.sendMessage(Bank.PREFIX + "Entschuldigung angenommen. Neuer Anfang, aber ich behalte dich im Auge.");
+                    }
+                    case INSUFFICIENT_FUNDS -> fail(player, "§fDafür reicht dein Konto gerade nicht.");
+                    case WANTED -> fail(player, "§fErst die Strafe, dann die Entschuldigung.");
+                    default -> fail(player, "§fDa gibt es nichts zu entschuldigen.");
+                }
+            });
+            reload();
+        });
     }
 
     private long legacyCash() {
@@ -234,6 +426,10 @@ public final class BankView implements InventoryHolder {
             case BankLog.TERM_PAYOUT -> "Festgeld ausgezahlt" + (entry.note() == null ? "" : " (" + entry.note() + " Zinsen)");
             case BankLog.TERM_CANCEL -> "Festgeld aufgelöst";
             case BankLog.VAULT_FEE -> "Schließfach";
+            case BankLog.LOAN_TAKE -> "Kredit aufgenommen";
+            case BankLog.LOAN_REPAY -> "Kredit zurückgezahlt" + (entry.note() == null ? "" : " (" + entry.note() + " Zinsen)");
+            case BankLog.LOAN_DEFAULT -> "Kredit eingezogen";
+            case BankLog.LOAN_APOLOGY -> "Entschuldigung an Basil";
             case "TAX_DEATH_TAX" -> "Todessteuer";
             case "TAX_NETHER_TAX" -> "Nether-Steuer";
             default -> kind;
@@ -284,6 +480,15 @@ public final class BankView implements InventoryHolder {
         if (click != ClickType.LEFT && click != ClickType.RIGHT) return;
         int slot = event.getRawSlot();
 
+        if (confirmLoan > 0) {
+            if (slot == SLOT_CONFIRM && click == ClickType.LEFT) {
+                takeLoan(player, confirmLoan);
+            } else if (slot == SLOT_CANCEL) {
+                confirmLoan = 0;
+                render();
+            }
+            return;
+        }
         if (slot == SLOT_CLOSE) {
             Tasks.sync(player::closeInventory);
         } else if (slot == SLOT_DEPOSIT && click == ClickType.LEFT) {
@@ -297,7 +502,28 @@ public final class BankView implements InventoryHolder {
             if (index < state.terms().size()) cancelTerm(player, state.terms().get(index));
         } else if (slot == SLOT_VAULT && click == ClickType.LEFT) {
             openVault(player);
+        } else if (click == ClickType.LEFT && slot >= LOAN_START && slot < LOAN_START + Loans.AMOUNTS.length) {
+            clickLoan(player, slot);
         }
+    }
+
+    private void clickLoan(Player player, int slot) {
+        Loans.Loan loan = state.loan();
+        if (loan != null) {
+            if (slot != SLOT_LOAN_ACTION) return;
+            if (loan.state() == Loans.State.OPEN) {
+                repayLoan(player);
+            } else if (!isWantedOrJailed()) {
+                apologize(player);
+            }
+            return;
+        }
+        int amount = Loans.AMOUNTS[slot - LOAN_START];
+        if (amount > Loans.maxFor(state.balance())) return;
+        // the rules first, the loan only after the confirmation
+        confirmLoan = amount;
+        player.playSound(player.getLocation(), Sound.ITEM_BOOK_PAGE_TURN, 1f, 1f);
+        render();
     }
 
     private void deposit(Player player) {
@@ -360,7 +586,7 @@ public final class BankView implements InventoryHolder {
             if (!withdrawal.success()) {
                 MainThread.run(() -> {
                     busy = false;
-                    fail(player, "§fSo viel hast du nicht auf dem Konto.");
+                    fail(player, notEnough());
                 });
                 return;
             }
@@ -391,7 +617,7 @@ public final class BankView implements InventoryHolder {
                         player.playSound(player.getLocation(), Sound.BLOCK_IRON_DOOR_CLOSE, 0.8f, 1.4f);
                         player.sendMessage(Bank.PREFIX + "§a" + format(amount) + " Schilling §fliegen jetzt " + Bank.TERM_DAYS + " Tage fest.");
                     }
-                    case INSUFFICIENT_FUNDS -> fail(player, "§fSo viel hast du nicht auf dem Konto.");
+                    case INSUFFICIENT_FUNDS -> fail(player, notEnough());
                     case LIMIT -> fail(player, "§fMehr Festgeld geht für dich gerade nicht §8(höchstens " + Bank.MAX_TERMS
                             + " gleichzeitig, und alle sollen etwas abbekommen)§f.");
                     case CLOSED -> fail(player, "§fSo viel Festgeld nimmt Basil gerade nicht an, die Staatskasse gibt nicht mehr her.");

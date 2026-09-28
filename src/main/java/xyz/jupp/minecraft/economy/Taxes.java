@@ -130,8 +130,9 @@ public final class Taxes {
         int cash = Math.max(0, requested - tax) / 10 * 10;
         if (cash == 0) return new CashWithdrawal(false, 0, 0);
         boolean success = Database.inTransaction(connection -> {
-            if (Database.update(connection, "UPDATE players SET money = money - ? WHERE uuid = ? AND money >= ?",
-                    cash + tax, player, requested) == 0) return false;
+            // borrowed money cannot be taken out as cash while the loan runs
+            if (Database.update(connection, "UPDATE players SET money = money - ? WHERE uuid = ? AND money >= ? AND money - ? >= " + BankLog.LOAN_LOCK,
+                    cash + tax, player, requested, cash + tax, player) == 0) return false;
             Treasury.deposit(connection, Treasury.Source.WITHDRAW_TAX, tax, player);
             BankLog.add(connection, player, BankLog.WITHDRAW, -(cash + tax), null);
             return true;

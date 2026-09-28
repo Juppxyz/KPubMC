@@ -31,6 +31,9 @@ public final class Treasury {
         VAULT_FEE("Schließfach"),
         // Basil's fixed deposits: in when they start, out when they end (owed to the players, no income)
         FIXED_DEPOSIT("Festgeld"),
+        // Basil's loans: the treasury's share of the interest, and what a defaulted loan pays beyond the borrowed amount
+        LOAN_INTEREST("Kreditzinsen"),
+        LOAN_PENALTY("Kreditstrafe"),
         // paid out: interest on Basil's fixed deposits
         INTEREST("Zinsen");
 
