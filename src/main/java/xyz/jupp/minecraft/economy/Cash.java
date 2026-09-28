@@ -38,7 +38,7 @@ public final class Cash {
             case 100 -> "§b100 Schilling";
             default -> "§a10 Schilling";
         }));
-        meta.lore(Text.lore(List.of("§5Bargeld", "§8Einzahlen bei Basil, Morpheus nimmt nur das.")));
+        meta.lore(Text.lore(List.of("§5Bargeld", "§8Einzahlen / Handeln bei Basil")));
         if (value >= 1_000) meta.setEnchantmentGlintOverride(true);
         meta.getPersistentDataContainer().set(KEY, PersistentDataType.INTEGER, value);
         note.setItemMeta(meta);

@@ -85,7 +85,8 @@ public final class Economy {
         Long volume = Database.queryOne("SELECT COALESCE(SUM(net), 0) FROM market_transactions WHERE created_at >= now() - interval '1 day'",
                 row -> row.getLong(1));
         int activePlayers = Math.max(1, active == null ? 0 : active);
-        long treasury = Treasury.balance();
+        // the fixed deposits in the treasury belong to the players (counted in the money supply above)
+        long treasury = Treasury.balance() - Bank.owedDeposits();
 
         Snapshot previous = latestBefore(day);
         ConfigManager config = ConfigManager.getManager();

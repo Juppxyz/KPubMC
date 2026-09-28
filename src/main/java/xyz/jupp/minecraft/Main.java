@@ -130,6 +130,7 @@ public final class Main extends JavaPlugin {
         int claimedChunks = ChunkCache.getInstance().load();
         Logger.console("loaded " + warps + " warps and " + claimedChunks + " claimed chunks");
         Logger.console("init market..");
+        Bank.load();
         Treasury.load();
         Economy.load();
         Market.load();

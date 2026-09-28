@@ -146,8 +146,8 @@ public final class BankView implements InventoryHolder {
 
         Bank.Offer offer = state.offer();
         List<String> termLore = new ArrayList<>();
-        termLore.add("§7Leg Geld für §f" + Bank.TERM_DAYS + " Tage §7fest, die Zinsen");
-        termLore.add("§7zahlt die Staatskasse.");
+        termLore.add("§7Dein Geld liegt §f" + Bank.TERM_DAYS + " Tage §7in der Staatskasse,");
+        termLore.add("§7sie zahlt es mit Zinsen zurück.");
         termLore.add("");
         if (offer.capacity() <= 0) {
             termLore.add(offer.playerLimited() ? "§cDu hast schon genug Festgeld laufen." : "§cGerade kein Festgeld möglich:");

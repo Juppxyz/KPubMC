@@ -285,6 +285,8 @@ public final class Database {
                 closed_at   TIMESTAMPTZ
             )""",
             "CREATE INDEX IF NOT EXISTS bank_deposits_open_idx ON bank_deposits (player_uuid) WHERE NOT paid_out",
+            // the deposited amount lies in the treasury (deposits from before were booked in by Bank.load)
+            "ALTER TABLE bank_deposits ADD COLUMN IF NOT EXISTS in_treasury BOOLEAN NOT NULL DEFAULT FALSE",
             """
             CREATE TABLE IF NOT EXISTS bank_vaults (
                 player_uuid UUID  PRIMARY KEY,

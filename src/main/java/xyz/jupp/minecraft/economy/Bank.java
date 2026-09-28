@@ -18,13 +18,15 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Basil's bank: cash deposits, fixed deposits with interest from the state treasury, the vault and the statement.
+ * Basil's bank: cash deposits, fixed deposits with the state treasury, the vault and the statement.
  * Tables bank_log, bank_deposits and bank_vaults. Every method is blocking.
  * <p>
- * Fixed deposits do not create money: the interest comes from the treasury (the taxes) and never more than it holds.
- * The treasury decides how much Basil may promise: per week at most half of what it took in during the last 7 days
- * and at most a quarter of its balance (the budget). The rate follows how much of that budget is still free:
- * 8 % while nothing is promised, down to 2 % when it is used up; it is fixed when the deposit starts.
+ * Basil has no money of his own: a fixed deposit goes into the treasury and the treasury pays it back with interest.
+ * The deposited amounts are owed to the players, so only the free treasury (balance minus owed deposits) counts for
+ * the interest: never more than that is paid, and deposits do not raise their own budget. The budget: per week at most
+ * half of what the treasury took in during the last 7 days and at most a quarter of its free balance. The rate follows
+ * how much of that budget is still free: 8 % while nothing is promised, down to 2 % when it is used up; it is fixed
+ * when the deposit starts.
  */
 public final class Bank {
 
@@ -48,6 +50,24 @@ public final class Bank {
     // serializes the interest payouts, so two of them never spend the same treasury money
     private static final long INTEREST_LOCK = 0x4B7075624261L;
     private static final long PAYOUT_PERIOD_TICKS = 20L * 60 * 5;
+
+
+    /** Blocking, in onEnable before Treasury.load: books fixed deposits from before into the treasury (once). */
+    public static void load() {
+        int booked = Database.inTransaction(connection -> {
+            List<Object[]> open = Database.query(connection, "UPDATE bank_deposits SET in_treasury = TRUE WHERE NOT paid_out AND NOT in_treasury "
+                    + "RETURNING player_uuid, amount", row -> new Object[]{row.getObject(1, UUID.class), row.getInt(2)});
+            for (Object[] deposit : open) Treasury.deposit(connection, Treasury.Source.FIXED_DEPOSIT, (int) deposit[1], (UUID) deposit[0]);
+            return open.size();
+        });
+        if (booked > 0) Main.getInstance().getSLF4JLogger().info("booked {} older fixed deposits into the treasury", booked);
+    }
+
+    /** The deposited amounts the treasury owes the players. */
+    public static long owedDeposits() {
+        Long owed = Database.queryOne("SELECT COALESCE(SUM(amount), 0) FROM bank_deposits WHERE NOT paid_out AND in_treasury", row -> row.getLong(1));
+        return owed == null ? 0 : owed;
+    }
 
 
     /* cash */
@@ -137,9 +157,10 @@ public final class Bank {
 
     private static Budget budget(java.sql.Connection connection, UUID player) throws java.sql.SQLException {
         return Database.queryOne(connection, """
-                SELECT (SELECT COALESCE(SUM(amount), 0) FROM treasury_ledger),
+                SELECT (SELECT COALESCE(SUM(amount), 0) FROM treasury_ledger)
+                           - (SELECT COALESCE(SUM(amount), 0) FROM bank_deposits WHERE NOT paid_out AND in_treasury),
                        (SELECT COALESCE(SUM(amount), 0) FROM treasury_ledger
-                            WHERE amount > 0 AND source <> 'INTEREST' AND created_at >= now() - make_interval(days => ?)),
+                            WHERE amount > 0 AND source NOT IN ('INTEREST', 'FIXED_DEPOSIT') AND created_at >= now() - make_interval(days => ?)),
                        (SELECT COALESCE(SUM(amount * rate), 0) FROM bank_deposits WHERE NOT paid_out),
                        (SELECT COALESCE(SUM(amount * rate), 0) FROM bank_deposits WHERE NOT paid_out AND player_uuid = ?)""",
                 row -> {
@@ -171,7 +192,7 @@ public final class Bank {
         boolean allowed = false;
         for (int option : TERM_AMOUNTS) allowed |= option == amount;
         if (!allowed) return Outcome.UNAVAILABLE;
-        return Database.inTransaction(connection -> {
+        Outcome outcome = Database.inTransaction(connection -> {
             // one start at a time (same lock as the payouts), so the budget is never promised twice
             Database.queryOne(connection, "SELECT pg_advisory_xact_lock(?)", row -> 1, INTEREST_LOCK);
             if (Database.queryOne(connection, "SELECT 1 FROM players WHERE uuid = ?", row -> 1, player) == null) {
@@ -185,23 +206,30 @@ public final class Bank {
             if (Database.update(connection, "UPDATE players SET money = money - ? WHERE uuid = ? AND money >= ?", amount, player, amount) == 0) {
                 return Outcome.INSUFFICIENT_FUNDS;
             }
-            Database.update(connection, "INSERT INTO bank_deposits (player_uuid, amount, rate, ends_at) VALUES (?, ?, ?, ?)",
+            Database.update(connection, "INSERT INTO bank_deposits (player_uuid, amount, rate, ends_at, in_treasury) VALUES (?, ?, ?, ?, TRUE)",
                     player, amount, offer.rate(), Timestamp.from(Instant.now().plus(Duration.ofDays(TERM_DAYS))));
+            Treasury.deposit(connection, Treasury.Source.FIXED_DEPOSIT, amount, player);
             BankLog.add(connection, player, BankLog.TERM_START, -amount, null);
             return Outcome.OK;
         });
+        if (outcome == Outcome.OK) Treasury.committed(amount);
+        return outcome;
     }
 
-    /** Ends a fixed deposit early: the amount goes back to the account, without interest. */
+    /** Ends a fixed deposit early: the treasury pays the amount back, without interest. */
     public static boolean cancelTerm(@NotNull UUID player, long id) {
-        return Database.inTransaction(connection -> {
-            Integer amount = Database.queryOne(connection, "UPDATE bank_deposits SET paid_out = TRUE, early = TRUE, closed_at = now() "
-                    + "WHERE id = ? AND player_uuid = ? AND NOT paid_out RETURNING amount", row -> row.getInt(1), id, player);
-            if (amount == null) return false;
-            Database.update(connection, "UPDATE players SET money = money + ? WHERE uuid = ?", amount, player);
-            BankLog.add(connection, player, BankLog.TERM_CANCEL, amount, null);
-            return true;
+        long fromTreasury = Database.inTransaction(connection -> {
+            long[] deposit = Database.queryOne(connection, "UPDATE bank_deposits SET paid_out = TRUE, early = TRUE, closed_at = now() "
+                            + "WHERE id = ? AND player_uuid = ? AND NOT paid_out RETURNING amount, in_treasury",
+                    row -> new long[]{row.getInt(1), row.getBoolean(2) ? 1 : 0}, id, player);
+            if (deposit == null) return -1L;
+            if (deposit[1] == 1) Treasury.withdraw(connection, Treasury.Source.FIXED_DEPOSIT, deposit[0], player);
+            Database.update(connection, "UPDATE players SET money = money + ? WHERE uuid = ?", deposit[0], player);
+            BankLog.add(connection, player, BankLog.TERM_CANCEL, deposit[0], null);
+            return deposit[1] == 1 ? deposit[0] : 0L;
         });
+        if (fromTreasury > 0) Treasury.committed(-fromTreasury);
+        return fromTreasury >= 0;
     }
 
     /** Pays out every due fixed deposit (of one player, or of everyone with null). */
@@ -217,24 +245,30 @@ public final class Bank {
         return payouts;
     }
 
-    // amount plus interest, the interest from the treasury and never more than it holds
+    private record Due(UUID player, int amount, int interest, boolean inTreasury) {}
+
+    // the treasury pays the amount back plus the interest, the interest never more than its free balance
     private static @Nullable Payout payout(long id) {
-        Payout payout = Database.inTransaction(connection -> {
+        Due paid = Database.inTransaction(connection -> {
             Database.queryOne(connection, "SELECT pg_advisory_xact_lock(?)", row -> 1, INTEREST_LOCK);
-            Payout due = Database.queryOne(connection, "UPDATE bank_deposits SET paid_out = TRUE, closed_at = now() "
-                            + "WHERE id = ? AND NOT paid_out AND ends_at <= now() RETURNING player_uuid, amount, rate",
-                    row -> new Payout(row.getObject(1, UUID.class), row.getInt(2), (int) Math.round(row.getInt(2) * row.getDouble(3))), id);
+            Due due = Database.queryOne(connection, "UPDATE bank_deposits SET paid_out = TRUE, closed_at = now() "
+                            + "WHERE id = ? AND NOT paid_out AND ends_at <= now() RETURNING player_uuid, amount, rate, in_treasury",
+                    row -> new Due(row.getObject(1, UUID.class), row.getInt(2), (int) Math.round(row.getInt(2) * row.getDouble(3)), row.getBoolean(4)), id);
             if (due == null) return null;
-            Long treasury = Database.queryOne(connection, "SELECT COALESCE(SUM(amount), 0) FROM treasury_ledger", row -> row.getLong(1));
-            int interest = (int) Math.max(0, Math.min(due.interest(), treasury == null ? 0 : treasury));
+            if (due.inTreasury()) Treasury.withdraw(connection, Treasury.Source.FIXED_DEPOSIT, due.amount(), due.player());
+            // free: what is left after every deposit still owed to the players
+            Long free = Database.queryOne(connection, "SELECT (SELECT COALESCE(SUM(amount), 0) FROM treasury_ledger) "
+                    + "- (SELECT COALESCE(SUM(amount), 0) FROM bank_deposits WHERE NOT paid_out AND in_treasury)", row -> row.getLong(1));
+            int interest = (int) Math.max(0, Math.min(due.interest(), free == null ? 0 : free));
             if (interest > 0) Treasury.withdraw(connection, Treasury.Source.INTEREST, interest, due.player());
             Database.update(connection, "UPDATE bank_deposits SET interest = ? WHERE id = ?", interest, id);
             Database.update(connection, "UPDATE players SET money = money + ? WHERE uuid = ?", due.amount() + interest, due.player());
             BankLog.add(connection, due.player(), BankLog.TERM_PAYOUT, due.amount() + interest, String.valueOf(interest));
-            return new Payout(due.player(), due.amount(), interest);
+            return new Due(due.player(), due.amount(), interest, due.inTreasury());
         });
-        if (payout != null) Treasury.committed(-payout.interest());
-        return payout;
+        if (paid == null) return null;
+        Treasury.committed(-(paid.interest() + (paid.inTreasury() ? paid.amount() : 0)));
+        return new Payout(paid.player(), paid.amount(), paid.interest());
     }
 
     /** Checks for due fixed deposits every few minutes, also for players who are offline. */

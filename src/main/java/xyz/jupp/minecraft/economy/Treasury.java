@@ -29,6 +29,8 @@ public final class Treasury {
         DEATH_TAX("Todessteuer"),
         NETHER_TAX("Transfersteuer"),
         VAULT_FEE("Schließfach"),
+        // Basil's fixed deposits: in when they start, out when they end (owed to the players, no income)
+        FIXED_DEPOSIT("Festgeld"),
         // paid out: interest on Basil's fixed deposits
         INTEREST("Zinsen");
 
