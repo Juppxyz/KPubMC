@@ -116,6 +116,8 @@ public class MobLimiterListener implements Listener {
 
     private void expandWitherSkeletonTime(WitherSkeleton witherSkeleton) {
         witherSkeleton.setRemoveWhenFarAway(false);
+        // not saved: if the chunk unloads or the server stops before the task, it is gone instead of staying forever
+        witherSkeleton.setPersistent(false);
         witherSkeleton.setTicksLived(1);
 
         Tasks.syncLater(WITHER_SKELETON_LIFESPAN_TICKS, () -> {

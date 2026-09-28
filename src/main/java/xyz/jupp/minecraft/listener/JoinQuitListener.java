@@ -28,13 +28,23 @@ import java.util.UUID;
 
 public class JoinQuitListener implements Listener {
 
+    // without the player loaded, every step on the main thread would wait for the database: no login then
     @EventHandler
     public void onPreLogin(AsyncPlayerPreLoginEvent event) {
+        if (event.getLoginResult() != AsyncPlayerPreLoginEvent.Result.ALLOWED) return;
         UUID uuid = event.getUniqueId();
-        PlayerRepository.createIfAbsent(uuid);
-        PlayerRepository.touch(uuid);
-        if (event.getLoginResult() == AsyncPlayerPreLoginEvent.Result.ALLOWED) {
-            CacheHandler.getInstance().preloadPlayer(uuid);
+        boolean loaded;
+        try {
+            PlayerRepository.createIfAbsent(uuid);
+            PlayerRepository.touch(uuid);
+            loaded = CacheHandler.getInstance().preloadPlayer(uuid);
+        } catch (RuntimeException e) {
+            Main.getInstance().getSLF4JLogger().warn("Pre-login database access failed for {}: {}", uuid, e.getMessage());
+            loaded = false;
+        }
+        if (!loaded) {
+            event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
+                    Component.text("Die Datenbank ist gerade nicht erreichbar, bitte versuch es gleich nochmal."));
         }
     }
 

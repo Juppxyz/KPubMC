@@ -3,6 +3,7 @@ package xyz.jupp.minecraft;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitWorker;
+import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.ChunkCache;
 import xyz.jupp.minecraft.cache.WarpCache;
 import xyz.jupp.minecraft.commands.*;
@@ -129,6 +130,8 @@ public final class Main extends JavaPlugin {
         Logger.console("init warps..");
         int warps = WarpCache.getInstance().load();
         int claimedChunks = ChunkCache.getInstance().load();
+        int teams = CacheHandler.getInstance().loadTeams();
+        Logger.console("loaded " + teams + " teams");
         Logger.console("loaded " + warps + " warps and " + claimedChunks + " claimed chunks");
         Logger.console("init market..");
         Bank.load();

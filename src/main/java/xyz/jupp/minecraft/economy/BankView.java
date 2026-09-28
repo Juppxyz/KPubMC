@@ -29,7 +29,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static xyz.jupp.minecraft.economy.ShopView.fail;
@@ -75,7 +77,7 @@ public final class BankView implements InventoryHolder {
     private long ignoreClicksUntil;
 
     private record State(int balance, List<Bank.Term> terms, List<Bank.Entry> statement, List<Bank.Payout> payouts, Bank.Offer offer,
-                         Loans.@Nullable Loan loan, double loanRate, Bonds.Holding bonds) {}
+                         Loans.@Nullable Loan loan, double loanRate, Bonds.Holding bonds, Map<String, String> names) {}
 
     private BankView(Player viewer, State state) {
         this.viewer = viewer;
@@ -106,8 +108,24 @@ public final class BankView implements InventoryHolder {
     // worker: due fixed deposits are paid out first, so the account is up to date
     private static State load(UUID uuid) {
         List<Bank.Payout> payouts = Bank.payoutDue(uuid);
-        return new State(PlayerRepository.getMoney(uuid), Bank.terms(uuid), Bank.statement(uuid, STATEMENT_LINES), payouts, Bank.offer(uuid),
-                Loans.current(uuid), Loans.rateNow(), Bonds.holding(uuid));
+        List<Bank.Entry> statement = Bank.statement(uuid, STATEMENT_LINES);
+        return new State(PlayerRepository.getMoney(uuid), Bank.terms(uuid), statement, payouts, Bank.offer(uuid),
+                Loans.current(uuid), Loans.rateNow(), Bonds.holding(uuid), transferNames(statement));
+    }
+
+    // worker: the names of transfer partners come from their player files (disk)
+    private static Map<String, String> transferNames(List<Bank.Entry> statement) {
+        Map<String, String> names = new HashMap<>();
+        for (Bank.Entry entry : statement) {
+            if (entry.note() == null || !entry.kind().startsWith("TRANSFER_")) continue;
+            try {
+                String name = Bukkit.getOfflinePlayer(UUID.fromString(entry.note())).getName();
+                if (name != null) names.put(entry.note(), name);
+            } catch (IllegalArgumentException ignored) {
+                // not a uuid
+            }
+        }
+        return names;
     }
 
     // worker after a booking, then the view is drawn again
@@ -453,14 +471,14 @@ public final class BankView implements InventoryHolder {
         if (state.statement().isEmpty()) lore.add(line("§7Noch keine Buchungen."));
         for (Bank.Entry entry : state.statement()) {
             String amount = entry.amount() >= 0 ? "§a+" + format(entry.amount()) : "§c-" + format(-entry.amount());
-            lore.add(line("§8" + DATE.format(entry.at()) + " " + amount + " §7").append(label(entry)));
+            lore.add(line("§8" + DATE.format(entry.at()) + " " + amount + " §7").append(label(entry, state.names())));
         }
         meta.lore(lore);
         book.setItemMeta(meta);
         return book;
     }
 
-    private static Component label(Bank.Entry entry) {
+    private static Component label(Bank.Entry entry, Map<String, String> names) {
         String kind = entry.kind();
         if (kind.startsWith("MARKET_")) {
             Material material = entry.note() == null ? null : Material.matchMaterial(entry.note());
@@ -470,8 +488,8 @@ public final class BankView implements InventoryHolder {
         String text = switch (kind) {
             case BankLog.DEPOSIT -> "Bargeld eingezahlt";
             case BankLog.WITHDRAW -> "Bargeld abgehoben";
-            case BankLog.TRANSFER_OUT -> "Überweisung an " + name(entry.note());
-            case BankLog.TRANSFER_IN -> "Überweisung von " + name(entry.note());
+            case BankLog.TRANSFER_OUT -> "Überweisung an " + names.getOrDefault(entry.note(), "?");
+            case BankLog.TRANSFER_IN -> "Überweisung von " + names.getOrDefault(entry.note(), "?");
             case BankLog.TERM_START -> "Festgeld angelegt";
             case BankLog.TERM_PAYOUT -> "Festgeld ausgezahlt" + (entry.note() == null ? "" : " (" + entry.note() + " Zinsen)");
             case BankLog.TERM_CANCEL -> "Festgeld aufgelöst";
@@ -487,16 +505,6 @@ public final class BankView implements InventoryHolder {
             default -> kind;
         };
         return Component.text(text, NamedTextColor.GRAY);
-    }
-
-    private static String name(@Nullable String uuid) {
-        if (uuid == null) return "?";
-        try {
-            String name = Bukkit.getOfflinePlayer(UUID.fromString(uuid)).getName();
-            return name == null ? "?" : name;
-        } catch (IllegalArgumentException e) {
-            return "?";
-        }
     }
 
     private static Component line(String legacy) {

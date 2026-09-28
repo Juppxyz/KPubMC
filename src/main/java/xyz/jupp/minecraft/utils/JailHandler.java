@@ -161,7 +161,17 @@ public final class JailHandler {
 
             if (pco.isWanted()) {
                 long jailEnd = pco.getJailEnd();
-                if (jailEnd > 0 && System.currentTimeMillis() >= jailEnd) {
+                if (jailEnd > 0 && System.currentTimeMillis() >= jailEnd && !pco.isJail()) {
+                    // ran out while offline: ends like in the watcher
+                    wantedPlayers.remove(player.getUniqueId());
+                    offMainThread(() -> {
+                        synchronized (LOCK) {
+                            pco.unsetJail(false);
+                        }
+                        refreshPlayerName(player, pco);
+                    });
+                    player.sendMessage(Main.getChatPrefix() + "§aDie Fahndung nach dir wurde eingestellt.");
+                } else if (jailEnd > 0 && System.currentTimeMillis() >= jailEnd) {
                     releasePlayer(player, pco);
                 } else {
                     player.sendMessage(Main.getChatPrefix() + "§cDu bist weiterhin auf der Flucht und Gesucht!");

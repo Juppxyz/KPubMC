@@ -15,6 +15,7 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 import xyz.jupp.minecraft.economy.Taxes;
 import xyz.jupp.minecraft.Main;
+import xyz.jupp.minecraft.economy.Loans;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.PlayerCacheObject;
 import xyz.jupp.minecraft.cache.TeamCacheObject;
@@ -190,8 +191,9 @@ public class DeathListener implements Listener {
         });
         if (alreadyCollected) return;
 
-        PlayerRepository.addMoney(killer, 10000);
-        sync(() -> killer.sendMessage(Main.getChatPrefix() + "§a+" + Main.getCurrencyName(10000)));
+        int reward = Loans.bounty(player.getUniqueId());
+        if (reward > 0) PlayerRepository.addMoney(killer, reward);
+        sync(() -> killer.sendMessage(Main.getChatPrefix() + "§a+" + Main.getCurrencyName(reward)));
 
         if (killerTeamID != null) {
             TeamRepository.addTeamPoints(killerTeamID, 1000);

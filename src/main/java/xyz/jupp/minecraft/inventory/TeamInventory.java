@@ -256,7 +256,9 @@ public class TeamInventory {
             SkullMeta playerHeadMeta = (SkullMeta) playerHead.getItemMeta();
             playerHeadMeta.setOwningPlayer(teamMember);
             String role = viceList.contains(teamMember.getUniqueId().toString()) ? String.format("§f(%s§oVize§f) ", teamColor) : "§f";
-            playerHeadMeta.customName(Text.of(role + teamMember.getName()));
+            // the stored name, getName() would read the player file of an offline member from disk
+            String memberName = memberList.get(i).nickname();
+            playerHeadMeta.customName(Text.of(role + (memberName == null ? "?" : memberName)));
             playerHeadMeta.lore(Text.lore(lores));
             playerHead.setItemMeta(playerHeadMeta);
             inventory.setItem(itemSlot, playerHead);

@@ -104,6 +104,15 @@ public final class PlayerRepository {
         return true;
     }
 
+    /** Withdraws only if the balance minus an open loan's lock covers it: for payments to other players. */
+    public static boolean tryWithdrawUnlocked(@NotNull UUID uuid, int amount) {
+        Integer money = Database.queryOne("UPDATE players SET money = money - ? WHERE uuid = ? AND money - ? >= " + BankLog.LOAN_LOCK + " RETURNING money",
+                row -> row.getInt(1), amount, uuid, amount, uuid);
+        if (money == null) return false;
+        log().info("money {} {} -> {}", uuid, signed(-amount), money);
+        return true;
+    }
+
     public static boolean tryWithdrawMoney(@NotNull Player player, int amount) {
         return tryWithdrawMoney(player.getUniqueId(), amount);
     }
@@ -136,8 +145,9 @@ public final class PlayerRepository {
         log().info("set jail for {} until {}", uuid, jailEnd);
     }
 
-    public static void unsetJail(@NotNull UUID uuid, long jailEnd) {
-        Database.update("UPDATE players SET jail = FALSE, jail_end = ? WHERE uuid = ?", jailEnd, uuid);
+    // wanted is written as well: a timed wanted that ran out must not stay TRUE (with jail_end 0 it means "until caught")
+    public static void unsetJail(@NotNull UUID uuid, long jailEnd, boolean wanted) {
+        Database.update("UPDATE players SET jail = FALSE, jail_end = ?, is_wanted = ? WHERE uuid = ?", jailEnd, wanted, uuid);
         log().info("unset jail for {}", uuid);
     }
 
@@ -154,7 +164,8 @@ public final class PlayerRepository {
 
     /** Wanted players whose time has not run out yet, longest remaining time first. */
     public static List<PlayerData> getWantedPlayers() {
-        return Database.query("SELECT * FROM players WHERE is_wanted AND jail_end > ? ORDER BY jail_end DESC",
+        // jail_end 0: wanted until caught (an unpaid loan)
+        return Database.query("SELECT * FROM players WHERE is_wanted AND NOT jail AND (jail_end = 0 OR jail_end > ?) ORDER BY jail_end DESC",
                 PlayerRepository::map, System.currentTimeMillis());
     }
 

@@ -75,6 +75,18 @@ public final class Loans {
         }
     }
 
+    public static final int BOUNTY = 10_000;
+
+    /**
+     * The bounty for catching this player: normally 10.000, for an unpaid loan at most the loan money that is still
+     * missing (the bounty is new money, a default on purpose must not pay off for a friend).
+     */
+    public static int bounty(@NotNull UUID player) {
+        Loan loan = current(player);
+        if (loan == null || loan.state() != State.DEFAULTED) return BOUNTY;
+        return (int) Math.max(0, Math.min(BOUNTY, loan.principal() - loan.paid()));
+    }
+
     public static long apology(int principal) {
         return (long) Math.ceil(principal * APOLOGY_FACTOR);
     }

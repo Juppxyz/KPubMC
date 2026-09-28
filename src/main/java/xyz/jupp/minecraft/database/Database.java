@@ -318,6 +318,9 @@ public final class Database {
             "CREATE TABLE IF NOT EXISTS emergency_sale (day DATE NOT NULL, material TEXT NOT NULL, PRIMARY KEY (day, material))",
             "CREATE TABLE IF NOT EXISTS emergency_purchases (day DATE NOT NULL, player_uuid UUID NOT NULL, material TEXT NOT NULL, PRIMARY KEY (day, player_uuid, material))",
             "ALTER TABLE market_items ADD COLUMN IF NOT EXISTS emergency_sale BOOLEAN NOT NULL DEFAULT FALSE",
+            // Basil's statement reads a player's trades and death/nether taxes
+            "CREATE INDEX IF NOT EXISTS market_transactions_player_idx ON market_transactions (player_uuid, created_at)",
+            "CREATE INDEX IF NOT EXISTS treasury_ledger_player_tax_idx ON treasury_ledger (player_uuid, created_at) WHERE source IN ('DEATH_TAX', 'NETHER_TAX')",
             """
             CREATE TABLE IF NOT EXISTS bank_vaults (
                 player_uuid UUID  PRIMARY KEY,

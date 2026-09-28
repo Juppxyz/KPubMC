@@ -127,7 +127,7 @@ public class PlayerCacheObject {
             this.jailEnd = 0L;
         }
         this.isWanted = isEscaped;
-        PlayerRepository.unsetJail(uuid, this.jailEnd);
+        PlayerRepository.unsetJail(uuid, this.jailEnd, this.isWanted);
     }
     public boolean isJail() {
         return jail;
