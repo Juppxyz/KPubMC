@@ -2,6 +2,7 @@ package xyz.jupp.minecraft.economy;
 
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.config.ConfigManager;
+import xyz.jupp.minecraft.database.BankLog;
 import xyz.jupp.minecraft.database.Database;
 
 import java.util.List;
@@ -121,7 +122,7 @@ public final class Taxes {
     }
 
     /**
-     * Cash withdrawal: the requested amount minus the standard tax is paid out in cash notes of 10;
+     * Cash withdrawal: the requested amount minus the standard tax is paid out in cash notes (a multiple of 10);
      * only the paid-out cash and the tax leave the account (the rest below 10 stays on it).
      */
     public static CashWithdrawal withdrawCash(@NotNull UUID player, int requested) {
@@ -132,6 +133,7 @@ public final class Taxes {
             if (Database.update(connection, "UPDATE players SET money = money - ? WHERE uuid = ? AND money >= ?",
                     cash + tax, player, requested) == 0) return false;
             Treasury.deposit(connection, Treasury.Source.WITHDRAW_TAX, tax, player);
+            BankLog.add(connection, player, BankLog.WITHDRAW, -(cash + tax), null);
             return true;
         });
         if (success) Treasury.committed(tax);

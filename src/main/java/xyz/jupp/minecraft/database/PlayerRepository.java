@@ -118,6 +118,8 @@ public final class PlayerRepository {
                 connection.rollback();
                 return TransferResult.TARGET_NOT_FOUND;
             }
+            BankLog.add(connection, from, BankLog.TRANSFER_OUT, -amount, to.toString());
+            BankLog.add(connection, to, BankLog.TRANSFER_IN, amount, from.toString());
             return TransferResult.SUCCESS;
         });
         if (result == TransferResult.SUCCESS) log().info("money {} -> {}: {}", from, to, amount);

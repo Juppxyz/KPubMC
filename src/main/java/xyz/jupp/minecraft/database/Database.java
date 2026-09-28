@@ -257,7 +257,40 @@ public final class Database {
                 quantity    INTEGER NOT NULL CHECK (quantity > 0),
                 created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
             )""",
-            "CREATE INDEX IF NOT EXISTS hondo_pending_player_idx ON hondo_pending (player_uuid)"
+            "CREATE INDEX IF NOT EXISTS hondo_pending_player_idx ON hondo_pending (player_uuid)",
+            // Hondo's exchanges are logged as trades but move no money (the statement skips them)
+            "ALTER TABLE market_transactions ADD COLUMN IF NOT EXISTS moves_money BOOLEAN NOT NULL DEFAULT TRUE",
+            // Basil's bank: statement bookings, fixed deposits and the vaults
+            """
+            CREATE TABLE IF NOT EXISTS bank_log (
+                id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                player_uuid UUID   NOT NULL,
+                kind        TEXT   NOT NULL,
+                amount      BIGINT NOT NULL,
+                note        TEXT,
+                created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+            )""",
+            "CREATE INDEX IF NOT EXISTS bank_log_player_idx ON bank_log (player_uuid, created_at)",
+            """
+            CREATE TABLE IF NOT EXISTS bank_deposits (
+                id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                player_uuid UUID    NOT NULL,
+                amount      INTEGER NOT NULL CHECK (amount > 0),
+                rate        DOUBLE PRECISION NOT NULL,
+                starts_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+                ends_at     TIMESTAMPTZ NOT NULL,
+                paid_out    BOOLEAN NOT NULL DEFAULT FALSE,
+                early       BOOLEAN NOT NULL DEFAULT FALSE,
+                interest    INTEGER NOT NULL DEFAULT 0,
+                closed_at   TIMESTAMPTZ
+            )""",
+            "CREATE INDEX IF NOT EXISTS bank_deposits_open_idx ON bank_deposits (player_uuid) WHERE NOT paid_out",
+            """
+            CREATE TABLE IF NOT EXISTS bank_vaults (
+                player_uuid UUID  PRIMARY KEY,
+                items       BYTEA NOT NULL,
+                updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+            )"""
     );
 
     private static volatile HikariDataSource dataSource;

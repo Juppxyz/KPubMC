@@ -8,6 +8,7 @@ import xyz.jupp.minecraft.cache.WarpCache;
 import xyz.jupp.minecraft.commands.*;
 import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.database.Database;
+import xyz.jupp.minecraft.economy.Bank;
 import xyz.jupp.minecraft.economy.Economy;
 import xyz.jupp.minecraft.economy.Hondo;
 import xyz.jupp.minecraft.economy.Market;
@@ -15,6 +16,7 @@ import xyz.jupp.minecraft.economy.Nomad;
 import xyz.jupp.minecraft.economy.Services;
 import xyz.jupp.minecraft.economy.ShopViewListener;
 import xyz.jupp.minecraft.economy.Treasury;
+import xyz.jupp.minecraft.economy.Vault;
 import xyz.jupp.minecraft.listener.*;
 import xyz.jupp.minecraft.utils.*;
 
@@ -92,6 +94,7 @@ public final class Main extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new SpawnListener(), this);
         Bukkit.getPluginManager().registerEvents(new TeamAreaListener(), this);
         Bukkit.getPluginManager().registerEvents(new AntiBugListener(), this);
+        Bukkit.getPluginManager().registerEvents(new CashGuardListener(), this);
 
         // afk
         Bukkit.getPluginManager().registerEvents(new AfkListener(), this);
@@ -101,6 +104,7 @@ public final class Main extends JavaPlugin {
         Logger.console("register tasks..");
         new PlayerUpdaterTask().startTask();
         Market.startTasks();
+        Bank.startTasks();
         PlayerTracker.startTask();
     }
 
@@ -148,6 +152,7 @@ public final class Main extends JavaPlugin {
     public void onDisable() {
         getServer().getScheduler().cancelTasks(this);
         awaitRunningWorkers(5_000L);
+        Vault.shutdown();
         Database.close();
     }
 

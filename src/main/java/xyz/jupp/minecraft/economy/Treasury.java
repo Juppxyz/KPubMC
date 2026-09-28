@@ -27,7 +27,10 @@ public final class Treasury {
         TRADE_TAX("Handelssteuer"),
         WITHDRAW_TAX("Abhebesteuer"),
         DEATH_TAX("Todessteuer"),
-        NETHER_TAX("Transfersteuer");
+        NETHER_TAX("Transfersteuer"),
+        VAULT_FEE("Schließfach"),
+        // paid out: interest on Basil's fixed deposits
+        INTEREST("Zinsen");
 
         private final String label;
 
@@ -58,6 +61,13 @@ public final class Treasury {
         if (amount <= 0) return;
         Database.update(connection, "INSERT INTO treasury_ledger (source, amount, player_uuid) VALUES (?, ?, ?)",
                 source.name(), amount, player);
+    }
+
+    /** Pays out of the treasury inside the caller's transaction (a negative entry); call {@link #committed(long)} with -amount. */
+    static void withdraw(Connection connection, Source source, long amount, @Nullable UUID player) throws SQLException {
+        if (amount <= 0) return;
+        Database.update(connection, "INSERT INTO treasury_ledger (source, amount, player_uuid) VALUES (?, ?, ?)",
+                source.name(), -amount, player);
     }
 
     // after the commit of a booking; negative for refunds

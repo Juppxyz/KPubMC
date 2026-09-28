@@ -69,9 +69,9 @@ final class Haggle {
         return new Result(Answer.COUNTER, asking);
     }
 
-    // the lowest offer he accepts with this much patience left
+    // the lowest offer he accepts with this much patience left, a multiple of 10 (the smallest note)
     private static int wants(int secret, int patience) {
-        return (int) Math.ceil(secret * (1 + GIVE_IN_STEP * (patience - 1)));
+        return (int) (Math.ceil(secret * (1 + GIVE_IN_STEP * (patience - 1)) / 10.0) * 10);
     }
 
     private static void refuse(UUID player) {

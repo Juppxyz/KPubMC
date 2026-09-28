@@ -229,8 +229,14 @@ public final class MarketRepository {
 
     static void logTrade(Connection connection, UUID player, Material material, String kind, int quantity,
                                  int net, int tax) throws SQLException {
-        Database.update(connection, "INSERT INTO market_transactions (player_uuid, material, kind, quantity, net, tax) VALUES (?, ?, ?, ?, ?, ?)",
-                player, material.name(), kind, quantity, net, tax);
+        logTrade(connection, player, material, kind, quantity, net, tax, true);
+    }
+
+    // movesMoney false for Hondo's exchanges: items against items, the statement skips them
+    static void logTrade(Connection connection, UUID player, Material material, String kind, int quantity,
+                         int net, int tax, boolean movesMoney) throws SQLException {
+        Database.update(connection, "INSERT INTO market_transactions (player_uuid, material, kind, quantity, net, tax, moves_money) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                player, material.name(), kind, quantity, net, tax, movesMoney);
     }
 
     /* adjustment log: every change by the AI review or /shopadmin set */

@@ -24,6 +24,11 @@ public class TreasuryCommand implements CommandExecutor {
         return Math.round(rate * 100) + "%";
     }
 
+    // everything that came in; the interest on fixed deposits went out
+    private static long income(Map<Treasury.Source, Long> inflow) {
+        return inflow.entrySet().stream().filter(entry -> entry.getKey() != Treasury.Source.INTEREST).mapToLong(Map.Entry::getValue).sum();
+    }
+
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
         Instant now = Instant.now();
@@ -33,9 +38,11 @@ public class TreasuryCommand implements CommandExecutor {
             List<String> lines = new ArrayList<>();
             lines.add("§8=-- §6§lStaatskasse §8--=");
             lines.add("§fStand: " + Main.getCurrencyName((int) Math.min(Integer.MAX_VALUE, Treasury.balance())));
-            long today = day.values().stream().mapToLong(Long::longValue).sum();
-            long lastWeek = week.values().stream().mapToLong(Long::longValue).sum();
+            long today = income(day);
+            long lastWeek = income(week);
             lines.add("§fEingenommen: §a" + today + " §7heute§8, §a" + lastWeek + " §7diese Woche");
+            long interest = -week.getOrDefault(Treasury.Source.INTEREST, 0L);
+            if (interest > 0) lines.add("§fZinsen an Sparer: §c" + interest + " §7diese Woche");
             lines.add("§fSteuern gerade: " + Economy.levelWord());
             lines.add("§8» §7Essen & Farm-Sachen: §a" + percent(Taxes.rate(TaxClass.BASIC))
                     + " §8| §7Normale Waren: §a" + percent(Taxes.rate(TaxClass.STANDARD))

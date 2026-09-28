@@ -12,8 +12,6 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
-import xyz.jupp.minecraft.database.PlayerRepository;
-import xyz.jupp.minecraft.inventory.MainThread;
 import xyz.jupp.minecraft.utils.BlackMarketHandler;
 import xyz.jupp.minecraft.utils.JailHandler;
 import xyz.jupp.minecraft.utils.Logger;
@@ -56,7 +54,6 @@ public final class BlackMarketView implements InventoryHolder {
     private final int offerId;
     private final Inventory inventory;
     private int offer;
-    private boolean busy;
     private long ignoreClicksUntil;
 
     private BlackMarketView(Player viewer, int offerId, int offer) {
@@ -97,7 +94,7 @@ public final class BlackMarketView implements InventoryHolder {
         player.openInventory(view.inventory);
         player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.4f, 1.2f);
         player.playSound(player.getLocation(), Sound.BLOCK_ENCHANTMENT_TABLE_USE, 0.7f, 0.8f);
-        if (talk.lastOffer() == 0) player.sendMessage(prefix() + "Das hier? Nicht unter " + talk.asking() + ". Aber rede ruhig.");
+        if (talk.lastOffer() == 0) player.sendMessage(prefix() + "Das hier? Nicht unter " + talk.asking() + ". Und nur bar. Aber rede ruhig.");
     }
 
     private void render() {
@@ -111,7 +108,8 @@ public final class BlackMarketView implements InventoryHolder {
             List<String> lore = new ArrayList<>(Text.legacyLore(meta.lore()) == null ? List.of() : Text.legacyLore(meta.lore()));
             lore.add("");
             lore.add("§7Morpheus will: §c" + talk.asking() + " Schilling");
-            lore.add("§8Steuerfrei, aber nicht ohne Risiko.");
+            lore.add("§7Dein Bargeld: §f" + Cash.total(viewer) + " Schilling");
+            lore.add("§8Nur Bargeld. Steuerfrei, aber nicht ohne Risiko.");
             meta.lore(Text.lore(lore));
             item.setItemMeta(meta);
             inventory.setItem(SLOT_ITEM, item);
@@ -137,7 +135,7 @@ public final class BlackMarketView implements InventoryHolder {
 
     public void handleClick(@NotNull InventoryClickEvent event, @NotNull Player player) {
         event.setCancelled(true);
-        if (event.getClickedInventory() != inventory || busy) return;
+        if (event.getClickedInventory() != inventory) return;
         if (System.currentTimeMillis() < ignoreClicksUntil) return;
         ClickType click = event.getClick();
         if (click != ClickType.LEFT && click != ClickType.RIGHT) return;
@@ -187,51 +185,39 @@ public final class BlackMarketView implements InventoryHolder {
         }
     }
 
-    // tax free; the item is reserved first, so two players cannot buy the same one
-    private void buy(Player player, int price) {
+    // tax free and only cash, paid on the main thread; the item is reserved first, so two players cannot buy the same one
+    private void buy(Player player, int agreed) {
+        // the smallest note is 10: a price is always paid exactly, never with lost change
+        int price = (agreed + 9) / 10 * 10;
         if (!BlackMarketHandler.reserve(offerId)) {
             player.sendMessage(prefix() + "Zu spät, das hat gerade jemand anderes gekauft.");
             Tasks.sync(player::closeInventory);
             return;
         }
+        if (!Cash.pay(player, price)) {
+            BlackMarketHandler.release(offerId);
+            player.playSound(player, Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
+            player.sendMessage(prefix() + "Ich nehme nur Bares, und davon hast du zu wenig. §8(" + price + " Schilling in Scheinen, du hast "
+                    + Cash.total(player) + ")");
+            return;
+        }
         ItemStack item = BlackMarketHandler.getCurrentBlackMarketItem();
-        busy = true;
-        Tasks.async(() -> {
-            boolean paid;
-            try {
-                paid = PlayerRepository.tryWithdrawMoney(player, price);
-            } catch (RuntimeException e) {
-                paid = false;
-            }
-            if (!paid) {
-                MainThread.run(() -> {
-                    busy = false;
-                    BlackMarketHandler.release(offerId);
-                    player.playSound(player, Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
-                    player.sendMessage(prefix() + "Puh, dafür will ich mehr Schillinge als du hast, verzieh dich!");
-                });
-                return;
-            }
-            Logger.console("black market: " + player.getUniqueId() + " bought " + (item == null ? "?" : item.getType()) + " for " + price);
-            MainThread.deliverOrRefund(player.getUniqueId(), price, () -> {
-                busy = false;
-                if (item != null) {
-                    player.getInventory().addItem(item).values()
-                            .forEach(rest -> player.getWorld().dropItemNaturally(player.getLocation(), rest));
-                }
-                player.sendMessage(Main.getChatPrefix() + "§c-" + price + " " + Main.getCurrencyName() + " §8(steuerfrei)");
-                player.sendMessage(prefix() + "Besuche mich gerne bald wieder! Viel Spaß damit.");
-                player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.4f, 0.2f);
-                player.playSound(player.getLocation(), Sound.ENTITY_ITEM_PICKUP, 2f, 2f);
-                Haggle.finish(player.getUniqueId());
-                player.closeInventory();
-                BlackMarketHandler.forceReroll();
-                if (ThreadLocalRandom.current().nextDouble() < CAUGHT_CHANCE) {
-                    player.sendMessage(prefix() + "Psst... ich glaube, man hat dich gesehen. Pass auf dich auf.");
-                    JailHandler.markWanted(player, WANTED_HOURS, "Schwarzmarkthandel");
-                }
-            });
-        });
+        Logger.console("black market: " + player.getUniqueId() + " bought " + (item == null ? "?" : item.getType()) + " for " + price + " cash");
+        if (item != null) {
+            player.getInventory().addItem(item).values()
+                    .forEach(rest -> player.getWorld().dropItemNaturally(player.getLocation(), rest));
+        }
+        player.sendMessage(Main.getChatPrefix() + "§c-" + price + " " + Main.getCurrencyName() + " §8(bar, steuerfrei)");
+        player.sendMessage(prefix() + "Besuche mich gerne bald wieder! Viel Spaß damit.");
+        player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.4f, 0.2f);
+        player.playSound(player.getLocation(), Sound.ENTITY_ITEM_PICKUP, 2f, 2f);
+        Haggle.finish(player.getUniqueId());
+        Tasks.sync(player::closeInventory);
+        BlackMarketHandler.forceReroll();
+        if (ThreadLocalRandom.current().nextDouble() < CAUGHT_CHANCE) {
+            player.sendMessage(prefix() + "Psst... ich glaube, man hat dich gesehen. Pass auf dich auf.");
+            JailHandler.markWanted(player, WANTED_HOURS, "Schwarzmarkthandel");
+        }
     }
 
 }

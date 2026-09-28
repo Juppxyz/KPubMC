@@ -186,8 +186,8 @@ public final class HondoRepository {
             double getDemand = get.demand() + (double) exchange.amount() / get.amount();
             setDemand(connection, give, giveDemand);
             setDemand(connection, get, getDemand);
-            MarketRepository.logTrade(connection, player, give.material(), "SELL", input, buyBack, 0);
-            MarketRepository.logTrade(connection, player, get.material(), "BUY", exchange.amount(), value, 0);
+            MarketRepository.logTrade(connection, player, give.material(), "SELL", input, buyBack, 0, false);
+            MarketRepository.logTrade(connection, player, get.material(), "BUY", exchange.amount(), value, 0, false);
             Friendship after = recordTrade(connection, player, friend, "EXCHANGE", get.material(), exchange.amount(),
                     give.material(), input, value);
             changed.add(give.withDemand(giveDemand));
