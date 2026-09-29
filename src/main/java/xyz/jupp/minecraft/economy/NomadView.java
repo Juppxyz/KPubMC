@@ -195,8 +195,10 @@ public final class NomadView implements InventoryHolder {
     }
 
     private void renderContracts() {
+        inventory.setItem(18, named(Material.MAP, "§6Aufträge", List.of("§7laufen 3 Tage,", "§7jeden Tag kommt ein neuer")));
+        inventory.setItem(27, named(Material.CLOCK, "§bTagesaufgaben", List.of("§7laufen bis Mitternacht,", "§7das erste Team bekommt §a+50 %")));
         for (Nomad.Contract contract : Nomad.contracts()) {
-            int slot = 20 + contract.slot() * 2;
+            int slot = Nomad.isDaily(contract) ? 29 + (contract.slot() - Nomad.FIRST_DAILY_SLOT) * 2 : 20 + contract.slot() * 2;
             ItemStack item = contractItem(contract);
             ItemMeta meta = item.getItemMeta();
             List<String> lore = contractLore(contract);
@@ -216,7 +218,8 @@ public final class NomadView implements InventoryHolder {
                 "§7einen Teil beitragen.",
                 "§7Ist der Auftrag voll, bekommt euer",
                 "§7Team die Belohnung.",
-                "§7Jeden Tag kommt ein neuer Auftrag.")));
+                "§7Jeden Tag kommt ein neuer Auftrag,",
+                "§7dazu drei neue Tagesaufgaben.")));
     }
 
     private ItemStack contractItem(Nomad.Contract contract) {
@@ -233,9 +236,12 @@ public final class NomadView implements InventoryHolder {
         Nomad.Progress state = progress.get(contract.id());
         int delivered = state == null ? 0 : state.delivered();
         List<String> lore = new ArrayList<>();
-        if (contract.slot() == 2) lore.add("§d★ Sonderauftrag");
+        boolean done = state != null && state.completed();
+        if (Nomad.isSpecial(contract)) lore.add("§d★ Sonderauftrag");
+        if (Nomad.isDaily(contract)) lore.add("§b☀ Tagesaufgabe" + (Nomad.theme(contract) == null ? "" : " §8· §7" + Nomad.theme(contract)));
         lore.add("§7Belohnung: §a+" + contract.reward() + " Team-Punkte");
-        if (state != null && state.completed()) {
+        if (Nomad.isDaily(contract) && !done) lore.add("§7Erstes Team: §a+" + Nomad.firstTeamBonus(contract.reward()) + " Bonus");
+        if (done) {
             lore.add("§a✔ Erledigt!");
         } else {
             lore.add("§7Geliefert: §f" + delivered + "§7/§f" + contract.required() + " " + bar(delivered, contract.required()));
@@ -453,10 +459,17 @@ public final class NomadView implements InventoryHolder {
                 switch (delivery.outcome()) {
                     case OK -> {
                         if (delivery.completed()) {
-                            Component done = Text.section(Nomad.PREFIX + "§a" + Text.strip(Nomad.teamName(team)) + " §fhat den Auftrag §e"
+                            Component done = Text.section(Nomad.PREFIX + "§a" + Text.strip(Nomad.teamName(team))
+                                    + (Nomad.isDaily(contract) ? " §fhat die Tagesaufgabe §e" : " §fhat den Auftrag §e")
                                     + contract.required() + "× ").append(Component.translatable(contract.material().translationKey()))
-                                    .append(Text.section(" §ferledigt! §a+" + delivery.points() + " Team-Punkte"));
-                            notifyTeam(team, done);
+                                    .append(Text.section(" §ferledigt! §a+" + delivery.points() + " Team-Punkte"
+                                            + (delivery.first() ? " §8(als erstes Team, mit Bonus)" : "")));
+                            // the first team is news for everyone
+                            if (delivery.first()) {
+                                Bukkit.broadcast(done);
+                            } else {
+                                notifyTeam(team, done);
+                            }
                             player.playSound(player.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 0.8f, 1f);
                         } else {
                             player.sendMessage(Nomad.PREFIX + "Danke! Ihr habt jetzt §e" + delivery.delivered() + "§7/§e"

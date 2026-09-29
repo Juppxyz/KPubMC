@@ -34,8 +34,9 @@ import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Nomad, the team point dealer: three team contracts that run three days each (one is renewed every day, the third
- * slot is always a special contract), an open redemption list with two "hot" items per day (double points) and a
- * weekly race of the delivered points with a bonus for the top three teams.
+ * slot is always a special contract), three smaller themed daily tasks until midnight (the first team to finish one
+ * gets a bonus), an open redemption list with two "hot" items per day (double points) and a weekly race of the
+ * delivered points with a bonus for the top three teams.
  * Every method that touches the database is blocking.
  */
 public final class Nomad {
@@ -45,6 +46,11 @@ public final class Nomad {
     public static final String PREFIX = "§6Nomad §7» §f";
     private static final int CONTRACT_DAYS = 3;
     private static final int SPECIAL_SLOT = 2;
+    // daily tasks take the slots from here on; each from another theme, the amount varies a little
+    public static final int FIRST_DAILY_SLOT = 3;
+    public static final int DAILY_TASKS = 3;
+    private static final double[] AMOUNT_FACTORS = {0.75, 1.0, 1.0, 1.25, 1.5};
+    private static final double FIRST_TEAM_BONUS = 0.5;
     private static final int HOT_ITEMS = 2;
     // normal contracts: goods worth this many Schilling, 1 team point per POINT_VALUE Schilling
     private static final int MIN_CONTRACT_VALUE = 1_000;
@@ -66,9 +72,70 @@ public final class Nomad {
 
     public enum Outcome { OK, NOT_ACTIVE, ALREADY_DONE, NO_TEAM }
 
-    public record Delivery(Outcome outcome, int accepted, int points, boolean completed, int delivered) {}
+    // first: the first team to finish a daily task, points include the bonus then
+    public record Delivery(Outcome outcome, int accepted, int points, boolean completed, int delivered, boolean first) {}
 
     private record Special(Material material, int amount, int reward) {}
+
+    private enum Theme {
+        FARM("Bauernhof"), KITCHEN("Küche"), MOBS("Monsterjagd"), MINING("Bergbau"), NETHER("Nether"),
+        OCEAN("Ozean"), CRAFT("Handwerk"), NATURE("Natur"), END("End");
+
+        private final String label;
+
+        Theme(String label) {
+            this.label = label;
+        }
+    }
+
+    private record Task(Theme theme, Material material, int amount, int reward) {}
+
+    // daily tasks: everyday things a team can gather in an evening; amount and reward are the middle of the range
+    private static final List<Task> TASK_POOL = List.of(
+            new Task(Theme.FARM, Material.WHEAT, 64, 60), new Task(Theme.FARM, Material.CARROT, 64, 60), new Task(Theme.FARM, Material.POTATO, 64, 60),
+            new Task(Theme.FARM, Material.BEETROOT, 48, 60), new Task(Theme.FARM, Material.PUMPKIN, 16, 70), new Task(Theme.FARM, Material.MELON_SLICE, 64, 60),
+            new Task(Theme.FARM, Material.SUGAR_CANE, 64, 60), new Task(Theme.FARM, Material.EGG, 32, 70), new Task(Theme.FARM, Material.HONEY_BOTTLE, 8, 100),
+            new Task(Theme.FARM, Material.SWEET_BERRIES, 64, 60), new Task(Theme.FARM, Material.COCOA_BEANS, 32, 70), new Task(Theme.FARM, Material.HAY_BLOCK, 16, 70),
+            new Task(Theme.KITCHEN, Material.BREAD, 32, 80), new Task(Theme.KITCHEN, Material.COOKED_BEEF, 32, 90), new Task(Theme.KITCHEN, Material.COOKED_PORKCHOP, 32, 90),
+            new Task(Theme.KITCHEN, Material.COOKED_CHICKEN, 32, 80), new Task(Theme.KITCHEN, Material.BAKED_POTATO, 48, 70), new Task(Theme.KITCHEN, Material.PUMPKIN_PIE, 16, 90),
+            new Task(Theme.KITCHEN, Material.COOKIE, 64, 70), new Task(Theme.KITCHEN, Material.GOLDEN_CARROT, 16, 110), new Task(Theme.KITCHEN, Material.CAKE, 2, 90),
+            new Task(Theme.KITCHEN, Material.RABBIT_STEW, 3, 110), new Task(Theme.KITCHEN, Material.MUSHROOM_STEW, 4, 70), new Task(Theme.KITCHEN, Material.COOKED_SALMON, 24, 80),
+            new Task(Theme.KITCHEN, Material.DRIED_KELP_BLOCK, 16, 70),
+            new Task(Theme.MOBS, Material.ROTTEN_FLESH, 64, 50), new Task(Theme.MOBS, Material.BONE, 48, 70), new Task(Theme.MOBS, Material.STRING, 48, 70),
+            new Task(Theme.MOBS, Material.GUNPOWDER, 32, 90), new Task(Theme.MOBS, Material.SPIDER_EYE, 16, 70), new Task(Theme.MOBS, Material.ENDER_PEARL, 8, 110),
+            new Task(Theme.MOBS, Material.SLIME_BALL, 16, 100), new Task(Theme.MOBS, Material.ARROW, 64, 60), new Task(Theme.MOBS, Material.LEATHER, 24, 80),
+            new Task(Theme.MOBS, Material.FEATHER, 32, 70), new Task(Theme.MOBS, Material.RABBIT_HIDE, 12, 90),
+            new Task(Theme.MINING, Material.COAL, 64, 60), new Task(Theme.MINING, Material.RAW_IRON, 48, 90), new Task(Theme.MINING, Material.RAW_COPPER, 64, 70),
+            new Task(Theme.MINING, Material.RAW_GOLD, 24, 100), new Task(Theme.MINING, Material.REDSTONE, 64, 70), new Task(Theme.MINING, Material.LAPIS_LAZULI, 48, 80),
+            new Task(Theme.MINING, Material.AMETHYST_SHARD, 32, 80), new Task(Theme.MINING, Material.OBSIDIAN, 16, 90), new Task(Theme.MINING, Material.TUFF, 64, 50),
+            new Task(Theme.MINING, Material.CALCITE, 32, 70), new Task(Theme.MINING, Material.COBBLED_DEEPSLATE, 128, 60), new Task(Theme.MINING, Material.FLINT, 32, 70),
+            new Task(Theme.NETHER, Material.QUARTZ, 64, 80), new Task(Theme.NETHER, Material.GLOWSTONE_DUST, 48, 80), new Task(Theme.NETHER, Material.NETHER_WART, 32, 70),
+            new Task(Theme.NETHER, Material.MAGMA_BLOCK, 16, 70), new Task(Theme.NETHER, Material.SOUL_SAND, 32, 60), new Task(Theme.NETHER, Material.BLACKSTONE, 64, 60),
+            new Task(Theme.NETHER, Material.CRIMSON_STEM, 32, 70), new Task(Theme.NETHER, Material.WARPED_STEM, 32, 70), new Task(Theme.NETHER, Material.SHROOMLIGHT, 8, 100),
+            new Task(Theme.NETHER, Material.BASALT, 64, 50), new Task(Theme.NETHER, Material.BLAZE_ROD, 12, 120), new Task(Theme.NETHER, Material.MAGMA_CREAM, 12, 100),
+            new Task(Theme.OCEAN, Material.KELP, 64, 50), new Task(Theme.OCEAN, Material.PRISMARINE_SHARD, 24, 100), new Task(Theme.OCEAN, Material.INK_SAC, 16, 80),
+            new Task(Theme.OCEAN, Material.GLOW_INK_SAC, 8, 90), new Task(Theme.OCEAN, Material.COD, 24, 70), new Task(Theme.OCEAN, Material.SALMON, 16, 70),
+            new Task(Theme.OCEAN, Material.TROPICAL_FISH, 4, 80), new Task(Theme.OCEAN, Material.PUFFERFISH, 4, 80), new Task(Theme.OCEAN, Material.SEA_PICKLE, 16, 80),
+            new Task(Theme.OCEAN, Material.CLAY_BALL, 64, 60), new Task(Theme.OCEAN, Material.SEAGRASS, 32, 60),
+            new Task(Theme.CRAFT, Material.BOOKSHELF, 8, 100), new Task(Theme.CRAFT, Material.LANTERN, 16, 90), new Task(Theme.CRAFT, Material.TORCH, 64, 50),
+            new Task(Theme.CRAFT, Material.CHEST, 16, 60), new Task(Theme.CRAFT, Material.BARREL, 16, 60), new Task(Theme.CRAFT, Material.ITEM_FRAME, 16, 80),
+            new Task(Theme.CRAFT, Material.PAINTING, 8, 70), new Task(Theme.CRAFT, Material.BOOK, 24, 90), new Task(Theme.CRAFT, Material.GLASS, 64, 60),
+            new Task(Theme.CRAFT, Material.BRICK, 64, 70), new Task(Theme.CRAFT, Material.LEAD, 4, 90), new Task(Theme.CRAFT, Material.FLOWER_POT, 16, 60),
+            new Task(Theme.CRAFT, Material.CAMPFIRE, 8, 70), new Task(Theme.CRAFT, Material.SCAFFOLDING, 64, 70), new Task(Theme.CRAFT, Material.RAIL, 64, 80),
+            new Task(Theme.CRAFT, Material.CANDLE, 16, 80),
+            new Task(Theme.NATURE, Material.OAK_LOG, 64, 50), new Task(Theme.NATURE, Material.BIRCH_LOG, 64, 50), new Task(Theme.NATURE, Material.SPRUCE_LOG, 64, 50),
+            new Task(Theme.NATURE, Material.CHERRY_LOG, 32, 80), new Task(Theme.NATURE, Material.MANGROVE_LOG, 32, 70), new Task(Theme.NATURE, Material.BAMBOO, 64, 50),
+            new Task(Theme.NATURE, Material.MOSS_BLOCK, 32, 60), new Task(Theme.NATURE, Material.APPLE, 16, 80), new Task(Theme.NATURE, Material.HONEYCOMB, 12, 90),
+            new Task(Theme.NATURE, Material.SNOWBALL, 64, 50), new Task(Theme.NATURE, Material.WHITE_WOOL, 32, 60), new Task(Theme.NATURE, Material.CACTUS, 32, 60),
+            new Task(Theme.NATURE, Material.VINE, 32, 60), new Task(Theme.NATURE, Material.LILY_PAD, 16, 70),
+            new Task(Theme.END, Material.CHORUS_FRUIT, 32, 90), new Task(Theme.END, Material.END_STONE, 64, 70), new Task(Theme.END, Material.PURPUR_BLOCK, 32, 90),
+            new Task(Theme.END, Material.POPPED_CHORUS_FRUIT, 32, 100), new Task(Theme.END, Material.END_ROD, 8, 110));
+
+    private static final Map<Material, Theme> TASK_THEMES = new HashMap<>();
+
+    static {
+        for (Task task : TASK_POOL) TASK_THEMES.put(task.material(), task.theme());
+    }
 
     // items that need an adventure (structures, bosses, rare mobs); plain items only, so nothing with variants or damage
     private static final List<Special> SPECIALS = List.of(
@@ -155,7 +222,8 @@ public final class Nomad {
     }
 
     public static boolean isUpToDate(@NotNull LocalDate today) {
-        return today.equals(hotDay) && contracts.size() == 3 && contracts.stream().allMatch(c -> c.endsAt().isAfter(Instant.now()));
+        return today.equals(hotDay) && contracts.size() == FIRST_DAILY_SLOT + DAILY_TASKS
+                && contracts.stream().allMatch(c -> c.endsAt().isAfter(Instant.now()));
     }
 
     /**
@@ -173,8 +241,8 @@ public final class Nomad {
             used.add(contract.material());
         }
         // the very first contracts are staggered, so one of them is renewed every day
-        boolean firstRun = contracts.isEmpty();
-        for (int slot = 0; slot < 3; slot++) {
+        boolean firstRun = contracts.stream().allMatch(Nomad::isDaily);
+        for (int slot = 0; slot < FIRST_DAILY_SLOT; slot++) {
             if (bySlot.containsKey(slot)) continue;
             int days = firstRun ? slot + 1 : CONTRACT_DAYS;
             Contract created = createContract(slot, today.plusDays(days), used);
@@ -185,6 +253,24 @@ public final class Nomad {
                     .append(Component.translatable(created.material().translationKey()))
                     .append(Text.section(" §8(§a+" + created.reward() + " Team-Punkte§8)")));
         }
+
+        // daily tasks, each from a theme the other running ones do not have
+        Set<Theme> themes = new HashSet<>();
+        for (Contract contract : bySlot.values()) {
+            Theme theme = TASK_THEMES.get(contract.material());
+            if (isDaily(contract) && theme != null) themes.add(theme);
+        }
+        Component tasks = null;
+        for (int slot = FIRST_DAILY_SLOT; slot < FIRST_DAILY_SLOT + DAILY_TASKS; slot++) {
+            if (bySlot.containsKey(slot)) continue;
+            Contract created = createTask(slot, today.plusDays(1), used, themes);
+            if (created == null) continue;
+            bySlot.put(slot, created);
+            used.add(created.material());
+            Component task = Text.section("§e" + created.required() + "× ").append(Component.translatable(created.material().translationKey()));
+            tasks = tasks == null ? Text.section(PREFIX + "Neue Tagesaufgaben: ").append(task) : tasks.append(Text.section("§7, ")).append(task);
+        }
+        if (tasks != null) announcements.add(tasks.append(Text.section(" §8(erstes Team: Bonus)")));
 
         if (!today.equals(hotDay)) drawHotItems(today);
         announcements.addAll(payOutRace(today));
@@ -242,6 +328,30 @@ public final class Nomad {
             required = niceAmount(targetValue / unitValue);
             reward = (int) Math.max(50, Math.round(required * unitValue / POINT_VALUE / 10.0) * 10);
         }
+        return insertContract(slot, material, required, reward, endDay);
+    }
+
+    // a themed daily task; the theme is taken from those not running yet
+    private static @Nullable Contract createTask(int slot, LocalDate endDay, Set<Material> used, Set<Theme> themes) {
+        Map<Material, Instant> recent = recentlyAsked();
+        List<Theme> open = new ArrayList<>(List.of(Theme.values()));
+        open.removeIf(theme -> themes.contains(theme) || (theme == Theme.END && !EndAccess.isOpen()));
+        java.util.Collections.shuffle(open, ThreadLocalRandom.current());
+        for (Theme theme : open) {
+            List<Task> candidates = freshest(TASK_POOL.stream()
+                    .filter(task -> task.theme() == theme && !used.contains(task.material()) && EndAccess.isAvailable(task.material()))
+                    .toList(), Task::material, recent);
+            if (candidates.isEmpty()) continue;
+            Task task = candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
+            int required = niceAmount(task.amount() * AMOUNT_FACTORS[ThreadLocalRandom.current().nextInt(AMOUNT_FACTORS.length)]);
+            int reward = (int) Math.max(30, Math.round(task.reward() * (double) required / task.amount() / 10.0) * 10);
+            themes.add(theme);
+            return insertContract(slot, task.material(), required, reward, endDay);
+        }
+        return null;
+    }
+
+    private static Contract insertContract(int slot, Material material, int required, int reward, LocalDate endDay) {
         Instant endsAt = endDay.atStartOfDay(Market.ZONE).toInstant();
         Long id = Database.queryOne("INSERT INTO nomad_contracts (slot, material, required, reward, ends_at) VALUES (?, ?, ?, ?, ?) RETURNING id",
                 row -> row.getLong(1), slot, material.name(), required, reward, Timestamp.from(endsAt));
@@ -296,6 +406,25 @@ public final class Nomad {
         return contracts.stream().filter(contract -> contract.id() == id).findFirst().orElse(null);
     }
 
+    public static boolean isSpecial(@NotNull Contract contract) {
+        return contract.slot() == SPECIAL_SLOT;
+    }
+
+    public static boolean isDaily(@NotNull Contract contract) {
+        return contract.slot() >= FIRST_DAILY_SLOT;
+    }
+
+    /** The theme of a daily task, e.g. "Bauernhof"; null for the other contracts. */
+    public static @Nullable String theme(@NotNull Contract contract) {
+        Theme theme = isDaily(contract) ? TASK_THEMES.get(contract.material()) : null;
+        return theme == null ? null : theme.label;
+    }
+
+    /** Extra points for the first team that finishes a daily task. */
+    public static int firstTeamBonus(int reward) {
+        return (int) Math.round(reward * FIRST_TEAM_BONUS / 10.0) * 10;
+    }
+
     public static List<Redeemable> redeemables() {
         return redeemables;
     }
@@ -327,27 +456,30 @@ public final class Nomad {
     /** Delivers up to {@code offered} items to a contract; the caller gives back what was not accepted. */
     public static Delivery deliver(@NotNull UUID player, @NotNull String teamID, long contractID, int offered) {
         Delivery delivery = Database.inTransaction(connection -> {
-            Contract contract = Database.queryOne(connection, "SELECT * FROM nomad_contracts WHERE id = ? AND ends_at > now()", row ->
+            // locked: of two teams finishing a daily task at once, only one is first
+            Contract contract = Database.queryOne(connection, "SELECT * FROM nomad_contracts WHERE id = ? AND ends_at > now() FOR UPDATE", row ->
                     new Contract(row.getLong("id"), row.getInt("slot"), Objects.requireNonNull(Material.matchMaterial(row.getString("material"))),
                             row.getInt("required"), row.getInt("reward"), row.getTimestamp("ends_at").toInstant()), contractID);
-            if (contract == null) return new Delivery(Outcome.NOT_ACTIVE, 0, 0, false, 0);
+            if (contract == null) return new Delivery(Outcome.NOT_ACTIVE, 0, 0, false, 0, false);
             if (Database.queryOne(connection, "SELECT 1 FROM teams WHERE team_id = ?", row -> 1, teamID) == null) {
-                return new Delivery(Outcome.NO_TEAM, 0, 0, false, 0);
+                return new Delivery(Outcome.NO_TEAM, 0, 0, false, 0, false);
             }
             Database.update(connection, "INSERT INTO nomad_progress (contract_id, team_id) VALUES (?, ?) ON CONFLICT DO NOTHING", contractID, teamID);
             Progress progress = Database.queryOne(connection, "SELECT delivered, completed FROM nomad_progress WHERE contract_id = ? AND team_id = ? FOR UPDATE",
                     row -> new Progress(row.getInt(1), row.getBoolean(2)), contractID, teamID);
-            if (progress == null || progress.completed()) return new Delivery(Outcome.ALREADY_DONE, 0, 0, true, contract.required());
+            if (progress == null || progress.completed()) return new Delivery(Outcome.ALREADY_DONE, 0, 0, true, contract.required(), false);
 
             int accepted = Math.max(0, Math.min(offered, contract.required() - progress.delivered()));
             int delivered = progress.delivered() + accepted;
             boolean completed = delivered >= contract.required();
             Database.update(connection, "UPDATE nomad_progress SET delivered = ?, completed = ? WHERE contract_id = ? AND team_id = ?",
                     delivered, completed, contractID, teamID);
-            int points = completed ? contract.reward() : 0;
+            boolean first = completed && isDaily(contract) && Database.queryOne(connection,
+                    "SELECT 1 FROM nomad_progress WHERE contract_id = ? AND completed AND team_id <> ?", row -> 1, contractID, teamID) == null;
+            int points = completed ? contract.reward() + (first ? firstTeamBonus(contract.reward()) : 0) : 0;
             if (points > 0) Database.update(connection, "UPDATE teams SET points = points + ? WHERE team_id = ?", points, teamID);
             logDelivery(connection, teamID, player, "CONTRACT", contract.material(), accepted, points);
-            return new Delivery(Outcome.OK, accepted, points, completed, delivered);
+            return new Delivery(Outcome.OK, accepted, points, completed, delivered, first);
         });
         if (delivery.points() > 0) {
             Main.getInstance().getSLF4JLogger().info("teamPoints {} +{} (nomad contract {})", teamID, delivery.points(), contractID);

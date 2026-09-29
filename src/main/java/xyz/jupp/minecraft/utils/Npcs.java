@@ -15,6 +15,9 @@ public final class Npcs {
 
     private Npcs() {}
 
+    // Nomad's name until 09/2026
+    private static final String OLD_NOMAD_NAME = "§6§lNomad der Punktemakler";
+
     public static boolean isNpc(@NotNull Entity entity) {
         EntityType type = entity.getType();
         if (type == EntityType.VILLAGER) {
@@ -28,7 +31,8 @@ public final class Npcs {
             return Main.getBlackMarketDealerVillagerName().equals(Text.legacyOrNull(entity.customName()));
         }
         if (type == EntityType.WANDERING_TRADER) {
-            return Main.getTeamPointsDealerVillagerName().equals(visibleName(entity));
+            String name = visibleName(entity);
+            return Main.getTeamPointsDealerVillagerName().equals(name) || OLD_NOMAD_NAME.equals(name);
         }
         return false;
     }
@@ -44,7 +48,10 @@ public final class Npcs {
     public static void keep(@NotNull LivingEntity npc) {
         npc.setRemoveWhenFarAway(false);
         npc.setPersistent(true);
-        if (npc instanceof WanderingTrader trader) trader.setDespawnDelay(0);
+        if (npc instanceof WanderingTrader trader) {
+            trader.setDespawnDelay(0);
+            if (OLD_NOMAD_NAME.equals(visibleName(trader))) trader.customName(Text.of(Main.getTeamPointsDealerVillagerName()));
+        }
     }
 
     // NPCs from before the fix, for the entities that are already loaded at startup

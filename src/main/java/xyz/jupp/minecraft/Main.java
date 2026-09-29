@@ -30,7 +30,7 @@ public final class Main extends JavaPlugin {
     private final static String financeVillagerFredName = "§5§lBasil";
     private final static String jewelerVillagerName = "§b§lHondo";
     private final static String blackMarketDealerVillagerName = "§8§lMorpheus";
-    private final static String teamPointsDealerVillagerName = "§6§lNomad der Punktemakler";
+    private final static String teamPointsDealerVillagerName = "§6§lNomad";
 
     private final static String currencyName = "Schilling";
     private final static String teamName = "§aTeam";
