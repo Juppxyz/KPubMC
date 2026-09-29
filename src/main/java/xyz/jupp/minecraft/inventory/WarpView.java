@@ -21,6 +21,7 @@ import xyz.jupp.minecraft.cache.TeamCacheObject;
 import xyz.jupp.minecraft.cache.WarpCache;
 import xyz.jupp.minecraft.cache.WarpCacheObject;
 import xyz.jupp.minecraft.database.PlayerRepository;
+import xyz.jupp.minecraft.team.Relations;
 import xyz.jupp.minecraft.team.TeamCreateView;
 import xyz.jupp.minecraft.team.TeamWarps;
 import xyz.jupp.minecraft.team.Teams;
@@ -131,12 +132,12 @@ public final class WarpView implements InventoryHolder {
         renderOwnWarp();
     }
 
+    // one field of the warp list with its click
+    private record Tile(ItemStack item, Runnable action) {}
+
     private void renderWarps() {
-        int pages = Math.max(1, (entries.size() + WARP_SLOTS.length - 1) / WARP_SLOTS.length);
-        page = Math.clamp(page, 0, pages - 1);
-        int start = page * WARP_SLOTS.length;
-        for (int i = 0; i < WARP_SLOTS.length && start + i < entries.size(); i++) {
-            Entry entry = entries.get(start + i);
+        List<Tile> tiles = new ArrayList<>(partnerWarps());
+        for (Entry entry : entries) {
             boolean own = entry.owner().equals(viewer.getUniqueId());
             ItemStack head = new ItemStack(Material.PLAYER_HEAD);
             SkullMeta meta = (SkullMeta) head.getItemMeta();
@@ -144,9 +145,16 @@ public final class WarpView implements InventoryHolder {
             meta.customName(Text.of(own ? "§aDein Warp" : "§fWarp von §a" + entry.name()));
             meta.lore(Text.lore(List.of("§7Teleport: §f" + TELEPORT_COST + " Schilling", "", "§e» Klicken zum Teleportieren")));
             head.setItemMeta(meta);
-            set(WARP_SLOTS[i], head, () -> teleport(() -> warpLocation(entry.owner()), own ? "zu deinem Warp" : "zum Warp von " + entry.name()));
+            tiles.add(new Tile(head, () -> teleport(() -> warpLocation(entry.owner()), own ? "zu deinem Warp" : "zum Warp von " + entry.name())));
         }
-        if (entries.isEmpty()) inventory.setItem(22, Items.named(Material.PAPER, "§7Noch keine Warps", List.of()));
+        int pages = Math.max(1, (tiles.size() + WARP_SLOTS.length - 1) / WARP_SLOTS.length);
+        page = Math.clamp(page, 0, pages - 1);
+        int start = page * WARP_SLOTS.length;
+        for (int i = 0; i < WARP_SLOTS.length && start + i < tiles.size(); i++) {
+            Tile tile = tiles.get(start + i);
+            set(WARP_SLOTS[i], tile.item(), tile.action());
+        }
+        if (tiles.isEmpty()) inventory.setItem(22, Items.named(Material.PAPER, "§7Noch keine Warps", List.of()));
         inventory.setItem(SLOT_PAGE, Items.named(Material.PAPER, "§fSeite " + (page + 1) + " von " + pages, List.of()));
         if (page > 0) set(SLOT_PREVIOUS, Items.named(Material.ARROW, "§f◀ Zurück", List.of()), () -> {
             page--;
@@ -202,7 +210,7 @@ public final class WarpView implements InventoryHolder {
         int cost = warp == null ? TeamWarps.SET_COST : TeamWarps.MOVE_COST;
         set(SLOT_TEAM_SET, Items.named(Material.RESPAWN_ANCHOR, warp == null ? colour + "Team-Warp hier setzen" : colour + "Team-Warp hierher verschieben", List.of(
                 "§7Kostet §f" + Items.format(cost) + " Schilling §7aus der Team-Kasse",
-                "§8Nur euer Team sieht ihn.",
+                "§8Euer Team und eure Partner (ab Level " + Teams.WARP_LEVEL + ") nutzen ihn.",
                 "",
                 "§e» Klicken")), () -> {
             Location here = viewer.getLocation();
@@ -412,6 +420,36 @@ public final class WarpView implements InventoryHolder {
         if (warp == null) return null;
         World world = Bukkit.getWorld(warp.getWorldName());
         return world == null ? null : new Location(world, warp.getX(), warp.getY(), warp.getZ());
+    }
+
+    // the partners' team warps come first: both teams need WARP_LEVEL
+    private List<Tile> partnerWarps() {
+        TeamCacheObject team = CacheHandler.getInstance().getPlayerInCache(viewer).getTeamCacheObject();
+        if (team == null || team.getLevel() < Teams.WARP_LEVEL || Teams.role(team, viewer.getUniqueId()) == Teams.Role.NONE) return List.of();
+        List<Tile> tiles = new ArrayList<>();
+        for (Relations.Relation partnership : Relations.of(team.getTeamID(), Relations.Kind.PARTNER)) {
+            String other = partnership.other(team.getTeamID());
+            TeamCacheObject partner = CacheHandler.getInstance().getTeamCacheObject(other);
+            TeamWarps.Warp warp = TeamWarps.get(other);
+            if (partner == null || partner.getLevel() < Teams.WARP_LEVEL || warp == null) continue;
+            String name = partner.getTeamColor() + partner.getTeamName();
+            tiles.add(new Tile(Items.named(TeamCreateView.colourBanner(partner.getTeamColor()), name + " §7Team-Warp", List.of(
+                    "§a✦ Partner §8· §7" + worldLabel(warp.world()),
+                    "§7Teleport: §f" + TELEPORT_COST + " Schilling",
+                    "",
+                    "§e» Klicken zum Teleportieren")), () -> teleport(() -> partnerWarpLocation(other), "zum Team-Warp von " + Text.strip(name))));
+        }
+        return tiles;
+    }
+
+    // main thread, at the moment of the teleport: still partners, both levels still high enough
+    private @Nullable Location partnerWarpLocation(String other) {
+        TeamCacheObject team = CacheHandler.getInstance().getPlayerInCache(viewer).getTeamCacheObject();
+        TeamCacheObject partner = CacheHandler.getInstance().getTeamCacheObject(other);
+        if (team == null || partner == null || Teams.role(team, viewer.getUniqueId()) == Teams.Role.NONE) return null;
+        if (team.getLevel() < Teams.WARP_LEVEL || partner.getLevel() < Teams.WARP_LEVEL || !Relations.partners(team.getTeamID(), other)) return null;
+        TeamWarps.Warp warp = TeamWarps.get(other);
+        return warp == null ? null : warp.toLocation();
     }
 
     // main thread, at the moment of the teleport: still in the team, level still high enough

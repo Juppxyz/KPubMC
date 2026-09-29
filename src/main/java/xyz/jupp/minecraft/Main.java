@@ -3,6 +3,7 @@ package xyz.jupp.minecraft;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitWorker;
+import xyz.jupp.minecraft.team.Relations;
 import xyz.jupp.minecraft.team.TeamViewListener;
 import xyz.jupp.minecraft.team.TeamWarps;
 import xyz.jupp.minecraft.cache.CacheHandler;
@@ -110,6 +111,7 @@ public final class Main extends JavaPlugin {
         new PlayerUpdaterTask().startTask();
         Market.startTasks();
         Bank.startTasks();
+        Relations.startTask();
         PlayerTracker.startTask();
     }
 
@@ -135,7 +137,8 @@ public final class Main extends JavaPlugin {
         int claimedChunks = ChunkCache.getInstance().load();
         int teams = CacheHandler.getInstance().loadTeams();
         int teamWarps = TeamWarps.load();
-        Logger.console("loaded " + teams + " teams, " + teamWarps + " team warps");
+        int relations = Relations.load();
+        Logger.console("loaded " + teams + " teams, " + teamWarps + " team warps, " + relations + " team relations");
         Logger.console("loaded " + warps + " warps and " + claimedChunks + " claimed chunks");
         Logger.console("init market..");
         Bank.load();

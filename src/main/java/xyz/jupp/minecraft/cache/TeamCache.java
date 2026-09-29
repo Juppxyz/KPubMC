@@ -59,6 +59,10 @@ final class TeamCache {
         return previous != null ? previous : loaded;
     }
 
+    static java.util.Collection<TeamCacheObject> all() {
+        return java.util.List.copyOf(teamCacheMap.values());
+    }
+
     // called when a team was created
     static void forgetUnknownTeams() {
         unknownTeamIDs.clear();

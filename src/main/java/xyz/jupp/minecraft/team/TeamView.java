@@ -60,7 +60,8 @@ public final class TeamView implements InventoryHolder {
         MEMBERS("Mitglieder", Material.PLAYER_HEAD),
         TREASURY("Team-Kasse", Material.GOLD_INGOT),
         AREA("Gebiet", Material.GRASS_BLOCK),
-        LEVEL("Level", Material.EXPERIENCE_BOTTLE);
+        LEVEL("Level", Material.EXPERIENCE_BOTTLE),
+        RELATIONS("Beziehungen", Material.SHIELD);
 
         private final String label;
         private final Material icon;
@@ -71,7 +72,7 @@ public final class TeamView implements InventoryHolder {
         }
     }
 
-    private enum Page { TABS, MEMBER, INVITE }
+    private enum Page { TABS, MEMBER, INVITE, TEAMS, RELATION }
 
     private record Member(UUID uuid, String name, Teams.Role role, @Nullable Instant lastSeen, long weekPoints, long totalPoints) {}
 
@@ -109,6 +110,8 @@ public final class TeamView implements InventoryHolder {
     private Tab tab = Tab.OVERVIEW;
     private Page page = Page.TABS;
     private @Nullable UUID selected;
+    private @Nullable String selectedTeam;
+    private int teamsPage;
     // an action waiting for its second click ("Wirklich? Nochmal klicken")
     private @Nullable String confirm;
     private long confirmUntil;
@@ -243,11 +246,14 @@ public final class TeamView implements InventoryHolder {
                     case TREASURY -> renderTreasury(role);
                     case AREA -> renderArea(team, role);
                     case LEVEL -> renderLevel(team, role);
+                    case RELATIONS -> renderRelations(team, role);
                 }
                 renderBottom(team, role);
             }
             case MEMBER -> renderMember(team, role);
             case INVITE -> renderInvite(team);
+            case TEAMS -> renderTeams();
+            case RELATION -> renderRelation(role);
         }
     }
 
@@ -282,6 +288,9 @@ public final class TeamView implements InventoryHolder {
         List<String> info = new ArrayList<>();
         info.add("§7Boss: " + colour + boss);
         info.add("§7Mitglieder: §f" + state.members().size() + " §8(" + online + " online)");
+        int partnerCount = Relations.of(teamID, Relations.Kind.PARTNER).size();
+        int warCount = Relations.of(teamID, Relations.Kind.WAR).size();
+        if (partnerCount + warCount > 0) info.add("§a✦ " + partnerCount + " Partner §8· §c⚔ " + warCount + (warCount == 1 ? " Krieg" : " Kriege"));
         if (state.founded() != null) info.add("§7Gegründet: §f" + DATE.format(state.founded()));
         set(20, Items.named(TeamCreateView.colourBanner(colour), colour + "§l" + team.getTeamName(), info), () -> show(Tab.MEMBERS));
 
@@ -576,11 +585,265 @@ public final class TeamView implements InventoryHolder {
     }
 
     private void back() {
+        backTo(Tab.MEMBERS);
+    }
+
+    private void backTo(Tab target) {
         page = Page.TABS;
-        tab = Tab.MEMBERS;
+        tab = target;
         confirm = null;
         render();
     }
+
+    /* relations: partners and wars */
+
+    private void renderRelations(TeamCacheObject team, Teams.Role role) {
+        inventory.setItem(18, Items.named(Material.LIME_BANNER, "§a✦ Partner", List.of(
+                "§7Teilen ihre Gebiete, kein PvP",
+                "§7untereinander. Team-Warps gegenseitig,",
+                "§7wenn beide Level " + Teams.WARP_LEVEL + " sind.")));
+        List<Relations.Relation> partners = Relations.of(teamID, Relations.Kind.PARTNER);
+        for (int i = 0; i < partners.size() && i < 7; i++) {
+            String other = partners.get(i).other(teamID);
+            List<String> lore = new ArrayList<>();
+            lore.add("§7Partner seit §f" + DATE.format(partners.get(i).since()));
+            lore.add(partnerWarpLine(team, other));
+            relationTile(19 + i, other, lore, role);
+        }
+        if (partners.isEmpty()) inventory.setItem(19, Items.named(Material.GRAY_DYE, "§7Noch keine Partner", List.of()));
+        if (partners.size() > 7) set(26, Items.named(Material.PAPER, "§7… und " + (partners.size() - 7) + " weitere", List.of("§e» Klicken: alle Teams")), this::openTeams);
+
+        inventory.setItem(27, Items.named(Material.IRON_SWORD, "§c⚔ Kriege", List.of(
+                "§7PvP ist zwischen euch überall an,",
+                "§7auch in geschützten Gebieten.",
+                "§7Endet nach 3 Tagen ohne Kill",
+                "§7oder mit einem Friedensvertrag.")));
+        List<Relations.Relation> wars = Relations.of(teamID, Relations.Kind.WAR);
+        for (int i = 0; i < wars.size() && i < 7; i++) {
+            Relations.Relation war = wars.get(i);
+            relationTile(28 + i, war.other(teamID), warLore(war), role);
+        }
+        if (wars.isEmpty()) inventory.setItem(28, Items.named(Material.GRAY_DYE, "§7Kein Krieg", List.of()));
+        if (wars.size() > 7) set(35, Items.named(Material.PAPER, "§7… und " + (wars.size() - 7) + " weitere", List.of("§e» Klicken: alle Teams")), this::openTeams);
+
+        inventory.setItem(36, Items.named(Material.WRITABLE_BOOK, "§eAnfragen an euch", List.of("§7Partnerschaften und Friedensangebote.")));
+        List<Relations.Request> incoming = Relations.incoming(teamID);
+        for (int i = 0; i < incoming.size() && i < 6; i++) {
+            Relations.Request request = incoming.get(i);
+            relationTile(37 + i, request.from(), List.of(request.kind() == Relations.RequestKind.PARTNER
+                    ? "§7möchte Partner werden" : "§7bietet euch Frieden an", "§8" + Items.ago(request.at())), role);
+        }
+        if (incoming.isEmpty()) inventory.setItem(37, Items.named(Material.GRAY_DYE, "§7Keine offenen Anfragen", List.of()));
+        if (role.canManage()) {
+            set(44, Items.named(Material.COMPASS, "§fAlle Teams", List.of(
+                    "§7Partnerschaft anfragen",
+                    "§7oder Krieg erklären.",
+                    "",
+                    "§e» Klicken zum Auswählen")), this::openTeams);
+        }
+    }
+
+    private void openTeams() {
+        page = Page.TEAMS;
+        teamsPage = 0;
+        confirm = null;
+        render();
+    }
+
+    // a team in the relations tab: its banner; owner and vices open its page
+    private void relationTile(int slot, String other, List<String> lines, Teams.Role role) {
+        TeamCacheObject team = CacheHandler.getInstance().getTeamCacheObject(other);
+        List<String> lore = new ArrayList<>(lines);
+        if (role.canManage()) {
+            lore.add("");
+            lore.add("§e» Klicken zum Verwalten");
+        }
+        Material banner = team == null ? Material.WHITE_BANNER : TeamCreateView.colourBanner(team.getTeamColor());
+        set(slot, Items.named(banner, Relations.label(other), lore), role.canManage() ? () -> openRelation(other) : null);
+    }
+
+    private List<String> warLore(Relations.Relation war) {
+        String other = war.other(teamID);
+        List<String> lore = new ArrayList<>();
+        lore.add("§7seit §f" + DATE.format(war.since()) + " §8· §7erklärt von " + (war.declaredBy() == null ? "?" : Relations.label(war.declaredBy())));
+        lore.add("§7letzter Kill: §f" + (war.lastKill().equals(war.since()) ? "noch keiner" : Items.ago(war.lastKill())));
+        lore.add("§7endet ohne Kill in: §f" + until(war.quietEnd()));
+        if (Relations.requested(other, teamID, Relations.RequestKind.PEACE)) lore.add("§aSie bieten euch Frieden an.");
+        if (Relations.requested(teamID, other, Relations.RequestKind.PEACE)) lore.add("§7Ihr habt Frieden angeboten.");
+        return lore;
+    }
+
+    private String partnerWarpLine(TeamCacheObject team, String other) {
+        TeamCacheObject partner = CacheHandler.getInstance().getTeamCacheObject(other);
+        if (partner == null) return "§7Team-Warp: §f-";
+        if (team.getLevel() < Teams.WARP_LEVEL || partner.getLevel() < Teams.WARP_LEVEL) return "§7Team-Warp: §fab Level " + Teams.WARP_LEVEL + " bei beiden";
+        return TeamWarps.get(other) == null ? "§7Team-Warp: §fnicht gesetzt" : "§7Team-Warp: §fim §a/warp§f-Menü";
+    }
+
+    private void openRelation(String other) {
+        selectedTeam = other;
+        page = Page.RELATION;
+        confirm = null;
+        render();
+    }
+
+    private void renderTeams() {
+        set(SLOT_BACK, Items.named(Material.ARROW, "§f◀ Zurück", List.of("§7zu den Beziehungen")), () -> backTo(Tab.RELATIONS));
+        inventory.setItem(SLOT_INFO, Items.named(Material.COMPASS, "§fAlle Teams", List.of("§7Wähle ein Team.")));
+        List<TeamCacheObject> others = new ArrayList<>(CacheHandler.getInstance().getAllTeams());
+        others.removeIf(other -> other.getTeamID().equals(teamID));
+        // partners, wars and requests first, then by name
+        others.sort(Comparator.comparing((TeamCacheObject other) -> relationLine(other.getTeamID()).startsWith("§7keine"))
+                .thenComparing(other -> other.getTeamName().toLowerCase()));
+        int perPage = 27;
+        int pages = Math.max(1, (others.size() + perPage - 1) / perPage);
+        teamsPage = Math.clamp(teamsPage, 0, pages - 1);
+        if (pages > 1) {
+            inventory.setItem(49, Items.named(Material.PAPER, "§fSeite " + (teamsPage + 1) + " von " + pages, List.of()));
+            if (teamsPage > 0) set(48, Items.named(Material.ARROW, "§f◀ Zurück", List.of()), () -> {
+                teamsPage--;
+                render();
+            });
+            if (teamsPage < pages - 1) set(50, Items.named(Material.ARROW, "§fWeiter ▶", List.of()), () -> {
+                teamsPage++;
+                render();
+            });
+        }
+        int slot = 18;
+        for (TeamCacheObject other : others.subList(Math.min(others.size(), teamsPage * perPage), Math.min(others.size(), (teamsPage + 1) * perPage))) {
+            String id = other.getTeamID();
+            set(slot++, Items.named(TeamCreateView.colourBanner(other.getTeamColor()), other.getTeamColor() + other.getTeamName(), List.of(
+                    relationLine(id),
+                    "§7Level §f" + other.getLevel() + " §8· §f" + other.getMembersList().size() + " §7Mitglieder",
+                    "",
+                    "§e» Klicken")), () -> openRelation(id));
+        }
+        if (others.isEmpty()) inventory.setItem(31, Items.named(Material.BARRIER, "§7Es gibt noch keine anderen Teams", List.of()));
+    }
+
+    private String relationLine(String other) {
+        Relations.Relation relation = Relations.between(teamID, other);
+        if (relation != null) return relation.kind() == Relations.Kind.PARTNER ? "§a✦ Partner" : "§c⚔ Krieg";
+        if (Relations.requested(other, teamID, Relations.RequestKind.PARTNER)) return "§emöchte Partner werden";
+        if (Relations.requested(teamID, other, Relations.RequestKind.PARTNER)) return "§7Anfrage verschickt";
+        return "§7keine Beziehung";
+    }
+
+    private void renderRelation(Teams.Role role) {
+        set(SLOT_BACK, Items.named(Material.ARROW, "§f◀ Zurück", List.of("§7zu den Beziehungen")), () -> backTo(Tab.RELATIONS));
+        String other = selectedTeam;
+        TeamCacheObject target = other == null ? null : CacheHandler.getInstance().getTeamCacheObject(other);
+        if (target == null) {
+            inventory.setItem(22, Items.named(Material.BARRIER, "§7Dieses Team gibt es nicht mehr", List.of()));
+            return;
+        }
+        Relations.Relation relation = Relations.between(teamID, other);
+        List<String> info = new ArrayList<>();
+        info.add(relationLine(other));
+        if (relation != null && relation.kind() == Relations.Kind.WAR) info.addAll(warLore(relation));
+        if (relation != null && relation.kind() == Relations.Kind.PARTNER) info.add("§7Partner seit §f" + DATE.format(relation.since()));
+        info.add("§7Level §f" + target.getLevel() + " §8· §f" + target.getMembersList().size() + " §7Mitglieder");
+        inventory.setItem(SLOT_INFO, Items.named(TeamCreateView.colourBanner(target.getTeamColor()), target.getTeamColor() + "§l" + target.getTeamName(), info));
+        if (!role.canManage()) {
+            inventory.setItem(22, Items.named(Material.GRAY_DYE, "§7Beziehungen ändern Boss und Vize", List.of()));
+            return;
+        }
+        if (relation == null) {
+            if (Relations.requested(other, teamID, Relations.RequestKind.PARTNER)) {
+                set(20, Items.named(Material.LIME_CONCRETE, "§a§lPartnerschaft annehmen", PARTNER_LORE),
+                        () -> act(() -> relationAct(() -> Relations.acceptPartnership(teamID, other), other)));
+                set(22, Items.named(Material.RED_CONCRETE, "§cAblehnen", List.of()),
+                        () -> act(() -> relationAct(() -> Relations.decline(teamID, other, Relations.RequestKind.PARTNER), other)));
+            } else if (Relations.requested(teamID, other, Relations.RequestKind.PARTNER)) {
+                set(20, Items.named(Material.GRAY_DYE, "§7Anfrage zurückziehen", List.of("§7Ihr wartet noch auf eine Antwort.")),
+                        () -> act(() -> relationAct(() -> Relations.withdraw(teamID, other, Relations.RequestKind.PARTNER), other)));
+            } else {
+                List<String> lore = new ArrayList<>(PARTNER_LORE);
+                lore.add("§7Beide Teams müssen zustimmen.");
+                set(20, Items.named(Material.LIME_BANNER, "§aPartnerschaft anfragen", lore),
+                        () -> act(() -> relationAct(() -> Relations.requestPartnership(teamID, other), other)));
+            }
+            String key = "war:" + other;
+            boolean asking = confirming(key);
+            set(24, Items.named(asking ? Material.RED_CONCRETE : Material.IRON_SWORD,
+                    asking ? "§c§lWirklich Krieg erklären? Nochmal klicken" : "§cKrieg erklären", List.of(
+                            "§7PvP ist zwischen euch dann überall an,",
+                            "§7auch in geschützten Gebieten.",
+                            "§7Kills bringen Team-Punkte vom Gegner.",
+                            "§7Endet nach 3 Tagen ohne Kill",
+                            "§7oder mit einem Friedensvertrag.")), () -> {
+                if (confirmed(key)) act(() -> relationAct(() -> Relations.declareWar(teamID, other), other));
+            });
+        } else if (relation.kind() == Relations.Kind.PARTNER) {
+            String key = "end:" + other;
+            boolean asking = confirming(key);
+            set(20, Items.named(asking ? Material.RED_CONCRETE : Material.SHEARS,
+                    asking ? "§c§lWirklich beenden? Nochmal klicken" : "§cPartnerschaft beenden",
+                    List.of("§7Dafür reicht eine Seite.")), () -> {
+                if (confirmed(key)) act(() -> relationAct(() -> Relations.endPartnership(teamID, other), other));
+            });
+        } else if (Relations.requested(other, teamID, Relations.RequestKind.PEACE)) {
+            set(20, Items.named(Material.LIME_CONCRETE, "§a§lFrieden annehmen", List.of("§7Der Krieg ist dann vorbei.")),
+                    () -> act(() -> relationAct(() -> Relations.acceptPeace(teamID, other), other)));
+            set(22, Items.named(Material.RED_CONCRETE, "§cAblehnen", List.of()),
+                    () -> act(() -> relationAct(() -> Relations.decline(teamID, other, Relations.RequestKind.PEACE), other)));
+        } else if (Relations.requested(teamID, other, Relations.RequestKind.PEACE)) {
+            set(20, Items.named(Material.GRAY_DYE, "§7Friedensangebot zurückziehen", List.of("§7Ihr wartet noch auf eine Antwort.")),
+                    () -> act(() -> relationAct(() -> Relations.withdraw(teamID, other, Relations.RequestKind.PEACE), other)));
+        } else {
+            set(20, Items.named(Material.WHITE_BANNER, "§aFrieden anbieten", List.of("§7Nimmt das andere Team an,", "§7ist der Krieg vorbei.")),
+                    () -> act(() -> relationAct(() -> Relations.offerPeace(teamID, other), other)));
+        }
+    }
+
+    private static final List<String> PARTNER_LORE = List.of(
+            "§7Partner teilen ihre Gebiete und",
+            "§7greifen sich nie an. Team-Warps",
+            "§7gegenseitig, wenn beide Level " + Teams.WARP_LEVEL + " sind.");
+
+    // worker thread: only owner and vices change relations, checked again at the click (the page may be old)
+    private Feedback relationAct(Supplier<Relations.Result> change, String other) {
+        TeamCacheObject team = team();
+        if (team == null || !Teams.role(team, viewer.getUniqueId()).canManage()) return Feedback.fail("Beziehungen ändern nur Boss und Vize.");
+        return relationFeedback(change.get(), other);
+    }
+
+    // worker thread: the answer to a relation change, with the announcement on the main thread
+    private Feedback relationFeedback(Relations.Result result, String other) {
+        String us = Relations.label(teamID);
+        String them = Relations.label(other);
+        return switch (result) {
+            case REQUESTED -> Feedback.ok("Anfrage an " + them + " §fverschickt.",
+                    () -> Teams.notifyTeam(other, teamInfo(other) + us + " §fmöchte mit euch Partner werden. §7(/team → Beziehungen)"));
+            case PARTNERED -> Feedback.ok(null, () -> broadcast("§7✦ " + us + " §7und " + them + " §7sind jetzt Partner."));
+            case ENDED -> Feedback.ok(null, () -> broadcast("§7✦ Die Partnerschaft zwischen " + us + " §7und " + them + " §7ist beendet."));
+            case WAR -> Feedback.ok(null, () -> broadcast("§7⚔ " + us + " §7hat " + them + " §7den Krieg erklärt."));
+            case PEACE_OFFERED -> Feedback.ok("Friedensangebot an " + them + " §fverschickt.",
+                    () -> Teams.notifyTeam(other, teamInfo(other) + us + " §fbietet euch Frieden an. §7(/team → Beziehungen)"));
+            case PEACE -> Feedback.ok(null, () -> broadcast("§7☮ " + us + " §7und " + them + " §7haben Frieden geschlossen."));
+            case WITHDRAWN -> Feedback.ok("§7Zurückgezogen.", null);
+            case DECLINED -> Feedback.ok("§7Abgelehnt.", () -> Teams.notifyTeam(other, teamInfo(other) + us + " §fhat eure Anfrage abgelehnt."));
+            case NOT_POSSIBLE -> Feedback.fail("Das geht gerade nicht, schau nochmal in die Übersicht.");
+        };
+    }
+
+    private static void broadcast(String message) {
+        Bukkit.broadcast(Text.section(Main.getChatPrefix() + message));
+    }
+
+    private static String teamInfo(String team) {
+        TeamCacheObject cached = CacheHandler.getInstance().getTeamCacheObject(team);
+        return (cached == null ? "§a" : cached.getTeamColor()) + "Team-Info §8» ";
+    }
+
+    // "2 T 5 Std", "3 Std 10 Min"
+    private static String until(Instant end) {
+        java.time.Duration left = java.time.Duration.between(Instant.now(), end);
+        if (left.isNegative()) return "gleich";
+        return left.toDays() > 0 ? left.toDays() + " T " + left.toHoursPart() + " Std" : left.toHours() + " Std " + left.toMinutesPart() + " Min";
+    }
+
+
 
     private boolean confirming(String key) {
         return key.equals(confirm) && System.currentTimeMillis() < confirmUntil;

@@ -121,6 +121,11 @@ public class CacheHandler {
     }
 
 
+    /** Every team in the cache (all are loaded at startup). */
+    public java.util.Collection<TeamCacheObject> getAllTeams() {
+        return TeamCache.all();
+    }
+
     // null if the team does not exist or its document is broken
     public @Nullable TeamCacheObject getTeamCacheObject(@Nullable String teamID) {
         return TeamCache.getTeam(teamID);

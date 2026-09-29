@@ -348,7 +348,27 @@ public final class Database {
                 z       DOUBLE PRECISION NOT NULL
             )""",
             "CREATE INDEX IF NOT EXISTS chunks_team_idx ON chunks (team_id)",
-            "CREATE INDEX IF NOT EXISTS nomad_deliveries_team_idx ON nomad_deliveries (team_id, player_uuid)"
+            "CREATE INDEX IF NOT EXISTS nomad_deliveries_team_idx ON nomad_deliveries (team_id, player_uuid)",
+            // partnerships and wars between teams, one row per pair; the open partnership requests and peace offers
+            """
+            CREATE TABLE IF NOT EXISTS team_relations (
+                team_a      TEXT NOT NULL REFERENCES teams (team_id) ON DELETE CASCADE,
+                team_b      TEXT NOT NULL REFERENCES teams (team_id) ON DELETE CASCADE,
+                kind        TEXT NOT NULL CHECK (kind IN ('PARTNER', 'WAR')),
+                declared_by TEXT,
+                since       TIMESTAMPTZ NOT NULL DEFAULT now(),
+                last_kill   TIMESTAMPTZ NOT NULL DEFAULT now(),
+                PRIMARY KEY (team_a, team_b),
+                CHECK (team_a < team_b COLLATE "C")
+            )""",
+            """
+            CREATE TABLE IF NOT EXISTS team_requests (
+                from_team  TEXT NOT NULL REFERENCES teams (team_id) ON DELETE CASCADE,
+                to_team    TEXT NOT NULL REFERENCES teams (team_id) ON DELETE CASCADE,
+                kind       TEXT NOT NULL CHECK (kind IN ('PARTNER', 'PEACE')),
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                PRIMARY KEY (from_team, to_team, kind)
+            )"""
     );
 
     private static volatile HikariDataSource dataSource;

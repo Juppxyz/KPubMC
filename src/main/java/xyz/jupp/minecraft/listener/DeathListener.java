@@ -13,6 +13,7 @@ import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
+import xyz.jupp.minecraft.team.Relations;
 import xyz.jupp.minecraft.economy.Taxes;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.economy.Loans;
@@ -181,6 +182,9 @@ public class DeathListener implements Listener {
             sync(() -> killer.sendMessage(Main.getChatPrefix() + "§cDu kannst keine Belohnung von deinem Teamteamkollegen eintreiben."));
             return;
         }
+        // catching a wanted enemy is a kill in a war as well
+        String victimTeamID = playerCacheObject.getTeamID();
+        if (killerTeamID != null && victimTeamID != null) Relations.warKill(killerTeamID, victimTeamID);
 
         boolean alreadyCollected = JailHandler.getAlreadyKilledPlayer().contains(player.getUniqueId());
         sync(() -> {
@@ -221,24 +225,25 @@ public class DeathListener implements Listener {
         TeamCacheObject playerTeam = playerCacheObject.getTeamCacheObject();
         if (killerTeam == null || playerTeam == null) return;
 
-        // a kill inside the own team only costs the points (the credit was always overwritten before)
-        if (!killerTeam.getTeamID().equals(playerTeam.getTeamID())) {
-            TeamRepository.addTeamPoints(killerTeam.getTeamID(), killCost);
-        }
+        // partners never fight: a death between them (TNT, a wolf, ...) moves nothing
+        if (Relations.partners(killerTeamID, playerTeamID)) return;
         // never below 0, returns the points before the kill
         int playerTeamPoints = TeamRepository.withdrawTeamPointsFloored(playerTeam.getTeamID(), killCost);
-        int earnedPoints = killCost;
-        if (playerTeamPoints < killCost) {
-            earnedPoints = playerTeamPoints;
-            playerTeam.downgradeTeamLevel();
+        int earnedPoints = Math.min(playerTeamPoints, killCost);
+        if (playerTeamPoints < killCost) playerTeam.downgradeTeamLevel();
+        // the killer's team gets what the other team really lost; a kill inside the own team only costs
+        if (!killerTeam.getTeamID().equals(playerTeam.getTeamID()) && earnedPoints > 0) {
+            TeamRepository.addTeamPoints(killerTeam.getTeamID(), earnedPoints);
         }
 
         int points = earnedPoints;
+        // a kill keeps a war between the two teams going
+        String war = !killerTeamID.equals(playerTeamID) && Relations.warKill(killerTeamID, playerTeamID) ? " §8(Krieg)" : "";
         sync(() -> {
             forEachOnlineTeamMember(killerTeamID, online ->
-                    online.sendMessage(Main.getChatPrefix() + "§a+" + points + " Team-Punkte §ffür den Kill an " + player.getDisplayName()));
+                    online.sendMessage(Main.getChatPrefix() + "§a+" + points + " Team-Punkte §ffür den Kill an " + player.getDisplayName() + war));
             forEachOnlineTeamMember(playerTeamID, online -> {
-                online.sendMessage(Main.getChatPrefix() + "§c-" + points + " Team-Punkte §fwegen dem Tod durch " + killer.getDisplayName());
+                online.sendMessage(Main.getChatPrefix() + "§c-" + points + " Team-Punkte §fwegen dem Tod durch " + killer.getDisplayName() + war);
                 if (points < killCost) {
                     online.sendMessage(Main.getChatPrefix() + "§cEuer Team wurde ein Level herunter gestuft!");
                     online.sendMessage(Main.getChatPrefix() + "§fAchtet in Zukunft immer auf genügend Team-Punkte!");

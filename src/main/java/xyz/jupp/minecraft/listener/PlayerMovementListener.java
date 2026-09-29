@@ -7,6 +7,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerMoveEvent;
+import xyz.jupp.minecraft.team.Relations;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.ChunkCache;
 import xyz.jupp.minecraft.cache.ChunkCacheObject;
@@ -73,11 +74,11 @@ public class PlayerMovementListener implements Listener {
                 player.sendActionBar(Text.of(playerCacheObject.getTeamColor() + OWN_TEAM_AREA));
             }
         } else {
-            handleForeignClaim(player, playerUUID, chunkCacheObject);
+            handleForeignClaim(player, playerUUID, chunkCacheObject, playerTeamID);
         }
     }
 
-    private void handleForeignClaim(Player player, UUID playerUUID, ChunkCacheObject chunkCacheObject) {
+    private void handleForeignClaim(Player player, UUID playerUUID, ChunkCacheObject chunkCacheObject, String playerTeamID) {
         TeamCacheObject teamCacheObject = CacheHandler.getInstance().getTeamCacheObject(chunkCacheObject.getTeamID());
         if (teamCacheObject == null) {
             player.sendActionBar(UNKNOWN_TEAM);
@@ -87,6 +88,14 @@ public class PlayerMovementListener implements Listener {
         String zoneOptionMobDamage = teamCacheObject.isZoneOptionMobDamage() ? MOBGRIEF_ON : MOBGRIEF_OFF;
         String zoneOptionInteract = teamCacheObject.isZoneOptionInteract() ? INTERACT_OPEN : INTERACT_LOCKED;
         playersInClaimedAreas.add(playerUUID);
+        if (Relations.partners(playerTeamID, teamCacheObject.getTeamID())) {
+            player.sendActionBar(Text.of("§fGebiet von §l" + teamCacheObject.getTeamName() + " §8§l| §a§l✦ Partner"));
+            return;
+        }
+        if (Relations.atWar(playerTeamID, teamCacheObject.getTeamID())) {
+            player.sendActionBar(Text.of("§fGebiet von §l" + teamCacheObject.getTeamName() + " §8§l| §c§l⚔ Krieg §8§l| §f§lPvP an"));
+            return;
+        }
         player.sendActionBar(Text.of("§fGebiet von: §l" + teamCacheObject.getTeamName() + " §8§l| " +
                 zoneOptionPvP + " §f§l- " + zoneOptionMobDamage + "§f§l- " + zoneOptionInteract + "§f§l- "));
     }
