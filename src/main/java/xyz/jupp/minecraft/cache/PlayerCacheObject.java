@@ -86,6 +86,13 @@ public class PlayerCacheObject {
     }
 
 
+    // the database has the change already (a transaction wrote it): only the cached fields
+    void teamChanged(String id) {
+        this.teamID = id;
+        this.teamCacheObject = id == null ? null : TeamCache.getTeam(id);
+    }
+
+
     // re-reads teamID/teamInvites from the database and sets the names on the main thread
     public void updatePlayer() {
         Tasks.async(() -> {
@@ -94,6 +101,7 @@ public class PlayerCacheObject {
                 PlayerData data = PlayerRepository.getPlayer(uuid);
                 if (data == null) return;
                 this.teamID = data.teamID();
+                this.teamCacheObject = teamID == null ? null : TeamCache.getTeam(teamID);
                 this.teamInvites = data.teamInvites();
             }
 

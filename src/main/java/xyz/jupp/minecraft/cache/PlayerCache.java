@@ -2,6 +2,7 @@ package xyz.jupp.minecraft.cache;
 
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -36,6 +37,11 @@ final class PlayerCache {
     // blocking, used on the async pre-login thread; replaces a possibly stale entry
     static void preload(@NotNull UUID uuid) {
         playerCacheMap.put(uuid, PlayerCacheObject.load(uuid));
+    }
+
+    // null if the player is not cached, never loads
+    static @Nullable PlayerCacheObject getIfCached(@NotNull UUID uuid) {
+        return playerCacheMap.get(uuid);
     }
 
     static void removePlayer(@NotNull UUID uuid) {

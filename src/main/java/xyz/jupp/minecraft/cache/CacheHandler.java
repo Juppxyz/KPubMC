@@ -71,9 +71,23 @@ public class CacheHandler {
     }
 
 
-    public void addPlayerToTeam(@NotNull Player player, @NotNull TeamCacheObject teamCacheObject) {
-        teamCacheObject.addPlayerToMemberList(player);
-        getPlayerInCache(player).changeTeamID(teamCacheObject.getTeamID());
+    /** Blocking: adds the player to the team, only if they are in no team yet (checked in the database). */
+    public boolean addPlayerToTeam(@NotNull Player player, @NotNull TeamCacheObject teamCacheObject) {
+        PlayerCacheObject pco = getPlayerInCache(player);
+        synchronized (pco) {
+            if (pco.getTeamID() != null) return false;
+            TeamRepository.TeamMember member = TeamRepository.TeamMember.of(player, "member");
+            if (!TeamRepository.joinTeam(teamCacheObject.getTeamID(), member)) return false;
+            teamCacheObject.memberJoined(member);
+            pco.teamChanged(teamCacheObject.getTeamID());
+            return true;
+        }
+    }
+
+    /** An offline member was removed: a cached entry (e.g. preloaded during the login) forgets the team too. */
+    public void clearTeamIfCached(@NotNull UUID uuid, @NotNull String teamID) {
+        PlayerCacheObject cached = PlayerCache.getIfCached(uuid);
+        if (cached != null && teamID.equals(cached.getTeamID())) cached.teamChanged(null);
     }
 
 
@@ -83,17 +97,22 @@ public class CacheHandler {
     }
 
 
-    // blocking, called on a worker: the announcement is sent on the main thread
-    public void createNewTeam(@NotNull Player player, @NotNull String teamName, @NotNull String teamColor) {
-        String teamID = TeamRepository.createNewTeam(player, teamName, teamColor);
-        TeamCache.forgetUnknownTeams();
-        Component announcement = Text.section(Main.getChatPrefix() + "§fDas Team " + teamColor + teamName + " §fwurde von §6" + player.getName() + " §fgegründet!");
+    // blocking, called on a worker: founds the team (price included); the announcement is sent on the main thread
+    public TeamRepository.Founding createNewTeam(@NotNull Player player, @NotNull String teamName, @NotNull String teamColor, int price) {
+        TeamRepository.Founded founded = TeamRepository.createNewTeam(player, teamName, teamColor, price);
+        if (founded.outcome() != TeamRepository.Founding.OK) return founded.outcome();
+        // committed: nothing below may undo it, a failure only costs the announcement or the cache (fixed at the next login)
         try {
+            TeamCache.forgetUnknownTeams();
+            getPlayerInCache(player).teamChanged(founded.teamID());
+            Component announcement = Text.section(Main.getChatPrefix() + "§fDas Team " + teamColor + teamName + " §fwurde von §6" + player.getName() + " §fgegründet!");
             Tasks.sync(() -> Bukkit.broadcast(announcement));
         } catch (IllegalPluginAccessException e) {
-            // server stop: only the announcement is dropped, the team is still assigned below
+            // server stop: only the announcement is dropped
+        } catch (RuntimeException e) {
+            Main.getInstance().getSLF4JLogger().warn("Team {} was founded, but the cache could not follow: {}", founded.teamID(), e.toString());
         }
-        getPlayerInCache(player).changeTeamID(teamID);
+        return TeamRepository.Founding.OK;
     }
 
 

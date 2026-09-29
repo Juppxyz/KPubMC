@@ -79,8 +79,9 @@ public final class Economy {
 
     /** Blocking: measures the economy for the day, stores the snapshot and applies the new factor. */
     public static Snapshot measure(@NotNull LocalDate day) {
-        // money in running fixed deposits still belongs to the players
-        long moneySupply = Database.queryOne("SELECT COALESCE(SUM(money), 0) + (SELECT COALESCE(SUM(amount), 0) FROM bank_deposits WHERE NOT paid_out) FROM players",
+        // money in running fixed deposits and in team treasuries still belongs to the players
+        long moneySupply = Database.queryOne("SELECT COALESCE(SUM(money), 0) + (SELECT COALESCE(SUM(amount), 0) FROM bank_deposits WHERE NOT paid_out)"
+                        + " + (SELECT COALESCE(SUM(treasury), 0) FROM teams) FROM players",
                 row -> row.getLong(1));
         Integer active = Database.queryOne("SELECT COUNT(*) FROM players WHERE last_seen >= now() - make_interval(days => ?)",
                 row -> row.getInt(1), ACTIVE_DAYS);

@@ -10,6 +10,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.jetbrains.annotations.NotNull;
+import xyz.jupp.minecraft.team.Teams;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.PlayerCacheObject;
@@ -20,12 +21,10 @@ public class TeamAreaListener implements Listener {
 
     // README: the mob griefing part is in the MobLimiterListener
 
-    private static final int PVP_PROTECTION_LEVEL = 3;
-
     private static boolean isPvPProtected(@NotNull Location location) {
         TeamCacheObject teamCacheObject = ClaimedAreaHelper.getClaimingTeam(location);
         return teamCacheObject != null
-                && teamCacheObject.getLevel() >= PVP_PROTECTION_LEVEL
+                && teamCacheObject.getLevel() >= Teams.PVP_LEVEL
                 && !teamCacheObject.isZoneOptionPvP();
     }
 

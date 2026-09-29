@@ -3,6 +3,7 @@ package xyz.jupp.minecraft.listener;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerPortalEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
@@ -35,8 +36,21 @@ public class NetherTransferListener implements Listener {
         }
         if (player.getWorld().getEnvironment() != World.Environment.NORMAL
                 || event.getCause() != PlayerTeleportEvent.TeleportCause.NETHER_PORTAL) return;
+        chargeNetherTax(player);
+    }
 
-        // progressive tax on the balance, booked into the state treasury; database on a worker, the message on the main thread
+    // a warp into the Nether (player or team warp) costs the same as the portal; PlayerPortalEvent has its own handler list
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
+    public void onWarpToNether(PlayerTeleportEvent event) {
+        if (event.getCause() != PlayerTeleportEvent.TeleportCause.PLUGIN) return;
+        World from = event.getFrom().getWorld();
+        World to = event.getTo().getWorld();
+        if (from == null || to == null || from.getEnvironment() != World.Environment.NORMAL || to.getEnvironment() != World.Environment.NETHER) return;
+        chargeNetherTax(event.getPlayer());
+    }
+
+    // progressive tax on the balance, booked into the state treasury; database on a worker, the message on the main thread
+    private static void chargeNetherTax(Player player) {
         Tasks.supplyAsync(() -> {
             Taxes.BalanceTax tax = Taxes.chargeNetherTax(player.getUniqueId());
             if (tax.tax() == 0) {

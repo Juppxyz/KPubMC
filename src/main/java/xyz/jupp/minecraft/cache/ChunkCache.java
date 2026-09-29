@@ -53,21 +53,18 @@ public class ChunkCache {
     }
 
 
-    public boolean addChunk(@NotNull String teamID, @NotNull String worldName, int x, int z) {
-        ChunkKey key = new ChunkKey(worldName, x, z);
-        ChunkCacheObject chunkCacheObject = new ChunkCacheObject(teamID);
-        if (chunkCache.putIfAbsent(key, chunkCacheObject) != null) {
-            return false;
+    /** Claimed chunks of a team. */
+    public int countClaims(@NotNull String teamID) {
+        int count = 0;
+        for (ChunkCacheObject claim : chunkCache.values()) {
+            if (teamID.equals(claim.getTeamID())) count++;
         }
-        boolean claimed;
-        try {
-            claimed = ChunkRepository.claim(teamID, worldName, x, z);
-        } catch (RuntimeException e) {
-            chunkCache.remove(key, chunkCacheObject);
-            throw e;
-        }
-        if (!claimed) chunkCache.remove(key, chunkCacheObject);
-        return claimed;
+        return count;
+    }
+
+    /** After Teams.claim wrote the claim to the database. */
+    public void claimed(@NotNull String teamID, @NotNull String worldName, int x, int z) {
+        chunkCache.put(new ChunkKey(worldName, x, z), new ChunkCacheObject(teamID));
     }
 
     public boolean removeChunk(@Nullable String teamID, @NotNull String worldName, int x, int z) {

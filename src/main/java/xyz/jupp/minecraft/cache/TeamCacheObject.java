@@ -2,6 +2,7 @@ package xyz.jupp.minecraft.cache;
 
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.database.TeamRepository;
 import xyz.jupp.minecraft.database.TeamRepository.TeamData;
 import xyz.jupp.minecraft.database.TeamRepository.TeamMember;
@@ -44,22 +45,26 @@ public class TeamCacheObject {
         this.zoneOptionInteract = data.zoneInteract();
     }
 
-    public void addPlayerToMemberList(@NotNull Player player) {
-        TeamMember member = TeamMember.of(player, "member");
+    // the database has the member already (TeamRepository.joinTeam)
+    void memberJoined(@NotNull TeamMember member) {
         membersList.add(member);
-        TeamRepository.addMember(teamID, member);
     }
 
     public void removePlayerFromMemberList(@NotNull Player player) {
-        String uuid = player.getUniqueId().toString();
-        if (membersList.removeIf(member -> member.uuid().equals(player.getUniqueId()))) {
-            TeamRepository.removeMember(teamID, player.getUniqueId());
-            teamVices.remove(uuid);
+        removeMember(player.getUniqueId());
+    }
+
+    // also for offline members; the player's own team_id is the caller's. Same monitor as the role change.
+    public synchronized void removeMember(@NotNull UUID uuid) {
+        if (membersList.removeIf(member -> member.uuid().equals(uuid))) {
+            TeamRepository.removeMember(teamID, uuid);
+            teamVices.remove(uuid.toString());
         }
     }
 
-    // toggles member <-> vice in the cache and writes the resulting role
-    public synchronized String changePlayerTeamRole(@NotNull UUID uuid) {
+    // toggles member <-> vice in the cache and writes the resulting role; null if the player is not (any longer) a member
+    public synchronized @Nullable String changePlayerTeamRole(@NotNull UUID uuid) {
+        if (membersList.stream().noneMatch(member -> member.uuid().equals(uuid))) return null;
         String id = uuid.toString();
         boolean isVice = !teamVices.contains(id);
         if (isVice) {
@@ -72,10 +77,12 @@ public class TeamCacheObject {
         return newRole;
     }
 
-    // the points are withdrawn by the caller, holding this object's lock together with the level read
-    public synchronized void upgradeTeamLevel() {
-        this.level++;
-        TeamRepository.incTeamLevel(teamID);
+    // points and level in one statement, the cache follows only when it went through
+    public synchronized boolean upgrade(int price) {
+        Integer newLevel = TeamRepository.upgradeLevel(teamID, level, price);
+        if (newLevel == null) return false;
+        this.level = newLevel;
+        return true;
     }
 
     // the points are reset by the caller

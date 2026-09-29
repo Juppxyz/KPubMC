@@ -243,7 +243,7 @@ public class DeathListener implements Listener {
                     online.sendMessage(Main.getChatPrefix() + "§cEuer Team wurde ein Level herunter gestuft!");
                     online.sendMessage(Main.getChatPrefix() + "§fAchtet in Zukunft immer auf genügend Team-Punkte!");
                     online.sendMessage(" ");
-                    online.sendMessage("§f§oEure Optionen im Gebiets-Manager wurden zurückgesetzt.");
+                    online.sendMessage("§f§oEure Gebiets-Einstellungen (§a/team §f§o→ Gebiet) wurden zurückgesetzt.");
                 }
             });
         });

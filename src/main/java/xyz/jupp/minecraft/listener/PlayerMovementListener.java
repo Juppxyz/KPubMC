@@ -29,8 +29,9 @@ public class PlayerMovementListener implements Listener {
     private static final String PVP_OFF = "§c§lPVP";
     private static final String MOBGRIEF_ON = "§a§lMob-Griefing";
     private static final String MOBGRIEF_OFF = "§c§lMob-Griefing";
-    private static final String INTERACT_ON = "§a§lGesichert";
-    private static final String INTERACT_OFF = "§c§lOffen";
+    // interaction option on: strangers may use things there
+    private static final String INTERACT_OPEN = "§a§lOffen";
+    private static final String INTERACT_LOCKED = "§c§lGesichert";
 
     // players whose last chunk change ended in a claimed chunk (own or foreign); main thread only
     private final Set<UUID> playersInClaimedAreas = new HashSet<>();
@@ -84,7 +85,7 @@ public class PlayerMovementListener implements Listener {
         }
         String zoneOptionPvP = teamCacheObject.isZoneOptionPvP() ? PVP_ON : PVP_OFF;
         String zoneOptionMobDamage = teamCacheObject.isZoneOptionMobDamage() ? MOBGRIEF_ON : MOBGRIEF_OFF;
-        String zoneOptionInteract = teamCacheObject.isZoneOptionInteract() ? INTERACT_ON : INTERACT_OFF;
+        String zoneOptionInteract = teamCacheObject.isZoneOptionInteract() ? INTERACT_OPEN : INTERACT_LOCKED;
         playersInClaimedAreas.add(playerUUID);
         player.sendActionBar(Text.of("§fGebiet von: §l" + teamCacheObject.getTeamName() + " §8§l| " +
                 zoneOptionPvP + " §f§l- " + zoneOptionMobDamage + "§f§l- " + zoneOptionInteract + "§f§l- "));

@@ -17,8 +17,8 @@ import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.TeamCacheObject;
 import xyz.jupp.minecraft.database.TeamRepository;
 import xyz.jupp.minecraft.inventory.MainThread;
-import xyz.jupp.minecraft.inventory.TeamInventory;
-import xyz.jupp.minecraft.listener.TeamInventoryListener;
+import xyz.jupp.minecraft.team.TeamCreateView;
+import xyz.jupp.minecraft.team.Teams;
 import xyz.jupp.minecraft.utils.Tasks;
 import xyz.jupp.minecraft.utils.Text;
 
@@ -110,7 +110,7 @@ public final class NomadView implements InventoryHolder {
             // Nomad only trades with teams: explain how to get into one instead of opening the menu
             player.sendMessage(Nomad.PREFIX + "Ich handle nur mit Teams, Fremder.");
             player.sendMessage(Nomad.PREFIX + "Gründe dein eigenes mit §a/team neu <Name> §8(ab Level "
-                    + TeamInventoryListener.TEAM_CREATION_LEVEL + ", kostet " + TeamInventoryListener.TEAM_CREATION_COST + " Schilling)§f,");
+                    + Teams.CREATION_LEVEL + ", kostet " + Teams.CREATION_COST + " Schilling)§f,");
             player.sendMessage(Nomad.PREFIX + "oder lass dich einladen: Mit §a/invites §fstellst du ein, ob du Einladungen annimmst.");
             player.playSound(player.getLocation(), Sound.ENTITY_WANDERING_TRADER_NO, 1f, 1f);
             return;
@@ -306,7 +306,7 @@ public final class NomadView implements InventoryHolder {
                 }
             }
             TeamCacheObject team = CacheHandler.getInstance().getTeamCacheObject(teamID);
-            Material block = TeamInventory.colorBlock(team == null ? "" : team.getTeamColor());
+            Material block = TeamCreateView.colourBlock(team == null ? "" : team.getTeamColor());
             inventory.setItem(31, named(block, "§fDein Team: " + Nomad.teamName(teamID), List.of(place == 0
                     ? "§7Noch keine Punkte diese Woche."
                     : "§7Platz §f" + place + " §7mit §a" + points + " §7Punkten.")));

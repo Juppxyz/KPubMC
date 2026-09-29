@@ -16,8 +16,13 @@ public class PlayerTeleport {
 
     // onAbort runs on the main thread if the player is not teleported (moved, left, changed world), e.g. to refund a price
     public void teleportAfter(Player player, Location targetLocation, @Nullable Runnable onAbort) {
+        teleportAfter(player, targetLocation, onAbort, null);
+    }
+
+    // onDone runs on the main thread after the teleport happened
+    public void teleportAfter(Player player, Location targetLocation, @Nullable Runnable onAbort, @Nullable Runnable onDone) {
         if (!Bukkit.isPrimaryThread()) {
-            Tasks.sync(() -> teleportAfter(player, targetLocation, onAbort));
+            Tasks.sync(() -> teleportAfter(player, targetLocation, onAbort, onDone));
             return;
         }
 
@@ -38,7 +43,11 @@ public class PlayerTeleport {
 
             if (currentLocation.distanceSquared(initialLocation) == 0) {
                 player.playSound(initialLocation, Sound.ENTITY_ENDERMAN_TELEPORT, 1f,1f);
-                if (!player.teleport(targetLocation)) abort(onAbort);
+                if (!player.teleport(targetLocation)) {
+                    abort(onAbort);
+                } else if (onDone != null) {
+                    onDone.run();
+                }
             } else {
                 player.sendMessage(Main.getChatPrefix() + "§fBleib bitte stehen, um teleportiert zu werden.");
                 player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f,1f);

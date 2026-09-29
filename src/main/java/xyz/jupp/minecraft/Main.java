@@ -3,6 +3,8 @@ package xyz.jupp.minecraft;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitWorker;
+import xyz.jupp.minecraft.team.TeamViewListener;
+import xyz.jupp.minecraft.team.TeamWarps;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.ChunkCache;
 import xyz.jupp.minecraft.cache.WarpCache;
@@ -12,6 +14,7 @@ import xyz.jupp.minecraft.database.Database;
 import xyz.jupp.minecraft.economy.Bank;
 import xyz.jupp.minecraft.economy.Bankruptcy;
 import xyz.jupp.minecraft.inventory.MainThread;
+import xyz.jupp.minecraft.inventory.WarpView;
 import xyz.jupp.minecraft.economy.Economy;
 import xyz.jupp.minecraft.economy.Hondo;
 import xyz.jupp.minecraft.economy.Market;
@@ -82,12 +85,11 @@ public final class Main extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new JoinQuitListener(), this);
         Bukkit.getPluginManager().registerEvents(new ChatListener(), this);
         Bukkit.getPluginManager().registerEvents(new CommandBlockListener(), this);
-        Bukkit.getPluginManager().registerEvents(new TeamInventoryListener(), this);
+        Bukkit.getPluginManager().registerEvents(new TeamViewListener(), this);
         Bukkit.getPluginManager().registerEvents(new NetherTransferListener(), this);
         Bukkit.getPluginManager().registerEvents(new DeathListener(), this);
         Bukkit.getPluginManager().registerEvents(new ShopListener(), this);
         Bukkit.getPluginManager().registerEvents(new ShopViewListener(), this);
-        Bukkit.getPluginManager().registerEvents(new WarpInventoryListener(), this);
         Bukkit.getPluginManager().registerEvents(new CreateLocalShopListener(), this);
         Bukkit.getPluginManager().registerEvents(new MobLimiterListener(), this);
         Bukkit.getPluginManager().registerEvents(new PlayerMovementListener(), this);
@@ -132,7 +134,8 @@ public final class Main extends JavaPlugin {
         int warps = WarpCache.getInstance().load();
         int claimedChunks = ChunkCache.getInstance().load();
         int teams = CacheHandler.getInstance().loadTeams();
-        Logger.console("loaded " + teams + " teams");
+        int teamWarps = TeamWarps.load();
+        Logger.console("loaded " + teams + " teams, " + teamWarps + " team warps");
         Logger.console("loaded " + warps + " warps and " + claimedChunks + " claimed chunks");
         Logger.console("init market..");
         Bank.load();
@@ -161,6 +164,7 @@ public final class Main extends JavaPlugin {
         getServer().getScheduler().cancelTasks(this);
         awaitRunningWorkers(5_000L);
         MainThread.runPending();
+        WarpView.refundPending();
         Vault.shutdown();
         Database.close();
     }

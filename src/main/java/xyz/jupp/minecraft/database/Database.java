@@ -326,7 +326,29 @@ public final class Database {
                 player_uuid UUID  PRIMARY KEY,
                 items       BYTEA NOT NULL,
                 updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-            )"""
+            )""",
+            // teams: the shared treasury with its ledger, the team warp; the team menu reads chunks and Nomad points per team
+            "ALTER TABLE teams ADD COLUMN IF NOT EXISTS treasury BIGINT NOT NULL DEFAULT 0 CHECK (treasury >= 0)",
+            """
+            CREATE TABLE IF NOT EXISTS team_ledger (
+                id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                team_id     TEXT   NOT NULL REFERENCES teams (team_id) ON DELETE CASCADE,
+                player_uuid UUID,
+                kind        TEXT   NOT NULL,
+                amount      BIGINT NOT NULL,
+                created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+            )""",
+            "CREATE INDEX IF NOT EXISTS team_ledger_team_idx ON team_ledger (team_id, created_at)",
+            """
+            CREATE TABLE IF NOT EXISTS team_warps (
+                team_id TEXT PRIMARY KEY REFERENCES teams (team_id) ON DELETE CASCADE,
+                world   TEXT NOT NULL,
+                x       DOUBLE PRECISION NOT NULL,
+                y       DOUBLE PRECISION NOT NULL,
+                z       DOUBLE PRECISION NOT NULL
+            )""",
+            "CREATE INDEX IF NOT EXISTS chunks_team_idx ON chunks (team_id)",
+            "CREATE INDEX IF NOT EXISTS nomad_deliveries_team_idx ON nomad_deliveries (team_id, player_uuid)"
     );
 
     private static volatile HikariDataSource dataSource;
