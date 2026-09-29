@@ -32,7 +32,6 @@ import java.util.Map;
 
 import static xyz.jupp.minecraft.economy.ShopView.countPlain;
 import static xyz.jupp.minecraft.economy.ShopView.fail;
-import static xyz.jupp.minecraft.economy.ShopView.give;
 import static xyz.jupp.minecraft.economy.ShopView.named;
 import static xyz.jupp.minecraft.economy.ShopView.pane;
 import static xyz.jupp.minecraft.economy.ShopView.takePlain;
@@ -435,20 +434,22 @@ public final class NomadView implements InventoryHolder {
             try {
                 delivery = Nomad.deliver(player.getUniqueId(), team, contract.id(), offered);
             } catch (RuntimeException e) {
-                MainThread.run(() -> {
+                boolean scheduled = MainThread.run(() -> {
                     busy = false;
-                    give(player, contract.material(), offered);
+                    HondoView.deliver(player.getUniqueId(), contract.material(), offered);
                     fail(player, "§fNomad ist gerade nicht ansprechbar, versuch es gleich nochmal.");
                 });
+                if (!scheduled) HondoView.keepForLater(player.getUniqueId(), contract.material(), offered);
                 return;
             }
-            Map<Long, Nomad.Progress> newProgress = Nomad.progress(team);
-            int points = TeamRepository.getTeamPoints(team);
-            MainThread.run(() -> {
+            Map<Long, Nomad.Progress> newProgress = progressOrNull(team);
+            Integer points = teamPointsOrNull(team);
+            int back = offered - delivery.accepted();
+            boolean scheduled = MainThread.run(() -> {
                 busy = false;
-                progress = newProgress;
-                teamPoints = points;
-                if (offered > delivery.accepted()) give(player, contract.material(), offered - delivery.accepted());
+                if (newProgress != null) progress = newProgress;
+                if (points != null) teamPoints = points;
+                if (back > 0) HondoView.deliver(player.getUniqueId(), contract.material(), back);
                 switch (delivery.outcome()) {
                     case OK -> {
                         if (delivery.completed()) {
@@ -469,6 +470,7 @@ public final class NomadView implements InventoryHolder {
                 }
                 render();
             });
+            if (!scheduled && back > 0) HondoView.keepForLater(player.getUniqueId(), contract.material(), back);
         });
     }
 
@@ -488,12 +490,12 @@ public final class NomadView implements InventoryHolder {
                 points = 0;
             }
             int earned = points;
-            int total = TeamRepository.getTeamPoints(team);
-            MainThread.run(() -> {
+            Integer total = teamPointsOrNull(team);
+            boolean scheduled = MainThread.run(() -> {
                 busy = false;
-                teamPoints = total;
+                if (total != null) teamPoints = total;
                 if (earned <= 0) {
-                    give(player, material, quantity);
+                    HondoView.deliver(player.getUniqueId(), material, quantity);
                     fail(player, "§fNomad nimmt das gerade nicht an.");
                 } else {
                     notifyTeam(team, Text.section(Nomad.PREFIX + "§e" + player.getName() + " §fhat §e" + quantity + "× ")
@@ -503,7 +505,25 @@ public final class NomadView implements InventoryHolder {
                 }
                 render();
             });
+            if (!scheduled && earned <= 0) HondoView.keepForLater(player.getUniqueId(), material, quantity);
         });
+    }
+
+    // worker thread, after the booking: a failed read must not stop the give-back
+    private static @Nullable Integer teamPointsOrNull(String team) {
+        try {
+            return TeamRepository.getTeamPoints(team);
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    private static @Nullable Map<Long, Nomad.Progress> progressOrNull(String team) {
+        try {
+            return Nomad.progress(team);
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     private static void notifyTeam(String teamID, Component message) {

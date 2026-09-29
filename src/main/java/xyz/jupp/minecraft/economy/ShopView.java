@@ -186,11 +186,16 @@ public final class ShopView implements InventoryHolder {
                     "§7Notverkauf unten links,",
                     "§7Staatsanleihen bei Basil.",
                     "§8/staatskasse")));
-            List<String> sale = new ArrayList<>(EmergencySaleView.summary());
-            sale.addFirst("§7Der Staat verkauft heute günstiger:");
-            sale.add("");
-            sale.add("§e» Klicken zum Kaufen");
-            inventory.setItem(SLOT_EMERGENCY, named(Material.BELL, "§4§lNotverkauf", sale));
+            List<Component> sale = new ArrayList<>();
+            sale.add(Text.of("§7Der Staat verkauft heute günstiger:"));
+            sale.addAll(EmergencySaleView.summary());
+            sale.add(Component.empty());
+            sale.add(Text.of("§e» Klicken zum Kaufen"));
+            ItemStack bell = named(Material.BELL, "§4§lNotverkauf", List.of());
+            ItemMeta bellMeta = bell.getItemMeta();
+            bellMeta.lore(sale);
+            bell.setItemMeta(bellMeta);
+            inventory.setItem(SLOT_EMERGENCY, bell);
         } else {
             inventory.setItem(SLOT_TREASURY, named(Material.GOLD_BLOCK, "§6Staatskasse: " + Main.getCurrencyName((int) Math.min(Integer.MAX_VALUE, Treasury.balance())),
                     List.of("§7Hier landen alle Steuern.",
@@ -565,10 +570,10 @@ public final class ShopView implements InventoryHolder {
                 unavailable(player, e, null, 0);
                 return;
             }
-            int money = PlayerRepository.getMoney(player);
+            Integer money = HondoView.moneyOrNull(player.getUniqueId());
             Runnable onMain = () -> {
                 busy = false;
-                balance = money;
+                if (money != null) balance = money;
                 switch (purchase.outcome()) {
                     case OK -> {
                         if (Services.apply(player, Objects.requireNonNull(purchase.offer()), repairTarget)) {
@@ -714,13 +719,13 @@ public final class ShopView implements InventoryHolder {
                 return;
             }
             Market.update(trade.item());
-            int money = PlayerRepository.getMoney(player);
+            Integer money = HondoView.moneyOrNull(player.getUniqueId());
             Runnable onMain = () -> {
                 busy = false;
-                balance = money;
+                if (money != null) balance = money;
                 switch (trade.outcome()) {
                     case OK -> {
-                        give(player, item.material(), bundles * item.amount());
+                        HondoView.deliver(player.getUniqueId(), item.material(), bundles * item.amount());
                         player.sendMessage(receipt("§fGekauft: §e" + bundles * item.amount() + "× ", item,
                                 " §ffür " + Main.getCurrencyName(trade.net() + trade.tax()) + " §8(davon " + trade.tax() + " Steuer)"));
                         player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f, 2f);
@@ -759,21 +764,22 @@ public final class ShopView implements InventoryHolder {
                 return;
             }
             Market.update(trade.item());
-            int money = PlayerRepository.getMoney(player);
-            MainThread.run(() -> {
+            Integer money = HondoView.moneyOrNull(player.getUniqueId());
+            boolean scheduled = MainThread.run(() -> {
                 busy = false;
-                balance = money;
+                if (money != null) balance = money;
                 if (trade.outcome() == MarketRepository.Outcome.OK) {
                     player.sendMessage(receipt("§fVerkauft: §e" + quantity + "× ", item, " §ffür " + Main.getCurrencyName(trade.net())));
                     player.playSound(player.getLocation(), Sound.BLOCK_LAVA_POP, 2f, 2f);
                 } else {
-                    give(player, item.material(), quantity);
+                    HondoView.deliver(player.getUniqueId(), item.material(), quantity);
                     fail(player, trade.outcome() == MarketRepository.Outcome.PRICE_CHANGED
                             ? "§fDer Ankaufpreis hat sich gerade geändert, bitte prüfe den neuen Preis."
                             : "§fDieses Item wird gerade nicht angekauft.");
                 }
                 refreshAll();
             });
+            if (!scheduled && trade.outcome() != MarketRepository.Outcome.OK) HondoView.keepForLater(player.getUniqueId(), item.material(), quantity);
         });
     }
 
@@ -790,12 +796,12 @@ public final class ShopView implements InventoryHolder {
                 unavailable(player, e, null, 0);
                 return;
             }
-            int money = PlayerRepository.getMoney(player);
+            Integer money = HondoView.moneyOrNull(player.getUniqueId());
             Runnable onMain = () -> {
                 busy = false;
-                balance = money;
+                if (money != null) balance = money;
                 if (trade.outcome() == MarketRepository.Outcome.OK) {
-                    give(player, item.material(), item.amount());
+                    HondoView.deliver(player.getUniqueId(), item.material(), item.amount());
                     player.sendMessage(receipt("§5Zufall: §e" + item.amount() + "× ", item,
                             " §ffür " + Main.getCurrencyName(trade.net() + trade.tax()) + " §8(davon " + trade.tax() + " Steuer)"));
                     player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f, 2f);
@@ -817,11 +823,12 @@ public final class ShopView implements InventoryHolder {
     // worker thread: a booking failed with a database error, nothing was booked
     private void unavailable(Player player, RuntimeException error, @Nullable Material giveBack, int quantity) {
         Main.getInstance().getSLF4JLogger().warn("Shop trade of {} failed: {}", player.getName(), error.toString());
-        MainThread.run(() -> {
+        boolean scheduled = MainThread.run(() -> {
             busy = false;
-            if (giveBack != null) give(player, giveBack, quantity);
+            if (giveBack != null) HondoView.deliver(player.getUniqueId(), giveBack, quantity);
             fail(player, "§fDer Händler ist gerade nicht erreichbar, bitte versuche es gleich nochmal.");
         });
+        if (!scheduled && giveBack != null) HondoView.keepForLater(player.getUniqueId(), giveBack, quantity);
     }
 
     private static boolean isSpawnEgg(Material material) {
@@ -899,7 +906,7 @@ public final class ShopView implements InventoryHolder {
         return Component.translatable(item.material().translationKey(), NamedTextColor.YELLOW);
     }
 
-    private static Component receipt(String before, MarketItem item, String after) {
+    static Component receipt(String before, MarketItem item, String after) {
         return Text.section(Main.getChatPrefix() + before).append(name(item)).append(Text.section(after));
     }
 

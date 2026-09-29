@@ -5,6 +5,7 @@ import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
+import xyz.jupp.minecraft.economy.Loans;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.PlayerCacheObject;
@@ -87,7 +88,9 @@ public final class JailHandler {
         long wantedEnd = System.currentTimeMillis() + hours * 60L * 60L * 1000L;
         offMainThread(() -> {
             synchronized (LOCK) {
-                pco.setWantedUntil(wantedEnd);
+                // "until caught" (jail_end 0, e.g. an unpaid loan) and a longer wanted (after an escape) stay as they are
+                boolean keep = pco.isJail() || (pco.isWanted() && (pco.getJailEnd() == 0 || pco.getJailEnd() >= wantedEnd));
+                if (!keep) pco.setWantedUntil(wantedEnd);
             }
             refreshPlayerName(player, pco);
         });
@@ -151,6 +154,16 @@ public final class JailHandler {
 
     public static void handleJoin(@NotNull Player player) {
         PlayerCacheObject pco = cache(player);
+        boolean loanDefault = false;
+        if (pco.isWanted() && pco.getJailEnd() == 0) {
+            try {
+                Loans.Loan loan = Loans.current(player.getUniqueId());
+                loanDefault = loan != null && loan.state() == Loans.State.DEFAULTED;
+            } catch (RuntimeException ignored) {
+                // only picks the message
+            }
+        }
+        boolean defaulted = loanDefault;
 
         onMainThread(() -> {
             if (!pco.isWanted() && pco.isJail() && !isInJailArea(player.getLocation())) {
@@ -173,6 +186,11 @@ public final class JailHandler {
                     player.sendMessage(Main.getChatPrefix() + "§aDie Fahndung nach dir wurde eingestellt.");
                 } else if (jailEnd > 0 && System.currentTimeMillis() >= jailEnd) {
                     releasePlayer(player, pco);
+                } else if (defaulted) {
+                    player.sendMessage(Main.getChatPrefix() + "§cDein Kredit bei Basil ist geplatzt, er hat sich genommen, was auf dem Konto war.");
+                    player.sendMessage(Main.getChatPrefix() + "§cDu wirst gesucht, bis dich jemand fasst. §7Neue Kredite erst nach der Strafe und einer Entschuldigung.");
+                    refreshPlayerName(player, pco);
+                    wantedPlayers.add(player.getUniqueId());
                 } else {
                     player.sendMessage(Main.getChatPrefix() + "§cDu bist weiterhin auf der Flucht und Gesucht!");
                     refreshPlayerName(player, pco);

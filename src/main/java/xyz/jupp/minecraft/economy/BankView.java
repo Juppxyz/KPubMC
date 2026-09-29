@@ -348,7 +348,8 @@ public final class BankView implements InventoryHolder {
                 "§a2. §fZurück in §f" + Loans.DAYS + " Tagen§f, je früher desto billiger:",
                 "   §7nach 1 Tag §f" + format(tomorrow) + "§7, am " + Loans.DAYS + ". Tag §f" + format(full) + " Schilling",
                 "§a3. §fBis dahin ist das geliehene Geld gesperrt:",
-                "   §7ausgeben ja, überweisen, abheben, festlegen nein.",
+                "   §7im Shop und bei Händlern ausgeben ja;",
+                "   §7Kistenshops, überweisen, abheben, Festgeld nein.",
                 "§a4. §fAm " + Loans.DAYS + ". Tag holt Basil es sich vom Konto.",
                 "§c5. §fReicht dein Geld nicht, nimmt er was da ist,",
                 "   §cund du wirst gesucht§f, bis dich jemand erwischt.",
@@ -481,6 +482,11 @@ public final class BankView implements InventoryHolder {
     private static Component label(Bank.Entry entry, Map<String, String> names) {
         String kind = entry.kind();
         if (kind.startsWith("MARKET_")) {
+            if (entry.note() != null && entry.note().startsWith("SERVICE:")) {
+                ServiceOffer offer = Services.get(entry.note().substring("SERVICE:".length()));
+                String name = offer == null ? "?" : Text.strip(Text.legacy(Services.name(offer)));
+                return Component.text("Dienst: " + name, NamedTextColor.GRAY);
+            }
             Material material = entry.note() == null ? null : Material.matchMaterial(entry.note());
             Component what = material == null ? Component.text("?") : Component.translatable(material.translationKey());
             return Component.text(kind.equals("MARKET_BUY") ? "Kauf: " : "Verkauf: ", NamedTextColor.GRAY).append(what.color(NamedTextColor.GRAY));

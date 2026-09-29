@@ -5,6 +5,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerPortalEvent;
+import org.bukkit.event.player.PlayerTeleportEvent;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -32,7 +33,8 @@ public class NetherTransferListener implements Listener {
                     + unlock.format(DateTimeFormatter.ofPattern("HH:mm")) + " Uhr §8(noch " + daysLeft + (daysLeft == 1 ? " Tag)" : " Tage)"));
             return;
         }
-        if (player.getWorld().getEnvironment() != World.Environment.NORMAL) return;
+        if (player.getWorld().getEnvironment() != World.Environment.NORMAL
+                || event.getCause() != PlayerTeleportEvent.TeleportCause.NETHER_PORTAL) return;
 
         // progressive tax on the balance, booked into the state treasury; database on a worker, the message on the main thread
         Tasks.supplyAsync(() -> {

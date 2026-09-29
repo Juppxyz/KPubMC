@@ -83,9 +83,14 @@ public final class Bankruptcy {
     }
 
     /** Blocking, in onEnable after the market: the state from before the restart, the default sale items once. */
-    public static void load() {
+    /** Blocking, in onEnable before the market (its daily offers depend on it): the state from before the restart. */
+    public static void loadState() {
         broke = "true".equals(meta(STATE_KEY));
         founded = meta(FOUNDED_KEY) != null;
+    }
+
+    /** Blocking, in onEnable after the market: the default sale items once, today's sale. */
+    public static void load() {
         if (meta(DEFAULTS_KEY) == null) {
             String placeholders = String.join(", ", Collections.nCopies(DEFAULT_SALE.size(), "?"));
             Database.update("UPDATE market_items SET emergency_sale = TRUE WHERE material IN (" + placeholders + ")", DEFAULT_SALE.toArray());

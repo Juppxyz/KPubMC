@@ -15,6 +15,7 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.economy.Bank;
+import xyz.jupp.minecraft.economy.TaxClass;
 import xyz.jupp.minecraft.economy.Taxes;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
@@ -104,6 +105,12 @@ public class MoneyInventoryListener implements Listener {
             if ((selectedAmount % 10) != 0) {
                 player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
                 player.sendMessage(Main.getChatPrefix() + "Der abzuhebende Betrag muss ein Vielfaches von 10 sein.");
+                return;
+            }
+
+            if ((selectedAmount - Taxes.taxOn(selectedAmount, TaxClass.STANDARD)) / 10 * 10 <= 0) {
+                player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
+                player.sendMessage(Main.getChatPrefix() + "Nach der Steuer bleibt kein ganzer Schein übrig, heb etwas mehr ab.");
                 return;
             }
 

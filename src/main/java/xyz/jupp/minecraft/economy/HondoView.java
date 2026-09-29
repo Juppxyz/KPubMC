@@ -9,6 +9,7 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.plugin.IllegalPluginAccessException;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
@@ -416,7 +417,12 @@ public final class HondoView implements InventoryHolder {
         if (online != null) {
             give(online, material, quantity);
         } else {
-            Tasks.async(() -> keepForLater(uuid, material, quantity));
+            try {
+                Tasks.async(() -> keepForLater(uuid, material, quantity));
+            } catch (IllegalPluginAccessException e) {
+                // server stop (MainThread.runPending): the database is still open
+                keepForLater(uuid, material, quantity);
+            }
         }
     }
 
@@ -452,7 +458,7 @@ public final class HondoView implements InventoryHolder {
     }
 
     // worker thread, after the booking: a failed read must not stop the delivery
-    private static @Nullable Integer moneyOrNull(UUID uuid) {
+    static @Nullable Integer moneyOrNull(UUID uuid) {
         try {
             return PlayerRepository.getMoney(uuid);
         } catch (RuntimeException e) {

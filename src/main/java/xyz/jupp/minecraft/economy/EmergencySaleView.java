@@ -1,5 +1,6 @@
 package xyz.jupp.minecraft.economy;
 
+import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -95,14 +96,16 @@ public final class EmergencySaleView implements InventoryHolder {
 
     private ItemStack saleItem(MarketItem item) {
         int price = Bankruptcy.salePrice(item);
-        int normal = item.buyPrice() + Taxes.taxOn(item.buyPrice(), item.taxClass());
+        // what it costs otherwise: in the shop, or at Hondo for his goods
+        int net = item.buyable() ? item.buyPrice() : Hondo.salePrice(item, item.amount(), 0);
+        int normal = net + Taxes.taxOn(net, item.buyable() ? item.taxClass() : Hondo.TAX_CLASS);
         boolean done = bought.contains(item.material());
         ItemStack stack = new ItemStack(item.material(), Math.min(item.amount(), item.material().getMaxStackSize()));
         ItemMeta meta = stack.getItemMeta();
         meta.customName(ShopView.name(item).decoration(TextDecoration.ITALIC, false));
         List<String> lore = new ArrayList<>();
         lore.add("§7" + item.amount() + " Stück für §a" + price + " Schilling");
-        lore.add("§8statt " + normal + " im Laden (inkl. Steuer)");
+        if (normal > price) lore.add("§8statt " + normal + (item.buyable() ? " im Laden" : " bei Hondo") + " (inkl. Steuer)");
         lore.add("");
         lore.add(done ? "§7Heute schon gekauft." : "§e» Linksklick: kaufen");
         meta.lore(Text.lore(lore));
@@ -111,11 +114,12 @@ public final class EmergencySaleView implements InventoryHolder {
     }
 
     /** Short lines for the shop button: what is on sale today. */
-    static List<String> summary() {
-        List<String> lines = new ArrayList<>();
+    static List<Component> summary() {
+        List<Component> lines = new ArrayList<>();
         for (Material material : Bankruptcy.sale()) {
             MarketItem item = Market.get(material);
-            if (item != null) lines.add("§7• §f" + item.amount() + "× " + Text.strip(Hondo.label(material)) + " §a" + Bankruptcy.salePrice(item));
+            if (item != null) lines.add(Text.section("§7• §f" + item.amount() + "× ").append(ShopView.name(item))
+                    .append(Text.section(" §a" + Bankruptcy.salePrice(item))).decoration(TextDecoration.ITALIC, false));
         }
         return lines;
     }
@@ -148,16 +152,26 @@ public final class EmergencySaleView implements InventoryHolder {
             } catch (RuntimeException e) {
                 outcome = Bankruptcy.Outcome.UNAVAILABLE;
             }
-            List<Material> fresh = outcome == Bankruptcy.Outcome.OK || outcome == Bankruptcy.Outcome.ALREADY_BOUGHT ? Bankruptcy.boughtToday(uuid) : bought;
+            List<Material> fresh = bought;
+            if (outcome == Bankruptcy.Outcome.OK || outcome == Bankruptcy.Outcome.ALREADY_BOUGHT) {
+                try {
+                    fresh = Bankruptcy.boughtToday(uuid);
+                } catch (RuntimeException e) {
+                    // a failed read must not stop the delivery
+                    fresh = new ArrayList<>(bought);
+                    fresh.add(material);
+                }
+            }
+            List<Material> known = fresh;
             Bankruptcy.Outcome result = outcome;
             Runnable onMain = () -> {
                 busy = false;
-                bought = fresh;
+                bought = known;
                 switch (result) {
                     case OK -> {
                         HondoView.deliver(uuid, material, item.amount());
-                        player.sendMessage(Main.getChatPrefix() + "§fNotverkauf: §e" + item.amount() + "× §f" + Text.strip(Hondo.label(material))
-                                + " für §a" + expected + " Schilling §8(an die Staatskasse)");
+                        player.sendMessage(ShopView.receipt("§fNotverkauf: §e" + item.amount() + "× ", item,
+                                " §ffür §a" + expected + " Schilling §8(an die Staatskasse)"));
                         player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.8f, 1.4f);
                     }
                     case ALREADY_BOUGHT -> fail(player, "§fDas hast du heute schon gekauft.");

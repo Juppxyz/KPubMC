@@ -17,6 +17,8 @@ import org.bukkit.event.entity.EntityChangeBlockEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.hanging.HangingBreakByEntityEvent;
 import org.bukkit.event.world.EntitiesLoadEvent;
+import org.bukkit.inventory.EntityEquipment;
+import org.bukkit.inventory.EquipmentSlot;
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.cache.TeamCacheObject;
 import xyz.jupp.minecraft.utils.ClaimedAreaHelper;
@@ -72,10 +74,23 @@ public class MobLimiterListener implements Listener {
     @EventHandler
     public void onEntitiesLoad(EntitiesLoadEvent event) {
         for (Entity entity : event.getEntities()) {
-            if (entity instanceof WitherSkeleton skeleton && !skeleton.getRemoveWhenFarAway() && skeleton.customName() == null) {
+            if (entity instanceof WitherSkeleton skeleton && !skeleton.getRemoveWhenFarAway() && skeleton.customName() == null
+                    && !hasPickedUpGear(skeleton)) {
                 skeleton.remove();
             }
         }
+    }
+
+    private static final EquipmentSlot[] GEAR_SLOTS = {EquipmentSlot.HAND, EquipmentSlot.OFF_HAND,
+            EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
+
+    // a picked-up item has a guaranteed drop (2.0) and makes the skeleton persistent; the workaround never touched drop chances
+    private static boolean hasPickedUpGear(WitherSkeleton skeleton) {
+        EntityEquipment equipment = skeleton.getEquipment();
+        for (EquipmentSlot slot : GEAR_SLOTS) {
+            if (equipment.getDropChance(slot) > 1f && !equipment.getItem(slot).isEmpty()) return true;
+        }
+        return false;
     }
 
 

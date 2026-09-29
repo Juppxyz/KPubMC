@@ -11,6 +11,7 @@ import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.database.Database;
 import xyz.jupp.minecraft.economy.Bank;
 import xyz.jupp.minecraft.economy.Bankruptcy;
+import xyz.jupp.minecraft.inventory.MainThread;
 import xyz.jupp.minecraft.economy.Economy;
 import xyz.jupp.minecraft.economy.Hondo;
 import xyz.jupp.minecraft.economy.Market;
@@ -137,6 +138,7 @@ public final class Main extends JavaPlugin {
         Bank.load();
         Treasury.load();
         Economy.load();
+        Bankruptcy.loadState();
         Market.load();
         Services.load();
         Nomad.load();
@@ -158,6 +160,7 @@ public final class Main extends JavaPlugin {
     public void onDisable() {
         getServer().getScheduler().cancelTasks(this);
         awaitRunningWorkers(5_000L);
+        MainThread.runPending();
         Vault.shutdown();
         Database.close();
     }

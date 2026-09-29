@@ -221,6 +221,12 @@ public class CustomToolsListener implements Listener {
             player.sendMessage(Main.getChatPrefix() + "§7Du wirst gar nicht gesucht. Heb sie dir gut auf.");
             return;
         }
+        if (pco.getJailEnd() == 0) {
+            // wanted until caught, e.g. an unpaid loan at Basil
+            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
+            player.sendMessage(Main.getChatPrefix() + "§cGegen diese Fahndung helfen keine Papiere. §7Sie endet erst, wenn dich jemand fasst.");
+            return;
+        }
         papers.setAmount(papers.getAmount() - 1);
         player.getInventory().setItemInMainHand(papers.getAmount() <= 0 ? null : papers);
         JailHandler.setPlayerWanted(player, false);
