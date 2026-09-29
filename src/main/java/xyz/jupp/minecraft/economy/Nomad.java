@@ -33,10 +33,10 @@ import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Nomad, the team point dealer: three team contracts that run three days each (one is renewed every day, the third
- * slot is always a special contract), three smaller themed daily tasks until midnight (the first team to finish one
- * gets a bonus), an open redemption list with two "hot" items per day (double points) and a weekly race of the
- * delivered points with a bonus for the top three teams.
+ * Nomad, the team point dealer: three team contracts that run three days each (one is renewed every day). The first
+ * two are goods from the shop or everyday things from a themed pool (farm, kitchen, mining, ...), the third is always
+ * a special contract; the first team to finish a contract gets a bonus. Besides: an open redemption list with two "hot"
+ * items per day (double points) and a weekly race of the delivered points with a bonus for the top three teams.
  * Every method that touches the database is blocking.
  */
 public final class Nomad {
@@ -46,9 +46,11 @@ public final class Nomad {
     public static final String PREFIX = "§6Nomad §7» §f";
     private static final int CONTRACT_DAYS = 3;
     private static final int SPECIAL_SLOT = 2;
-    // daily tasks take the slots from here on; each from another theme, the amount varies a little
+    public static final int CONTRACTS = 3;
+    // slots from here on were daily tasks (until 09/2026); none are made any more, the last ones run out
     public static final int FIRST_DAILY_SLOT = 3;
-    public static final int DAILY_TASKS = 3;
+    // a themed contract: the pool's amount for one day times this, varying a little
+    private static final int THEMED_DAYS = 3;
     private static final double[] AMOUNT_FACTORS = {0.75, 1.0, 1.0, 1.25, 1.5};
     private static final double FIRST_TEAM_BONUS = 0.5;
     private static final int HOT_ITEMS = 2;
@@ -72,7 +74,7 @@ public final class Nomad {
 
     public enum Outcome { OK, NOT_ACTIVE, ALREADY_DONE, NO_TEAM }
 
-    // first: the first team to finish a daily task, points include the bonus then
+    // first: the first team to finish the contract, points include the bonus then
     public record Delivery(Outcome outcome, int accepted, int points, boolean completed, int delivered, boolean first) {}
 
     private record Special(Material material, int amount, int reward) {}
@@ -222,7 +224,7 @@ public final class Nomad {
     }
 
     public static boolean isUpToDate(@NotNull LocalDate today) {
-        return today.equals(hotDay) && contracts.size() == FIRST_DAILY_SLOT + DAILY_TASKS
+        return today.equals(hotDay) && contracts.stream().filter(c -> !isDaily(c)).count() == CONTRACTS
                 && contracts.stream().allMatch(c -> c.endsAt().isAfter(Instant.now()));
     }
 
@@ -240,12 +242,18 @@ public final class Nomad {
             bySlot.put(contract.slot(), contract);
             used.add(contract.material());
         }
+        // the running contracts' themes: two themed contracts at once never share one
+        Set<Theme> themes = new HashSet<>();
+        for (Contract contract : contracts) {
+            Theme theme = TASK_THEMES.get(contract.material());
+            if (theme != null && !isSpecial(contract)) themes.add(theme);
+        }
         // the very first contracts are staggered, so one of them is renewed every day
         boolean firstRun = contracts.stream().allMatch(Nomad::isDaily);
-        for (int slot = 0; slot < FIRST_DAILY_SLOT; slot++) {
+        for (int slot = 0; slot < CONTRACTS; slot++) {
             if (bySlot.containsKey(slot)) continue;
             int days = firstRun ? slot + 1 : CONTRACT_DAYS;
-            Contract created = createContract(slot, today.plusDays(days), used);
+            Contract created = createContract(slot, today.plusDays(days), used, themes);
             if (created == null) continue;
             bySlot.put(slot, created);
             used.add(created.material());
@@ -254,23 +262,6 @@ public final class Nomad {
                     .append(Text.section(" §8(§a+" + created.reward() + " Team-Punkte§8)")));
         }
 
-        // daily tasks, each from a theme the other running ones do not have
-        Set<Theme> themes = new HashSet<>();
-        for (Contract contract : bySlot.values()) {
-            Theme theme = TASK_THEMES.get(contract.material());
-            if (isDaily(contract) && theme != null) themes.add(theme);
-        }
-        Component tasks = null;
-        for (int slot = FIRST_DAILY_SLOT; slot < FIRST_DAILY_SLOT + DAILY_TASKS; slot++) {
-            if (bySlot.containsKey(slot)) continue;
-            Contract created = createTask(slot, today.plusDays(1), used, themes);
-            if (created == null) continue;
-            bySlot.put(slot, created);
-            used.add(created.material());
-            Component task = Text.section("§e" + created.required() + "× ").append(Component.translatable(created.material().translationKey()));
-            tasks = tasks == null ? Text.section(PREFIX + "Neue Tagesaufgaben: ").append(task) : tasks.append(Text.section("§7, ")).append(task);
-        }
-        if (tasks != null) announcements.add(tasks.append(Text.section(" §8(erstes Team: Bonus)")));
 
         if (!today.equals(hotDay)) drawHotItems(today);
         announcements.addAll(payOutRace(today));
@@ -297,11 +288,16 @@ public final class Nomad {
         }
     }
 
-    private static @Nullable Contract createContract(int slot, LocalDate endDay, Set<Material> used) {
+    private static @Nullable Contract createContract(int slot, LocalDate endDay, Set<Material> used, Set<Theme> themes) {
         Material material;
         int required;
         int reward;
         Map<Material, Instant> recent = recentlyAsked();
+        // half of the normal contracts come from the themed pool, for more variety
+        if (slot != SPECIAL_SLOT && ThreadLocalRandom.current().nextBoolean()) {
+            Contract themed = createThemed(slot, endDay, used, themes, recent);
+            if (themed != null) return themed;
+        }
         if (slot == SPECIAL_SLOT) {
             List<Special> candidates = freshest(SPECIALS.stream()
                     .filter(special -> !used.contains(special.material()) && EndAccess.isAvailable(special.material())).toList(),
@@ -331,9 +327,8 @@ public final class Nomad {
         return insertContract(slot, material, required, reward, endDay);
     }
 
-    // a themed daily task; the theme is taken from those not running yet
-    private static @Nullable Contract createTask(int slot, LocalDate endDay, Set<Material> used, Set<Theme> themes) {
-        Map<Material, Instant> recent = recentlyAsked();
+    // a themed contract: everyday things for THEMED_DAYS, from a theme the other running contract does not have
+    private static @Nullable Contract createThemed(int slot, LocalDate endDay, Set<Material> used, Set<Theme> themes, Map<Material, Instant> recent) {
         List<Theme> open = new ArrayList<>(List.of(Theme.values()));
         open.removeIf(theme -> themes.contains(theme) || (theme == Theme.END && !EndAccess.isOpen()));
         java.util.Collections.shuffle(open, ThreadLocalRandom.current());
@@ -343,8 +338,8 @@ public final class Nomad {
                     .toList(), Task::material, recent);
             if (candidates.isEmpty()) continue;
             Task task = candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
-            int required = niceAmount(task.amount() * AMOUNT_FACTORS[ThreadLocalRandom.current().nextInt(AMOUNT_FACTORS.length)]);
-            int reward = (int) Math.max(30, Math.round(task.reward() * (double) required / task.amount() / 10.0) * 10);
+            int required = niceAmount(task.amount() * THEMED_DAYS * AMOUNT_FACTORS[ThreadLocalRandom.current().nextInt(AMOUNT_FACTORS.length)]);
+            int reward = (int) Math.max(50, Math.round(task.reward() * (double) required / task.amount() / 10.0) * 10);
             themes.add(theme);
             return insertContract(slot, task.material(), required, reward, endDay);
         }
@@ -414,9 +409,9 @@ public final class Nomad {
         return contract.slot() >= FIRST_DAILY_SLOT;
     }
 
-    /** The theme of a daily task, e.g. "Bauernhof"; null for the other contracts. */
+    /** The theme of a contract from the themed pool, e.g. "Bauernhof"; null for the others. */
     public static @Nullable String theme(@NotNull Contract contract) {
-        Theme theme = isDaily(contract) ? TASK_THEMES.get(contract.material()) : null;
+        Theme theme = isSpecial(contract) ? null : TASK_THEMES.get(contract.material());
         return theme == null ? null : theme.label;
     }
 
@@ -474,7 +469,7 @@ public final class Nomad {
             boolean completed = delivered >= contract.required();
             Database.update(connection, "UPDATE nomad_progress SET delivered = ?, completed = ? WHERE contract_id = ? AND team_id = ?",
                     delivered, completed, contractID, teamID);
-            boolean first = completed && isDaily(contract) && Database.queryOne(connection,
+            boolean first = completed && Database.queryOne(connection,
                     "SELECT 1 FROM nomad_progress WHERE contract_id = ? AND completed AND team_id <> ?", row -> 1, contractID, teamID) == null;
             int points = completed ? contract.reward() + (first ? firstTeamBonus(contract.reward()) : 0) : 0;
             if (points > 0) Database.update(connection, "UPDATE teams SET points = points + ? WHERE team_id = ?", points, teamID);
