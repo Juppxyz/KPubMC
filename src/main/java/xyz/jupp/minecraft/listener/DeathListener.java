@@ -13,11 +13,12 @@ import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
+import xyz.jupp.minecraft.economy.Taxes;
 import xyz.jupp.minecraft.Main;
+import xyz.jupp.minecraft.economy.Loans;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.PlayerCacheObject;
 import xyz.jupp.minecraft.cache.TeamCacheObject;
-import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.database.TeamRepository;
 import xyz.jupp.minecraft.items.KeepInventoryItem;
@@ -147,21 +148,17 @@ public class DeathListener implements Listener {
 
     // worker thread
     private static void chargeDeathTax(Player player) {
-        float deathTaxRate = ConfigManager.getManager().getDeathTax();
-        int money = PlayerRepository.getMoney(player);
+        Taxes.BalanceTax tax = Taxes.chargeDeathTax(player.getUniqueId());
 
         String message;
-        if (money <= 250) {
+        if (tax.tax() == 0) {
             message = Main.getChatPrefix() + "Dir wurde §ckeine §fTodes-Steuer berechnet.";
         } else {
-            int tax = Math.round(money * deathTaxRate);
-            PlayerRepository.addMoney(player, -tax);
-
             message = String.format(
                     "%sDir wurden §a%s §8(§2%.0f%%§8) §fals Todes-Steuer berechnet.",
                     Main.getChatPrefix(),
-                    Main.getCurrencyName(tax),
-                    deathTaxRate * 100
+                    Main.getCurrencyName(tax.tax()),
+                    Taxes.deathRate() * 100
             );
         }
         sync(() -> player.sendMessage(message));
@@ -194,8 +191,9 @@ public class DeathListener implements Listener {
         });
         if (alreadyCollected) return;
 
-        PlayerRepository.addMoney(killer, 10000);
-        sync(() -> killer.sendMessage(Main.getChatPrefix() + "§a+" + Main.getCurrencyName(10000)));
+        int reward = Loans.bounty(player.getUniqueId());
+        if (reward > 0) PlayerRepository.addMoney(killer, reward);
+        sync(() -> killer.sendMessage(Main.getChatPrefix() + "§a+" + Main.getCurrencyName(reward)));
 
         if (killerTeamID != null) {
             TeamRepository.addTeamPoints(killerTeamID, 1000);

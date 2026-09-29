@@ -5,6 +5,7 @@ import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
+import xyz.jupp.minecraft.economy.Loans;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.PlayerCacheObject;
@@ -80,7 +81,45 @@ public final class JailHandler {
     }
 
 
-    private static void refreshPlayerName(@NotNull Player player, @NotNull PlayerCacheObject pco) {
+    /** Wanted for the given hours (e.g. caught at the black market), with the usual broadcast. */
+    public static void markWanted(@NotNull Player player, int hours, @NotNull String reason) {
+        PlayerCacheObject pco = cache(player);
+        wantedPlayers.add(player.getUniqueId());
+        long wantedEnd = System.currentTimeMillis() + hours * 60L * 60L * 1000L;
+        offMainThread(() -> {
+            synchronized (LOCK) {
+                // "until caught" (jail_end 0, e.g. an unpaid loan) and a longer wanted (after an escape) stay as they are
+                boolean keep = pco.isJail() || (pco.isWanted() && (pco.getJailEnd() == 0 || pco.getJailEnd() >= wantedEnd));
+                if (!keep) pco.setWantedUntil(wantedEnd);
+            }
+            refreshPlayerName(player, pco);
+        });
+        playerWantedBroadcast(player, reason);
+    }
+
+
+    /** Wanted until a player catches them (no end), e.g. for an unpaid loan; with the usual broadcast. */
+    public static void markWantedUntilCaught(@NotNull Player player, @NotNull String reason) {
+        PlayerCacheObject pco = cache(player);
+        wantedPlayers.add(player.getUniqueId());
+        offMainThread(() -> {
+            synchronized (LOCK) {
+                pco.setWantedUntil(0);
+            }
+            refreshPlayerName(player, pco);
+        });
+        playerWantedBroadcast(player, reason);
+    }
+
+    /** The wanted broadcast for a player who is offline (their status is already in the database). */
+    public static void broadcastWanted(@NotNull String name, @NotNull String reason) {
+        String msg = Main.getChatPrefix() + "§4§lGESUCHT §c" + name + " §7(" + reason + "§7)";
+        onMainThread(() -> Bukkit.getOnlinePlayers().forEach(p -> p.sendMessage(msg)));
+        Logger.console("Wanted-Broadcast: " + name + " - " + reason);
+    }
+
+    // team name plus the jail/wanted prefix, every name refresh has to go through here or the prefix is lost
+    public static void refreshPlayerName(@NotNull Player player, @NotNull PlayerCacheObject pco) {
         onMainThread(() -> {
             String finalName = teamFormattedName(player, pco);
             if (pco.isJail()) {
@@ -115,6 +154,16 @@ public final class JailHandler {
 
     public static void handleJoin(@NotNull Player player) {
         PlayerCacheObject pco = cache(player);
+        boolean loanDefault = false;
+        if (pco.isWanted() && pco.getJailEnd() == 0) {
+            try {
+                Loans.Loan loan = Loans.current(player.getUniqueId());
+                loanDefault = loan != null && loan.state() == Loans.State.DEFAULTED;
+            } catch (RuntimeException ignored) {
+                // only picks the message
+            }
+        }
+        boolean defaulted = loanDefault;
 
         onMainThread(() -> {
             if (!pco.isWanted() && pco.isJail() && !isInJailArea(player.getLocation())) {
@@ -125,8 +174,23 @@ public final class JailHandler {
 
             if (pco.isWanted()) {
                 long jailEnd = pco.getJailEnd();
-                if (jailEnd > 0 && System.currentTimeMillis() >= jailEnd) {
+                if (jailEnd > 0 && System.currentTimeMillis() >= jailEnd && !pco.isJail()) {
+                    // ran out while offline: ends like in the watcher
+                    wantedPlayers.remove(player.getUniqueId());
+                    offMainThread(() -> {
+                        synchronized (LOCK) {
+                            pco.unsetJail(false);
+                        }
+                        refreshPlayerName(player, pco);
+                    });
+                    player.sendMessage(Main.getChatPrefix() + "§aDie Fahndung nach dir wurde eingestellt.");
+                } else if (jailEnd > 0 && System.currentTimeMillis() >= jailEnd) {
                     releasePlayer(player, pco);
+                } else if (defaulted) {
+                    player.sendMessage(Main.getChatPrefix() + "§cDein Kredit bei Basil ist geplatzt, er hat sich genommen, was auf dem Konto war.");
+                    player.sendMessage(Main.getChatPrefix() + "§cDu wirst gesucht, bis dich jemand fasst. §7Neue Kredite erst nach der Strafe und einer Entschuldigung.");
+                    refreshPlayerName(player, pco);
+                    wantedPlayers.add(player.getUniqueId());
                 } else {
                     player.sendMessage(Main.getChatPrefix() + "§cDu bist weiterhin auf der Flucht und Gesucht!");
                     refreshPlayerName(player, pco);
@@ -236,6 +300,17 @@ public final class JailHandler {
                     wantedPlayers.add(player.getUniqueId());
                 } else {
                     wantedPlayers.remove(player.getUniqueId());
+                }
+
+                // a wanted status ends when its time is over
+                if (pco.isWanted() && !pco.isJail() && pco.getJailEnd() > 0 && now >= pco.getJailEnd()) {
+                    synchronized (LOCK) {
+                        pco.unsetJail(false);
+                    }
+                    wantedPlayers.remove(player.getUniqueId());
+                    refreshPlayerName(player, pco);
+                    onMainThread(() -> player.sendMessage(Main.getChatPrefix() + "§aDie Fahndung nach dir wurde eingestellt."));
+                    continue;
                 }
 
                 if (pco.isJail()) {

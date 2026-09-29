@@ -39,6 +39,28 @@ public final class TeamRepository {
     }
 
 
+    /** All teams with their members (two queries, the tables are small), for the cache at startup. */
+    public static List<TeamData> loadAllTeams() {
+        return Database.withConnection(connection -> {
+            java.util.Map<String, List<TeamMember>> members = new java.util.HashMap<>();
+            Database.query(connection, "SELECT team_id, uuid, role, nickname FROM team_members", row -> {
+                members.computeIfAbsent(row.getString("team_id"), key -> new java.util.ArrayList<>()).add(mapMember(row));
+                return null;
+            });
+            return Database.query(connection, "SELECT * FROM teams", row -> new TeamData(
+                    row.getString("team_id"),
+                    row.getString("name"),
+                    row.getString("color"),
+                    row.getObject("owner_uuid", UUID.class),
+                    row.getInt("points"),
+                    row.getInt("level"),
+                    row.getBoolean("zone_pvp"),
+                    row.getBoolean("zone_mob_damage"),
+                    row.getBoolean("zone_interact"),
+                    members.getOrDefault(row.getString("team_id"), List.of())));
+        });
+    }
+
     public static @Nullable TeamData getTeam(@NotNull String teamID) {
         return Database.withConnection(connection -> {
             List<TeamMember> members = Database.query(connection,

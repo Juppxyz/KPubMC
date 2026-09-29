@@ -3,13 +3,16 @@ package xyz.jupp.minecraft.utils;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
-import xyz.jupp.minecraft.config.ConfigManager;
+import xyz.jupp.minecraft.economy.Bankruptcy;
+import xyz.jupp.minecraft.economy.Economy;
+import xyz.jupp.minecraft.economy.Treasury;
 
 // main thread only
 public class TabListUtil {
 
     private static final String HEADER = "Auslastung: ";
-    private static final String FOOTER = "\n§fHandel: §a%d%% §8| §fTod: §a%d%% §8| §fTransfer: §a%d%%";
+    // kept short on purpose: the details are in the shop info tab and /staatskasse
+    private static final String FOOTER = "\n§6Staatskasse: §a%d Schilling\n§7Steuern: %s";
 
 
     public static void updateTabForAll() {
@@ -29,8 +32,11 @@ public class TabListUtil {
     }
 
     private static Component footer() {
-        ConfigManager config = ConfigManager.getManager();
-        return Component.text(FOOTER.formatted(Math.round(config.getTradeTax()*100), Math.round(config.getDeathTax()*100), Math.round(config.getNetherTransferTax()*100)));
+        if (Bankruptcy.isBroke()) {
+            return Component.text("\n§4§lSTAATSPLEITE §8| §cKasse leer\n§7Steuern: " + Economy.levelWord()
+                    + " §8| §7Notverkauf im Shop");
+        }
+        return Component.text(FOOTER.formatted(Treasury.balance(), Economy.levelWord()));
     }
 
     private static String currentPerformance() {

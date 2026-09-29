@@ -37,13 +37,20 @@ public class CacheHandler {
 
 
     // Blocking, meant for the AsyncPlayerPreLoginEvent so the join does not hit the database.
-    public void preloadPlayer(@NotNull UUID uuid) {
+    // false if the database failed: the login is refused then, so no online player is ever without a cache entry
+    public boolean preloadPlayer(@NotNull UUID uuid) {
         try {
             PlayerCache.preload(uuid);
+            return true;
         } catch (RuntimeException e) {
-            // getPlayerInCache loads the player on first access instead
             Main.getInstance().getSLF4JLogger().warn("Could not preload player {}: {}", uuid, e.getMessage());
+            return false;
         }
+    }
+
+    /** Blocking, in onEnable: all teams into the cache. */
+    public int loadTeams() {
+        return TeamCache.load();
     }
 
 

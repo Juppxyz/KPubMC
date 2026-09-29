@@ -30,17 +30,27 @@ public class WarpInventory {
 
     private static final int[] MIDDLE_ROW_SLOTS = {10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43};
 
+    // the owners' names come from their player files (disk): read on a worker, the menu is built on the main thread
     public static void openInventory(@NotNull Player player, int page) {
-        Tasks.sync(() -> {
+        if (page != 1) return;
+        Tasks.supplyAsync(WarpInventory::ownerNames, names -> {
+            if (!player.isOnline()) return;
             player.closeInventory();
-            if (page == 1) {
-                player.openInventory(createNewMainWarpInventory(player, page));
-                player.playSound(player.getLocation(), Sound.BLOCK_SHULKER_BOX_OPEN, 2f, 2f);
-            }
+            player.openInventory(createNewMainWarpInventory(player, page, names));
+            player.playSound(player.getLocation(), Sound.BLOCK_SHULKER_BOX_OPEN, 2f, 2f);
         });
     }
 
-    private static Inventory createNewMainWarpInventory(Player player, int page) {
+    private static java.util.Map<UUID, String> ownerNames() {
+        java.util.Map<UUID, String> names = new java.util.HashMap<>();
+        for (UUID owner : WarpCache.getInstance().getWarpOwners()) {
+            String name = Bukkit.getOfflinePlayer(owner).getName();
+            if (name != null) names.put(owner, name);
+        }
+        return names;
+    }
+
+    private static Inventory createNewMainWarpInventory(Player player, int page, java.util.Map<UUID, String> names) {
         Inventory inventory = Menu.create(Menu.Type.WARP, page, 54, "§5Warp-Menü §8(" + page + "§8)");
 
         ItemStack grayPane = createItemStack("§7---", Material.GRAY_STAINED_GLASS_PANE);
@@ -65,8 +75,9 @@ public class WarpInventory {
         // Warps auf der aktuellen Seite anzeigen
         for (int i = 0; i < warpsOnPage.size(); i++) {
             UUID uuid = warpsOnPage.get(i);
+            String ownerName = names.get(uuid);
+            if (ownerName == null) continue;
             OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(uuid);
-            if (offlinePlayer.getName() == null) continue;
 
             ItemStack playerHead = new ItemStack(Material.PLAYER_HEAD);
             SkullMeta playerHeadMeta = (SkullMeta) playerHead.getItemMeta();
@@ -78,7 +89,7 @@ public class WarpInventory {
             if (player.getUniqueId().equals(uuid)) {
                 playerHeadMeta.customName(Text.of("§aDein Warp"));
             } else {
-                playerHeadMeta.customName(Text.of("§fWarp von§8: §a" + offlinePlayer.getName()));
+                playerHeadMeta.customName(Text.of("§fWarp von§8: §a" + ownerName));
             }
 
             playerHead.setItemMeta(playerHeadMeta);

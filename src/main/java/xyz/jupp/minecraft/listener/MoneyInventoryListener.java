@@ -14,10 +14,12 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
 import org.jetbrains.annotations.Nullable;
+import xyz.jupp.minecraft.economy.Bank;
+import xyz.jupp.minecraft.economy.TaxClass;
+import xyz.jupp.minecraft.economy.Taxes;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.PlayerCacheObject;
-import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.inventory.MainThread;
 import xyz.jupp.minecraft.inventory.Menu;
@@ -106,6 +108,12 @@ public class MoneyInventoryListener implements Listener {
                 return;
             }
 
+            if ((selectedAmount - Taxes.taxOn(selectedAmount, TaxClass.STANDARD)) / 10 * 10 <= 0) {
+                player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
+                player.sendMessage(Main.getChatPrefix() + "Nach der Steuer bleibt kein ganzer Schein übrig, heb etwas mehr ab.");
+                return;
+            }
+
             withdrawCash(player, selectedAmount);
             return;
         }
@@ -165,27 +173,19 @@ public class MoneyInventoryListener implements Listener {
     // withdrawn async, the cash is handed out on the main thread
     private static void withdrawCash(Player player, int selectedAmount) {
         Tasks.async(() -> {
-            if (!PlayerRepository.tryWithdrawMoney(player, selectedAmount)) {
+            // cash minus trade tax; the tax goes to the state treasury, a rest below 10 stays on the account
+            Taxes.CashWithdrawal withdrawal = Taxes.withdrawCash(player.getUniqueId(), selectedAmount);
+            if (!withdrawal.success()) {
                 MainThread.run(() -> player.sendMessage(Main.getChatPrefix() + "Du hast nicht genügend " + Main.getCurrencyName() + "§f."));
                 return;
             }
+            int netAmount = withdrawal.cash();
+            Logger.console("withdraw from " + player.getUniqueId() + " (" + netAmount + " cash, " + withdrawal.tax() + " tax)");
 
-            // Steuerberechnung
-            int netAmount = (int) Math.floor(selectedAmount * (1 - ConfigManager.getManager().getTradeTax()));
-            Logger.console("withdraw from " + player.getUniqueId() + " (" + selectedAmount + " before tax, " + netAmount + " after tax)");
-
-            MainThread.deliverOrRefund(player.getUniqueId(), selectedAmount, () -> {
-                int amountOfCash = netAmount / 10;
-                while (amountOfCash > 0) {
-                    int stackAmount = Math.min(amountOfCash, 64);
-                    ItemStack cashStack = createItemStack(Main.getCurrencyName(10), Material.EMERALD, new String[]{"§5Bargeld"});
-                    cashStack.setAmount(stackAmount);
-                    player.getInventory().addItem(cashStack).values()
-                            .forEach(item -> player.getWorld().dropItemNaturally(player.getLocation(), item));
-                    amountOfCash -= stackAmount;
-                }
+            MainThread.deliverOrRefund(player.getUniqueId(), netAmount + withdrawal.tax(), () -> {
+                Bank.handOut(player.getUniqueId(), netAmount);
                 player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f, 2f);
-                player.sendMessage(Main.getChatPrefix() + "§fDu hast §2" + netAmount + " " + Main.getCurrencyName() + " §fabgehoben");
+                player.sendMessage(Main.getChatPrefix() + "§fDu hast §2" + netAmount + " " + Main.getCurrencyName() + " §fabgehoben §8(Steuer: " + withdrawal.tax() + ")");
             });
         });
     }

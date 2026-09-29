@@ -9,6 +9,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
+import xyz.jupp.minecraft.economy.Loans;
 import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.utils.Tasks;
 
@@ -48,12 +49,12 @@ public class WantedCommand implements CommandExecutor {
             OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(wantedPlayer.uuid());
 
             long diffMillis = wantedPlayer.jailEnd() - System.currentTimeMillis();
-            double diffHours = diffMillis / (1000d * 60d * 60d);
+            String left = wantedPlayer.jailEnd() == 0 ? "bis gefasst" : Math.round(diffMillis / (1000d * 60d * 60d)) + "h";
 
             lines.add("§fName§8: §c" + offlinePlayer.getName());
-            lines.add("§fVerbleibende Zeit§8: §c§o" + diffHours + "h");
+            lines.add("§fVerbleibende Zeit§8: §c§o" + left);
             lines.add(" ");
-            lines.add("§fBelohnung§8» " + Main.getCurrencyName(10000) + " §7und §a1000 Team-Punkte");
+            lines.add("§fBelohnung§8» " + Main.getCurrencyName(Loans.bounty(wantedPlayer.uuid())) + " §7und §a1000 Team-Punkte");
             lines.add("§7----------------------");
         }
         return lines;

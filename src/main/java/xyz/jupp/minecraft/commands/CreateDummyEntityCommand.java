@@ -10,6 +10,7 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
+import xyz.jupp.minecraft.utils.Npcs;
 import xyz.jupp.minecraft.utils.Text;
 
 public class CreateDummyEntityCommand implements CommandExecutor {
@@ -70,6 +71,7 @@ public class CreateDummyEntityCommand implements CommandExecutor {
             living.setGravity(false);
             living.setCollidable(false);
             living.setInvulnerable(true);
+            Npcs.keep(living);
 
             if (jumping) {
                 living.setJumping(true);

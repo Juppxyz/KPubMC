@@ -47,6 +47,11 @@ public final class PlayerRepository {
         }
     }
 
+    /** Remembers the login for the economy measurement (active players). */
+    public static void touch(@NotNull UUID uuid) {
+        Database.update("UPDATE players SET last_seen = now() WHERE uuid = ?", uuid);
+    }
+
     public static @Nullable PlayerData getPlayer(@NotNull UUID uuid) {
         return Database.queryOne("SELECT * FROM players WHERE uuid = ?", PlayerRepository::map, uuid);
     }
@@ -106,13 +111,16 @@ public final class PlayerRepository {
     /** Moves money from one player to another in one transaction. */
     public static TransferResult transferMoney(@NotNull UUID from, @NotNull UUID to, int amount) {
         TransferResult result = Database.inTransaction(connection -> {
-            if (Database.update(connection, "UPDATE players SET money = money - ? WHERE uuid = ? AND money >= ?", amount, from, amount) == 0) {
+            if (Database.update(connection, "UPDATE players SET money = money - ? WHERE uuid = ? AND money >= ?",
+                    amount, from, amount) == 0) {
                 return TransferResult.INSUFFICIENT_FUNDS;
             }
             if (Database.update(connection, "UPDATE players SET money = money + ? WHERE uuid = ?", amount, to) == 0) {
                 connection.rollback();
                 return TransferResult.TARGET_NOT_FOUND;
             }
+            BankLog.add(connection, from, BankLog.TRANSFER_OUT, -amount, to.toString());
+            BankLog.add(connection, to, BankLog.TRANSFER_IN, amount, from.toString());
             return TransferResult.SUCCESS;
         });
         if (result == TransferResult.SUCCESS) log().info("money {} -> {}: {}", from, to, amount);
@@ -127,9 +135,16 @@ public final class PlayerRepository {
         log().info("set jail for {} until {}", uuid, jailEnd);
     }
 
-    public static void unsetJail(@NotNull UUID uuid, long jailEnd) {
-        Database.update("UPDATE players SET jail = FALSE, jail_end = ? WHERE uuid = ?", jailEnd, uuid);
+    // wanted is written as well: a timed wanted that ran out must not stay TRUE (with jail_end 0 it means "until caught")
+    public static void unsetJail(@NotNull UUID uuid, long jailEnd, boolean wanted) {
+        Database.update("UPDATE players SET jail = FALSE, jail_end = ?, is_wanted = ? WHERE uuid = ?", jailEnd, wanted, uuid);
         log().info("unset jail for {}", uuid);
+    }
+
+    /** Wanted until the given time (the same end field the escape uses). */
+    public static void setWantedUntil(@NotNull UUID uuid, long wantedEnd) {
+        Database.update("UPDATE players SET is_wanted = TRUE, jail_end = ? WHERE uuid = ?", wantedEnd, uuid);
+        log().info("set wanted for {} until {}", uuid, wantedEnd);
     }
 
     public static void setIsWanted(@NotNull UUID uuid, boolean isWanted) {
@@ -139,7 +154,8 @@ public final class PlayerRepository {
 
     /** Wanted players whose time has not run out yet, longest remaining time first. */
     public static List<PlayerData> getWantedPlayers() {
-        return Database.query("SELECT * FROM players WHERE is_wanted AND jail_end > ? ORDER BY jail_end DESC",
+        // jail_end 0: wanted until caught (an unpaid loan)
+        return Database.query("SELECT * FROM players WHERE is_wanted AND NOT jail AND (jail_end = 0 OR jail_end > ?) ORDER BY jail_end DESC",
                 PlayerRepository::map, System.currentTimeMillis());
     }
 

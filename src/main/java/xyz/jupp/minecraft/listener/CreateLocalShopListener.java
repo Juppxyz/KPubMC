@@ -148,7 +148,7 @@ public class CreateLocalShopListener implements Listener {
             }
 
             // pay first, so the goods are only taken out of the chest for a covered purchase
-            if (!PlayerRepository.tryWithdrawMoney(player, sellPrice)) {
+            if (!PlayerRepository.tryWithdrawMoney(player.getUniqueId(), sellPrice)) {
                 notifyBuyer(player, "§cDein Konto ist aktuell leider nicht ausreichend gedeckt.");
                 return;
             }

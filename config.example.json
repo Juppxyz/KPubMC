@@ -1,19 +1,39 @@
 {
-  "serverMOTD":"§6§lKlotzscherPub §f§lMinecraft Server",
-  "tradeTax": 0.24,
-  "netherTransferTax": 0.7,
+  "serverMOTD": "§6§lKlotzscherPub §f§lMinecraft Server",
+  "taxClasses": {
+    "BASIC": 0.1,
+    "STANDARD": 0.2,
+    "LUXURY": 0.35
+  },
   "deathTax": 0.15,
-  "databaseUrl": "jdbc:postgresql://localhost:5432/kpubmc?user=kpubmc&password=CHANGE_ME",
-  "shopItems": [
-    {"name": "", "price": 250, "sell": false, "amount": 32, "description": "", "material": "FIREWORK_ROCKET"},
-    {"name": "", "price": 20000, "sell": false, "amount": 1, "description": "", "material": "NETHER_STAR"},
-    {"name": "", "price": 180, "sell": true, "amount": 16, "description": "", "material": "REDSTONE_BLOCK"},
-    {"name": "", "price": 300, "sell": false, "amount": 16, "description": "", "material": "COAL_BLOCK"},
-    {"name": "", "price": 600, "sell": false, "amount": 1, "description": "", "material": "SADDLE"},
-    {"name": "", "price": 123, "sell": true, "amount": 16, "description": "", "material": "LEATHER"},
-    {"name": "", "price": 100, "sell": true, "amount": 32, "description": "", "material": "GOLDEN_CARROT"},
-    {"name": "", "price": 120, "sell": true, "amount": 32, "description": "", "material": "POTATO"},
-    {"name": "", "price": 500, "sell": true, "amount": 16, "description": "", "material": "PUFFERFISH"},
-    {"name": "", "price": 100000, "sell": false, "amount": 1, "description": "", "material": "ELYTRA"}
-  ]
+  "netherTransferTaxBrackets": [
+    {
+      "from": 0,
+      "rate": 0.0
+    },
+    {
+      "from": 500,
+      "rate": 0.5
+    },
+    {
+      "from": 5000,
+      "rate": 0.65
+    },
+    {
+      "from": 20000,
+      "rate": 0.7
+    }
+  ],
+  "endUnlock": "2026-12-13T16:00",
+  "dailyOffers": 7,
+  "dailyDiscount": 0.15,
+  "demandHalfLifeHours": 6,
+  "economyFactorMin": 0.7,
+  "economyFactorMax": 1.3,
+  "economyTargetGrowth": 0.02,
+  "treasuryTargetPerPlayer": 20000,
+  "aiReview": true,
+  "openAiModel": "gpt-5-mini",
+  "openAiApiKey": "",
+  "databaseUrl": "jdbc:postgresql://localhost:5432/kpubmc?user=kpubmc&password=CHANGE_ME"
 }

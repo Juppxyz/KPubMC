@@ -6,8 +6,6 @@ import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
-import xyz.jupp.minecraft.Main;
-import xyz.jupp.minecraft.utils.BlackMarketHandler;
 import xyz.jupp.minecraft.utils.Text;
 
 import java.util.ArrayList;
@@ -21,13 +19,20 @@ abstract class BlackMarketItem implements CustomItemsInterface {
     private final int minCost;
     private final NamespacedKey key;
     private final List<String> baseLore;
+    // uses of the item, 0 for items without charges
+    private final int charges;
 
     BlackMarketItem(String itemName, Material itemType, int minCost, NamespacedKey key, List<String> baseLore) {
+        this(itemName, itemType, minCost, key, baseLore, 0);
+    }
+
+    BlackMarketItem(String itemName, Material itemType, int minCost, NamespacedKey key, List<String> baseLore, int charges) {
         this.itemName = itemName;
         this.itemType = itemType;
         this.minCost = minCost;
         this.key = key;
         this.baseLore = baseLore;
+        this.charges = charges;
     }
 
     @Override
@@ -39,7 +44,7 @@ abstract class BlackMarketItem implements CustomItemsInterface {
         meta.customName(Text.of(itemName));
 
         List<String> lore = new ArrayList<>(baseLore);
-        lore.add("§fPreis: " + Main.getCurrencyName(BlackMarketHandler.getCurrentCosts().get()));
+        if (charges > 0) Charges.init(meta, lore, charges);
         meta.lore(Text.lore(lore));
 
         item.setItemMeta(meta);

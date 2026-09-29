@@ -16,11 +16,13 @@ import org.bukkit.event.entity.EntityBreakDoorEvent;
 import org.bukkit.event.entity.EntityChangeBlockEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.hanging.HangingBreakByEntityEvent;
+import org.bukkit.event.world.EntitiesLoadEvent;
+import org.bukkit.inventory.EntityEquipment;
+import org.bukkit.inventory.EquipmentSlot;
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.cache.TeamCacheObject;
 import xyz.jupp.minecraft.utils.ClaimedAreaHelper;
 import xyz.jupp.minecraft.utils.Locations;
-import xyz.jupp.minecraft.utils.Tasks;
 
 import java.util.EnumSet;
 import java.util.Set;
@@ -33,7 +35,6 @@ public class MobLimiterListener implements Listener {
     private static final int NEARBY_ENTITY_RADIUS_XZ = 8;
     private static final int NEARBY_ENTITY_RADIUS_Y = 2;
     private static final int NEARBY_ENTITY_LIMIT = 50;
-    private static final long WITHER_SKELETON_LIFESPAN_TICKS = 600L;
 
     private static boolean isProtected(@Nullable TeamCacheObject claimingTeam) {
         return claimingTeam != null && claimingTeam.getLevel() >= 2 && !claimingTeam.isZoneOptionMobDamage();
@@ -65,9 +66,31 @@ public class MobLimiterListener implements Listener {
             return;
         }
 
-        if (entity instanceof WitherSkeleton witherSkeleton) {
-            expandWitherSkeletonTime(witherSkeleton);
+    }
+
+
+    // Until 09/2026 every new wither skeleton was made persistent and removed by a 30 s task (a workaround for a farm).
+    // A task lost to a chunk unload or restart left the skeleton in the fortress forever; those go when their chunk loads.
+    @EventHandler
+    public void onEntitiesLoad(EntitiesLoadEvent event) {
+        for (Entity entity : event.getEntities()) {
+            if (entity instanceof WitherSkeleton skeleton && !skeleton.getRemoveWhenFarAway() && skeleton.customName() == null
+                    && !hasPickedUpGear(skeleton)) {
+                skeleton.remove();
+            }
         }
+    }
+
+    private static final EquipmentSlot[] GEAR_SLOTS = {EquipmentSlot.HAND, EquipmentSlot.OFF_HAND,
+            EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
+
+    // a picked-up item has a guaranteed drop (2.0) and makes the skeleton persistent; the workaround never touched drop chances
+    private static boolean hasPickedUpGear(WitherSkeleton skeleton) {
+        EntityEquipment equipment = skeleton.getEquipment();
+        for (EquipmentSlot slot : GEAR_SLOTS) {
+            if (equipment.getDropChance(slot) > 1f && !equipment.getItem(slot).isEmpty()) return true;
+        }
+        return false;
     }
 
 
@@ -112,17 +135,6 @@ public class MobLimiterListener implements Listener {
         if (!(remover instanceof Player) && isProtected(e.getEntity().getLocation())) {
             e.setCancelled(true);
         }
-    }
-
-    private void expandWitherSkeletonTime(WitherSkeleton witherSkeleton) {
-        witherSkeleton.setRemoveWhenFarAway(false);
-        witherSkeleton.setTicksLived(1);
-
-        Tasks.syncLater(WITHER_SKELETON_LIFESPAN_TICKS, () -> {
-            if (witherSkeleton.isValid()) {
-                witherSkeleton.remove();
-            }
-        });
     }
 
 }
