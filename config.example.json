@@ -34,5 +34,6 @@
   "treasuryTargetPerPlayer": 20000,
   "aiReview": true,
   "openAiModel": "gpt-5-mini",
+  "openAiApiKey": "",
   "databaseUrl": "jdbc:postgresql://localhost:5432/kpubmc?user=kpubmc&password=CHANGE_ME"
 }

@@ -49,6 +49,7 @@ public class ConfigManager {
     private static volatile int treasuryTargetPerPlayer = 20_000;
     private static volatile boolean aiReview = true;
     private static volatile String openAiModel = "gpt-5-mini";
+    private static volatile String openAiApiKey = "";
     private static volatile LocalDateTime endUnlock = null;
     // progressive nether transfer tax, sorted by 'from'; immutable list, replaced as a whole on reload
     private static final List<TaxBracket> DEFAULT_NETHER_BRACKETS = List.of(
@@ -86,6 +87,7 @@ public class ConfigManager {
             treasuryTargetPerPlayer = Math.max(0, optInt(config, "treasuryTargetPerPlayer", 20_000));
             aiReview = !"false".equalsIgnoreCase(optString(config, "aiReview", "true"));
             openAiModel = optString(config, "openAiModel", "gpt-5-mini");
+            openAiApiKey = optString(config, "openAiApiKey", "").trim();
             endUnlock = parseDateTime(optString(config, "endUnlock", ""));
             netherTransferTaxBrackets = parseBrackets(config.get("netherTransferTaxBrackets"));
 
@@ -140,6 +142,7 @@ public class ConfigManager {
     public int getTreasuryTargetPerPlayer() { return treasuryTargetPerPlayer; }
     public boolean isAiReview() { return aiReview; }
     public String getOpenAiModel() { return openAiModel; }
+    public String getOpenAiApiKey() { return openAiApiKey; }
     public LocalDateTime getEndUnlock() { return endUnlock; }
 
     // "2026-10-10T16:00" or "2026-10-10"; empty or invalid -> null

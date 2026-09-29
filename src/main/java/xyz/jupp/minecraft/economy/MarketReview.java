@@ -64,9 +64,11 @@ public final class MarketReview {
     /** Blocking: runs the review for the day, if enabled and an API key is set. Never throws for API problems. */
     public static void run(@NotNull LocalDate day, @NotNull Economy.Snapshot snapshot) {
         if (!ConfigManager.getManager().isAiReview()) return;
-        String apiKey = System.getenv(API_KEY_ENV);
+        // the key from config.json ("openAiApiKey"), otherwise from the environment variable
+        String apiKey = ConfigManager.getManager().getOpenAiApiKey();
+        if (apiKey.isBlank()) apiKey = System.getenv(API_KEY_ENV);
         if (apiKey == null || apiKey.isBlank()) {
-            Main.getInstance().getSLF4JLogger().info("AI market review skipped: environment variable {} is not set", API_KEY_ENV);
+            Main.getInstance().getSLF4JLogger().info("AI market review skipped: no API key (openAiApiKey in config.json or environment variable {})", API_KEY_ENV);
             return;
         }
         try {
