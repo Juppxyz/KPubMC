@@ -416,28 +416,46 @@ public final class TeamView implements InventoryHolder {
         }
     }
 
+    // left in green: paying in (every member), right in orange: taking out (owner and vices), in the middle balance and history
+    private static final int[] DEPOSIT_FRAME = {18, 19, 20, 21, 36, 37, 38, 39};
+    private static final int[] WITHDRAW_FRAME = {23, 24, 25, 26, 41, 42, 43, 44};
+
     private void renderTreasury(Teams.Role role) {
-        set(22, Items.named(Material.GOLD_BLOCK, "§eTeam-Kasse: §f" + Items.format(state.treasury()) + " Schilling", List.of(
-                "§7Einzahlen: jedes Mitglied",
-                "§7Auszahlen: Boss und Vize",
+        boolean manager = role.canManage();
+        for (int slot : DEPOSIT_FRAME) inventory.setItem(slot, Items.pane(Material.LIME_STAINED_GLASS_PANE));
+        for (int slot : WITHDRAW_FRAME) inventory.setItem(slot, Items.pane(manager ? Material.ORANGE_STAINED_GLASS_PANE : Material.GRAY_STAINED_GLASS_PANE));
+
+        set(22, Items.named(Material.GOLD_BLOCK, "§e§lTeam-Kasse: §f§l" + Items.format(state.treasury()) + " Schilling", List.of(
+                "§7Links einzahlen, rechts auszahlen.",
                 "§8Beim Auszahlen fällt die Steuer",
                 "§8wie beim Abheben an.")), null);
-        Material[] icons = {Material.GOLD_NUGGET, Material.GOLD_INGOT, Material.RAW_GOLD_BLOCK};
+        inventory.setItem(27, Items.named(Material.HOPPER, "§a§l⬇ Einzahlen", List.of(
+                "§7Von deinem Konto in die Team-Kasse.",
+                "§7Das kann jedes Mitglied.",
+                "§7Dein Konto: §f" + Items.format(state.money()) + " Schilling")));
+        inventory.setItem(35, Items.named(Material.DROPPER, (manager ? "§6§l" : "§7§l") + "⬆ Auszahlen", List.of(
+                "§7Aus der Team-Kasse auf dein Konto.",
+                "§7Das dürfen nur Boss und Vize.")));
+
+        Material[] icons = {Material.GOLD_NUGGET, Material.GOLD_INGOT, Material.GOLD_BLOCK};
         for (int i = 0; i < TeamBank.AMOUNTS.length; i++) {
             int amount = TeamBank.AMOUNTS[i];
-            set(19 + i, Items.named(icons[i], "§a" + Items.format(amount) + " einzahlen", List.of(
-                    "§7Dein Konto: §f" + Items.format(state.money()),
+            boolean enough = state.money() >= amount;
+            set(28 + i, Items.named(icons[i], "§a§l+" + Items.format(amount) + " §aeinzahlen", List.of(
+                    enough ? "§7Dein Konto: §f" + Items.format(state.money()) : "§cSo viel hast du nicht auf dem Konto.",
                     "",
-                    "§e» Klicken zum Einzahlen")), () -> act(() -> deposit(amount)));
-            if (role.canManage()) {
+                    "§a» Klicken zum Einzahlen")), () -> act(() -> deposit(amount)));
+            if (manager) {
                 int tax = Taxes.taxOn(amount, TaxClass.STANDARD);
-                set(23 + i, Items.named(icons[i], "§e" + Items.format(amount) + " auszahlen", List.of(
-                        "§7Du bekommst §f" + Items.format(amount - tax) + "§7, Steuer §f" + Items.format(tax),
+                set(32 + i, Items.named(icons[i], "§6§l-" + Items.format(amount) + " §6auszahlen", List.of(
+                        "§7Du bekommst §f" + Items.format(amount - tax) + " §8(Steuer " + Items.format(tax) + ")",
+                        state.treasury() >= amount ? "§7In der Kasse: §f" + Items.format(state.treasury()) : "§cSo viel ist nicht in der Kasse.",
                         "",
-                        "§e» Klicken zum Auszahlen")), () -> act(() -> withdraw(amount)));
+                        "§6» Klicken zum Auszahlen")), () -> act(() -> withdraw(amount)));
+            } else {
+                inventory.setItem(32 + i, Items.named(Material.GRAY_DYE, "§7Auszahlen: nur Boss und Vize", List.of()));
             }
         }
-        if (!role.canManage()) inventory.setItem(24, Items.named(Material.GRAY_DYE, "§7Auszahlen nur Boss und Vize", List.of()));
 
         List<String> history = new ArrayList<>();
         for (TeamBank.Entry entry : state.history()) {
