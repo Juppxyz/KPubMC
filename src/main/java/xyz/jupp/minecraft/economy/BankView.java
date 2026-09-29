@@ -301,8 +301,7 @@ public final class BankView implements InventoryHolder {
                     "§7Heute zurückzahlen: §f" + format(loan.debt(now)) + " Schilling",
                     "§7Am " + Loans.DAYS + ". Tag: §f" + format(loan.debt(loan.dueAt())) + " Schilling",
                     "§7Fällig in: §f" + remaining(loan.dueAt()),
-                    "§8Gesperrt bis dahin: " + format(loan.locked()) + " Schilling",
-                    "§8(nicht überweisen, abheben oder festlegen)")));
+                    "§8Geliehenes Geld nicht für Festgeld oder Anleihen")));
             inventory.setItem(SLOT_LOAN_ACTION, named(Material.LIME_CONCRETE, "§a§lJetzt zurückzahlen", List.of(
                     "§7Kostet heute §f" + format(loan.debt(now)) + " Schilling",
                     "",
@@ -347,10 +346,10 @@ public final class BankView implements InventoryHolder {
                 "§a1. §fDu bekommst §a" + format(amount) + " Schilling §fsofort.",
                 "§a2. §fZurück in §f" + Loans.DAYS + " Tagen§f, je früher desto billiger:",
                 "   §7nach 1 Tag §f" + format(tomorrow) + "§7, am " + Loans.DAYS + ". Tag §f" + format(full) + " Schilling",
-                "§a3. §fBis dahin ist das geliehene Geld gesperrt:",
-                "   §7im Shop und bei Händlern ausgeben ja;",
-                "   §7Kistenshops, überweisen, abheben, Festgeld nein.",
-                "§a4. §fAm " + Loans.DAYS + ". Tag holt Basil es sich vom Konto.",
+                "§a3. §fDas Geld kannst du frei nutzen,",
+                "   §7nur nicht für Festgeld oder Staatsanleihen.",
+                "§a4. §f" + Loans.REMIND_DAYS + " Tage vorher erinnert dich Basil,",
+                "   §fam " + Loans.DAYS + ". Tag holt er es sich vom Konto.",
                 "§c5. §fReicht dein Geld nicht, nimmt er was da ist,",
                 "   §cund du wirst gesucht§f, bis dich jemand erwischt.",
                 "   §fDann §c72 Stunden Gefängnis§f.",
@@ -361,11 +360,11 @@ public final class BankView implements InventoryHolder {
         inventory.setItem(SLOT_CANCEL, named(Material.RED_CONCRETE, "§cAbbrechen", List.of()));
     }
 
-    // an open loan locks the borrowed money, the player should know why
+    // fixed deposits and bonds: an open loan locks the borrowed money there, the player should know why
     private String notEnough() {
         Loans.Loan loan = state.loan();
         return loan != null && loan.state() == Loans.State.OPEN
-                ? "§fSo viel geht nicht: geliehenes Geld bleibt bis zur Rückzahlung gesperrt."
+                ? "§fSo viel geht nicht: geliehenes Geld kommt nicht ins Festgeld oder in Anleihen."
                 : "§fSo viel hast du nicht auf dem Konto.";
     }
 
@@ -517,7 +516,7 @@ public final class BankView implements InventoryHolder {
         return Text.section(legacy).decoration(TextDecoration.ITALIC, false);
     }
 
-    private static String remaining(Instant end) {
+    static String remaining(Instant end) {
         Duration left = Duration.between(Instant.now(), end);
         if (left.isNegative()) return "gleich";
         long days = left.toDays();
@@ -654,7 +653,7 @@ public final class BankView implements InventoryHolder {
             if (!withdrawal.success()) {
                 MainThread.run(() -> {
                     busy = false;
-                    fail(player, notEnough());
+                    fail(player, "§fSo viel hast du nicht auf dem Konto.");
                 });
                 return;
             }

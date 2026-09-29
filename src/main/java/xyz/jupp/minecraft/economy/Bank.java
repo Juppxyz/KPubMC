@@ -14,9 +14,14 @@ import xyz.jupp.minecraft.utils.Tasks;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Basil's bank: cash deposits, fixed deposits with the state treasury, the vault and the statement.
@@ -291,9 +296,11 @@ public final class Bank {
                 Main.getInstance().getSLF4JLogger().warn("Fixed deposit or loan processing failed: {}", e.toString());
                 return;
             }
-            if (!payouts.isEmpty() || !loans.isEmpty()) MainThread.run(() -> {
+            List<Loans.DueSoon> dueSoon = dueSoon();
+            if (!payouts.isEmpty() || !loans.isEmpty() || !dueSoon.isEmpty()) MainThread.run(() -> {
                 payouts.forEach(Bank::announce);
                 loans.forEach(Bank::announceLoan);
+                dueSoon.forEach(Bank::remindLoan);
             });
         }, 20L * 40, PAYOUT_PERIOD_TICKS);
     }
@@ -304,6 +311,52 @@ public final class Bank {
         if (player == null) return;
         player.sendMessage(PREFIX + "Dein Festgeld ist fällig: §a+" + (payout.amount() + payout.interest()) + " Schilling §8(davon "
                 + payout.interest() + " Zinsen)");
+    }
+
+
+    // loan id -> the day its borrower was last reminded (in memory: after a restart at most one extra reminder)
+    private static final Map<Long, LocalDate> loanReminders = new ConcurrentHashMap<>();
+
+    // worker: open loans due soon; loans that are no longer due soon are forgotten
+    private static List<Loans.DueSoon> dueSoon() {
+        try {
+            List<Loans.DueSoon> soon = Loans.dueSoon(null);
+            Set<Long> ids = new HashSet<>();
+            soon.forEach(due -> ids.add(due.loan().id()));
+            loanReminders.keySet().retainAll(ids);
+            return soon;
+        } catch (RuntimeException e) {
+            Main.getInstance().getSLF4JLogger().warn("Loan reminders failed: {}", e.toString());
+            return List.of();
+        }
+    }
+
+    /** At join (worker): a loan due soon is mentioned right away, at most once a day. */
+    public static void remindAtJoin(@NotNull UUID player) {
+        List<Loans.DueSoon> soon;
+        try {
+            soon = Loans.dueSoon(player);
+        } catch (RuntimeException e) {
+            return;
+        }
+        if (!soon.isEmpty()) MainThread.run(() -> soon.forEach(Bank::remindLoan));
+    }
+
+    // main thread: "Kreditrückzahlung bald fällig", once a day while the borrower is online
+    static void remindLoan(@NotNull Loans.DueSoon soon) {
+        Player player = Bukkit.getPlayer(soon.player());
+        if (player == null) return;
+        LocalDate today = LocalDate.now(Market.ZONE);
+        if (today.equals(loanReminders.put(soon.loan().id(), today))) return;
+        Loans.Loan loan = soon.loan();
+        int due = loan.debt(loan.dueAt());
+        player.sendMessage(PREFIX + "§6Kreditrückzahlung bald fällig! §fNoch §e" + BankView.remaining(loan.dueAt())
+                + "§f, dann holt Basil §e" + due + " Schilling §fvom Konto.");
+        if (soon.money() < due) {
+            player.sendMessage(PREFIX + "§cDir fehlen noch " + (due - soon.money()) + " Schilling, §fsonst wirst du gesucht.");
+        } else {
+            player.sendMessage(PREFIX + "§7Früher zurückzahlen ist billiger: heute §f" + loan.debt(Instant.now()) + " Schilling §7bei Basil.");
+        }
     }
 
 

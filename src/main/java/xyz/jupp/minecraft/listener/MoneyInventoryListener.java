@@ -176,7 +176,7 @@ public class MoneyInventoryListener implements Listener {
             // cash minus trade tax; the tax goes to the state treasury, a rest below 10 stays on the account
             Taxes.CashWithdrawal withdrawal = Taxes.withdrawCash(player.getUniqueId(), selectedAmount);
             if (!withdrawal.success()) {
-                MainThread.run(() -> player.sendMessage(Main.getChatPrefix() + "Du hast nicht genügend " + Main.getCurrencyName() + "§f. §8(Geliehenes Geld bleibt bis zur Rückzahlung gesperrt.)"));
+                MainThread.run(() -> player.sendMessage(Main.getChatPrefix() + "Du hast nicht genügend " + Main.getCurrencyName() + "§f."));
                 return;
             }
             int netAmount = withdrawal.cash();
@@ -196,7 +196,7 @@ public class MoneyInventoryListener implements Listener {
             PlayerRepository.TransferResult result = PlayerRepository.transferMoney(player.getUniqueId(), targetPlayer.getUniqueId(), selectedAmount);
 
             if (result == PlayerRepository.TransferResult.INSUFFICIENT_FUNDS) {
-                MainThread.run(() -> player.sendMessage(Main.getChatPrefix() + "Du hast nicht genügend " + Main.getCurrencyName() + "§f. §8(Geliehenes Geld bleibt bis zur Rückzahlung gesperrt.)"));
+                MainThread.run(() -> player.sendMessage(Main.getChatPrefix() + "Du hast nicht genügend " + Main.getCurrencyName() + "§f."));
                 return;
             }
             if (result != PlayerRepository.TransferResult.SUCCESS) return;

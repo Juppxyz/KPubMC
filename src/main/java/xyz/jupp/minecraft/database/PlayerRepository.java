@@ -104,15 +104,6 @@ public final class PlayerRepository {
         return true;
     }
 
-    /** Withdraws only if the balance minus an open loan's lock covers it: for payments to other players. */
-    public static boolean tryWithdrawUnlocked(@NotNull UUID uuid, int amount) {
-        Integer money = Database.queryOne("UPDATE players SET money = money - ? WHERE uuid = ? AND money - ? >= " + BankLog.LOAN_LOCK + " RETURNING money",
-                row -> row.getInt(1), amount, uuid, amount, uuid);
-        if (money == null) return false;
-        log().info("money {} {} -> {}", uuid, signed(-amount), money);
-        return true;
-    }
-
     public static boolean tryWithdrawMoney(@NotNull Player player, int amount) {
         return tryWithdrawMoney(player.getUniqueId(), amount);
     }
@@ -120,9 +111,8 @@ public final class PlayerRepository {
     /** Moves money from one player to another in one transaction. */
     public static TransferResult transferMoney(@NotNull UUID from, @NotNull UUID to, int amount) {
         TransferResult result = Database.inTransaction(connection -> {
-            // borrowed money stays on the account while the loan runs
-            if (Database.update(connection, "UPDATE players SET money = money - ? WHERE uuid = ? AND money - ? >= " + BankLog.LOAN_LOCK,
-                    amount, from, amount, from) == 0) {
+            if (Database.update(connection, "UPDATE players SET money = money - ? WHERE uuid = ? AND money >= ?",
+                    amount, from, amount) == 0) {
                 return TransferResult.INSUFFICIENT_FUNDS;
             }
             if (Database.update(connection, "UPDATE players SET money = money + ? WHERE uuid = ?", amount, to) == 0) {

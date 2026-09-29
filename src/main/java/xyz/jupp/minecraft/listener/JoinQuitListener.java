@@ -21,6 +21,7 @@ import xyz.jupp.minecraft.utils.JailHandler;
 import xyz.jupp.minecraft.utils.LastSeen;
 import xyz.jupp.minecraft.utils.Locations;
 import xyz.jupp.minecraft.utils.TabListUtil;
+import xyz.jupp.minecraft.economy.Bank;
 import xyz.jupp.minecraft.utils.Tasks;
 import xyz.jupp.minecraft.utils.Text;
 
@@ -88,6 +89,8 @@ public class JoinQuitListener implements Listener {
         Tasks.async(() -> JailHandler.handleJoin(player));
         // goods from a Hondo trade the player left during
         HondoView.deliverPending(player);
+        // a loan due soon
+        Tasks.async(() -> Bank.remindAtJoin(player.getUniqueId()));
 
     }
 

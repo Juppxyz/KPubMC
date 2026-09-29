@@ -148,9 +148,8 @@ public class CreateLocalShopListener implements Listener {
             }
 
             // pay first, so the goods are only taken out of the chest for a covered purchase
-            // a payment to another player: borrowed money stays on the account while the loan runs
-            if (!PlayerRepository.tryWithdrawUnlocked(player.getUniqueId(), sellPrice)) {
-                notifyBuyer(player, "§cDein Konto ist aktuell leider nicht ausreichend gedeckt §7(geliehenes Geld zählt nicht)§c.");
+            if (!PlayerRepository.tryWithdrawMoney(player.getUniqueId(), sellPrice)) {
+                notifyBuyer(player, "§cDein Konto ist aktuell leider nicht ausreichend gedeckt.");
                 return;
             }
 

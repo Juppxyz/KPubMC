@@ -22,8 +22,9 @@ import java.util.UUID;
  * <p>
  * Rules: one loan per player (a unique index), paid back within 7 days, interest per started day, so paying early
  * costs less. The rate is Basil's current fixed deposit rate plus a share for the treasury. While the loan runs, the
- * borrowed amount plus its full interest ("locked") cannot be transferred, withdrawn as cash or put into a fixed
- * deposit, only spent. On the due day Basil takes it from the account; if that is not enough, he takes what is there,
+ * borrowed amount plus its full interest ("locked") cannot go into a fixed deposit or a state bond (no interest on
+ * created money); otherwise it is the player's to use. From REMIND_DAYS before the due day Basil reminds the player
+ * once a day. On the due day Basil takes it from the account; if that is not enough, he takes what is there,
  * the player is wanted until someone catches them, and gets no new loan until the apology (2.5 times the loan, minus
  * what was taken) is paid, which is only possible after the sentence.
  */
@@ -33,6 +34,7 @@ public final class Loans {
 
     public static final int[] AMOUNTS = {1_000, 5_000, 10_000, 50_000, 100_000};
     public static final int DAYS = 7;
+    public static final int REMIND_DAYS = 3;
     static final double TREASURY_SHARE = 0.03;
     public static final double APOLOGY_FACTOR = 2.5;
 
@@ -103,6 +105,19 @@ public final class Loans {
     }
 
     /** The open or defaulted loan of the player, null if there is none. */
+    /** An open loan due within REMIND_DAYS and the borrower's balance. */
+    public record DueSoon(UUID player, Loan loan, long money) {}
+
+    /** Open loans due within REMIND_DAYS: of one player, or of everyone with null. */
+    public static List<DueSoon> dueSoon(@Nullable UUID player) {
+        String sql = "SELECT l.*, p.money AS balance FROM bank_loans l JOIN players p ON p.uuid = l.player_uuid "
+                + "WHERE l.state = 'OPEN' AND l.due_at <= now() + make_interval(days => ?)";
+        Database.RowMapper<DueSoon> mapper = row -> new DueSoon(row.getObject("player_uuid", UUID.class), map(row), row.getLong("balance"));
+        return player == null
+                ? Database.query(sql, mapper, REMIND_DAYS)
+                : Database.query(sql + " AND l.player_uuid = ?", mapper, REMIND_DAYS, player);
+    }
+
     public static @Nullable Loan current(@NotNull UUID player) {
         return Database.queryOne("SELECT * FROM bank_loans WHERE player_uuid = ? AND state IN ('OPEN', 'DEFAULTED')", Loans::map, player);
     }
