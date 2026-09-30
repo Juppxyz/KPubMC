@@ -378,9 +378,7 @@ public final class Database {
                     ALTER TABLE team_warps ADD CONSTRAINT team_warps_pkey PRIMARY KEY (team_id, number);
                 END IF;
             END $$""",
-            "ALTER TABLE teams ADD COLUMN IF NOT EXISTS zone_alarm BOOLEAN NOT NULL DEFAULT TRUE",
-            // goods kept for a player who left during a trade: bought ones get the trader's mark when handed out
-            "ALTER TABLE hondo_pending ADD COLUMN IF NOT EXISTS bought BOOLEAN NOT NULL DEFAULT FALSE"
+            "ALTER TABLE teams ADD COLUMN IF NOT EXISTS zone_alarm BOOLEAN NOT NULL DEFAULT TRUE"
     );
 
     private static volatile HikariDataSource dataSource;

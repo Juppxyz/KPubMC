@@ -358,7 +358,7 @@ public final class ShopView implements InventoryHolder {
             return;
         }
 
-        int owned = countGoods(viewer, item.material());
+        int owned = countPlain(viewer, item.material());
         ItemStack good = displayStack(item);
         ItemMeta meta = good.getItemMeta();
         List<String> lore = new ArrayList<>(priceLines(item));
@@ -567,7 +567,7 @@ public final class ShopView implements InventoryHolder {
             try {
                 purchase = Services.buy(player.getUniqueId(), offer.key(), finalDamage, expected);
             } catch (RuntimeException e) {
-                unavailable(player, e, null);
+                unavailable(player, e, null, 0);
                 return;
             }
             Integer money = HondoView.moneyOrNull(player.getUniqueId());
@@ -715,7 +715,7 @@ public final class ShopView implements InventoryHolder {
             try {
                 trade = MarketRepository.buy(player.getUniqueId(), item.material(), bundles, discount, expectedNet);
             } catch (RuntimeException e) {
-                unavailable(player, e, null);
+                unavailable(player, e, null, 0);
                 return;
             }
             Market.update(trade.item());
@@ -725,7 +725,7 @@ public final class ShopView implements InventoryHolder {
                 if (money != null) balance = money;
                 switch (trade.outcome()) {
                     case OK -> {
-                        HondoView.deliver(player.getUniqueId(), item.material(), bundles * item.amount(), true);
+                        HondoView.deliver(player.getUniqueId(), item.material(), bundles * item.amount());
                         player.sendMessage(receipt("§fGekauft: §e" + bundles * item.amount() + "× ", item,
                                 " §ffür " + Main.getCurrencyName(trade.net() + trade.tax()) + " §8(davon " + trade.tax() + " Steuer)"));
                         player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f, 2f);
@@ -747,12 +747,12 @@ public final class ShopView implements InventoryHolder {
     private void sell(Player player, MarketItem item, int bundles) {
         if (!item.sellable()) return;
         int quantity = bundles * item.amount();
-        if (countGoods(player, item.material()) < quantity) {
+        if (countPlain(player, item.material()) < quantity) {
             render();
             return;
         }
         int expected = item.sellTotal(bundles);
-        Goods.Taken taken = takeGoods(player, item.material(), quantity);
+        takePlain(player, item.material(), quantity);
         busy = true;
         Tasks.async(() -> {
             MarketRepository.Trade trade;
@@ -760,7 +760,7 @@ public final class ShopView implements InventoryHolder {
                 trade = MarketRepository.sell(player.getUniqueId(), item.material(), bundles, expected);
             } catch (RuntimeException e) {
                 // the items were already taken: they go back to the player
-                unavailable(player, e, taken);
+                unavailable(player, e, item.material(), quantity);
                 return;
             }
             Market.update(trade.item());
@@ -772,14 +772,14 @@ public final class ShopView implements InventoryHolder {
                     player.sendMessage(receipt("§fVerkauft: §e" + quantity + "× ", item, " §ffür " + Main.getCurrencyName(trade.net())));
                     player.playSound(player.getLocation(), Sound.BLOCK_LAVA_POP, 2f, 2f);
                 } else {
-                    HondoView.giveBack(player.getUniqueId(), taken);
+                    HondoView.deliver(player.getUniqueId(), item.material(), quantity);
                     fail(player, trade.outcome() == MarketRepository.Outcome.PRICE_CHANGED
                             ? "§fDer Ankaufpreis hat sich gerade geändert, bitte prüfe den neuen Preis."
                             : "§fDieses Item wird gerade nicht angekauft.");
                 }
                 refreshAll();
             });
-            if (!scheduled && trade.outcome() != MarketRepository.Outcome.OK) HondoView.keepBack(player.getUniqueId(), taken);
+            if (!scheduled && trade.outcome() != MarketRepository.Outcome.OK) HondoView.keepForLater(player.getUniqueId(), item.material(), quantity);
         });
     }
 
@@ -793,7 +793,7 @@ public final class ShopView implements InventoryHolder {
             try {
                 trade = MarketRepository.buyFixed(player.getUniqueId(), item.material(), item.amount(), net, TaxClass.STANDARD);
             } catch (RuntimeException e) {
-                unavailable(player, e, null);
+                unavailable(player, e, null, 0);
                 return;
             }
             Integer money = HondoView.moneyOrNull(player.getUniqueId());
@@ -801,7 +801,7 @@ public final class ShopView implements InventoryHolder {
                 busy = false;
                 if (money != null) balance = money;
                 if (trade.outcome() == MarketRepository.Outcome.OK) {
-                    HondoView.deliver(player.getUniqueId(), item.material(), item.amount(), true);
+                    HondoView.deliver(player.getUniqueId(), item.material(), item.amount());
                     player.sendMessage(receipt("§5Zufall: §e" + item.amount() + "× ", item,
                             " §ffür " + Main.getCurrencyName(trade.net() + trade.tax()) + " §8(davon " + trade.tax() + " Steuer)"));
                     player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f, 2f);
@@ -821,14 +821,14 @@ public final class ShopView implements InventoryHolder {
     /* helpers */
 
     // worker thread: a booking failed with a database error, nothing was booked
-    private void unavailable(Player player, RuntimeException error, @Nullable Goods.Taken giveBack) {
+    private void unavailable(Player player, RuntimeException error, @Nullable Material giveBack, int quantity) {
         Main.getInstance().getSLF4JLogger().warn("Shop trade of {} failed: {}", player.getName(), error.toString());
         boolean scheduled = MainThread.run(() -> {
             busy = false;
-            if (giveBack != null) HondoView.giveBack(player.getUniqueId(), giveBack);
+            if (giveBack != null) HondoView.deliver(player.getUniqueId(), giveBack, quantity);
             fail(player, "§fDer Händler ist gerade nicht erreichbar, bitte versuche es gleich nochmal.");
         });
-        if (!scheduled && giveBack != null) HondoView.keepBack(player.getUniqueId(), giveBack);
+        if (!scheduled && giveBack != null) HondoView.keepForLater(player.getUniqueId(), giveBack, quantity);
     }
 
     private static boolean isSpawnEgg(Material material) {
@@ -860,41 +860,9 @@ public final class ShopView implements InventoryHolder {
         return count;
     }
 
-    // plain items and bought goods (the trader's mark only): what the shop and Hondo take back
-    static int countGoods(Player player, Material material) {
-        ItemStack plain = Goods.stack(material, 1, false);
-        ItemStack bought = Goods.stack(material, 1, true);
-        int count = 0;
-        for (ItemStack stack : player.getInventory().getStorageContents()) {
-            if (stack != null && (stack.isSimilar(plain) || stack.isSimilar(bought))) count += stack.getAmount();
-        }
-        return count;
-    }
-
-    /** Takes plain items and bought goods, the bought ones first; what was taken of each, for a give-back. */
-    static Goods.Taken takeGoods(Player player, Material material, int quantity) {
-        ItemStack[] contents = player.getInventory().getStorageContents();
-        int bought = take(contents, Goods.stack(material, 1, true), quantity);
-        int plain = take(contents, Goods.stack(material, 1, false), quantity - bought);
-        player.getInventory().setStorageContents(contents);
-        return new Goods.Taken(material, plain, bought);
-    }
-
-    private static int take(ItemStack[] contents, ItemStack kind, int quantity) {
-        int taken = 0;
-        for (int i = 0; i < contents.length && taken < quantity; i++) {
-            ItemStack stack = contents[i];
-            if (stack == null || !stack.isSimilar(kind)) continue;
-            int part = Math.min(quantity - taken, stack.getAmount());
-            stack.setAmount(stack.getAmount() - part);
-            taken += part;
-        }
-        return taken;
-    }
-
-    // how many bought goods of this material still fit into the storage slots (every purchase checks this)
+    // how many plain items of this material still fit into the storage slots
     static int freeSpace(Player player, Material material) {
-        ItemStack plain = Goods.stack(material, 1, true);
+        ItemStack plain = new ItemStack(material);
         int maxStack = material.getMaxStackSize();
         int space = 0;
         for (ItemStack stack : player.getInventory().getStorageContents()) {
@@ -920,12 +888,11 @@ public final class ShopView implements InventoryHolder {
         player.getInventory().setStorageContents(contents);
     }
 
-    // bought: goods from a trader, with the mark Nomad refuses
-    static void give(Player player, Material material, int quantity, boolean bought) {
+    static void give(Player player, Material material, int quantity) {
         int maxStack = material.getMaxStackSize();
         while (quantity > 0) {
             int amount = Math.min(quantity, maxStack);
-            player.getInventory().addItem(Goods.stack(material, amount, bought)).values()
+            player.getInventory().addItem(new ItemStack(material, amount)).values()
                     .forEach(rest -> player.getWorld().dropItemNaturally(player.getLocation(), rest));
             quantity -= amount;
         }

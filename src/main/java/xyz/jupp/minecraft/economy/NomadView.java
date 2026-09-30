@@ -30,7 +30,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static xyz.jupp.minecraft.economy.ShopView.countGoods;
 import static xyz.jupp.minecraft.economy.ShopView.countPlain;
 import static xyz.jupp.minecraft.economy.ShopView.fail;
 import static xyz.jupp.minecraft.economy.ShopView.named;
@@ -284,15 +283,7 @@ public final class NomadView implements InventoryHolder {
         if (Nomad.isHot(material)) lore.add("§6★ Heute doppelt gesucht!");
         lore.add("§7Pro Stück: §a+" + Nomad.pointsFor(material) + " Team-Punkte");
         lore.add("§7Du hast: §f" + countPlain(viewer, material));
-        String bought = boughtHint(viewer, material);
-        if (bought != null) lore.add(bought);
         return lore;
-    }
-
-    // goods from a trader do not count: the player should see why
-    private static @Nullable String boughtHint(Player player, Material material) {
-        int bought = countGoods(player, material) - countPlain(player, material);
-        return bought > 0 ? "§8(+" + bought + " gekauft, die nimmt Nomad nicht)" : null;
     }
 
     private void renderRace() {
@@ -346,8 +337,6 @@ public final class NomadView implements InventoryHolder {
         List<String> lore = contractLore(contract);
         int owned = countPlain(viewer, contract.material());
         lore.add("§7Du hast: §f" + owned);
-        String bought = boughtHint(viewer, contract.material());
-        if (bought != null) lore.add(bought);
         meta.lore(Text.lore(lore));
         info.setItemMeta(meta);
         inventory.setItem(SLOT_INFO, info);
@@ -457,10 +446,10 @@ public final class NomadView implements InventoryHolder {
             } catch (RuntimeException e) {
                 boolean scheduled = MainThread.run(() -> {
                     busy = false;
-                    HondoView.deliver(player.getUniqueId(), contract.material(), offered, false);
+                    HondoView.deliver(player.getUniqueId(), contract.material(), offered);
                     fail(player, "§fNomad ist gerade nicht ansprechbar, versuch es gleich nochmal.");
                 });
-                if (!scheduled) HondoView.keepForLater(player.getUniqueId(), contract.material(), offered, false);
+                if (!scheduled) HondoView.keepForLater(player.getUniqueId(), contract.material(), offered);
                 return;
             }
             Map<Long, Nomad.Progress> newProgress = progressOrNull(team);
@@ -470,7 +459,7 @@ public final class NomadView implements InventoryHolder {
                 busy = false;
                 if (newProgress != null) progress = newProgress;
                 if (points != null) teamPoints = points;
-                if (back > 0) HondoView.deliver(player.getUniqueId(), contract.material(), back, false);
+                if (back > 0) HondoView.deliver(player.getUniqueId(), contract.material(), back);
                 switch (delivery.outcome()) {
                     case OK -> {
                         if (delivery.completed()) {
@@ -498,7 +487,7 @@ public final class NomadView implements InventoryHolder {
                 }
                 render();
             });
-            if (!scheduled && back > 0) HondoView.keepForLater(player.getUniqueId(), contract.material(), back, false);
+            if (!scheduled && back > 0) HondoView.keepForLater(player.getUniqueId(), contract.material(), back);
         });
     }
 
@@ -523,7 +512,7 @@ public final class NomadView implements InventoryHolder {
                 busy = false;
                 if (total != null) teamPoints = total;
                 if (earned <= 0) {
-                    HondoView.deliver(player.getUniqueId(), material, quantity, false);
+                    HondoView.deliver(player.getUniqueId(), material, quantity);
                     fail(player, "§fNomad nimmt das gerade nicht an.");
                 } else {
                     notifyTeam(team, Text.section(Nomad.PREFIX + "§e" + player.getName() + " §fhat §e" + quantity + "× ")
@@ -533,7 +522,7 @@ public final class NomadView implements InventoryHolder {
                 }
                 render();
             });
-            if (!scheduled && earned <= 0) HondoView.keepForLater(player.getUniqueId(), material, quantity, false);
+            if (!scheduled && earned <= 0) HondoView.keepForLater(player.getUniqueId(), material, quantity);
         });
     }
 
