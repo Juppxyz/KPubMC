@@ -368,7 +368,17 @@ public final class Database {
                 kind       TEXT NOT NULL CHECK (kind IN ('PARTNER', 'PEACE')),
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 PRIMARY KEY (from_team, to_team, kind)
-            )"""
+            )""",
+            // teams: a second team warp (number 2), the area alarm switch
+            "ALTER TABLE team_warps ADD COLUMN IF NOT EXISTS number INTEGER NOT NULL DEFAULT 1",
+            """
+            DO $$ BEGIN
+                IF (SELECT array_length(conkey, 1) FROM pg_constraint WHERE conrelid = 'team_warps'::regclass AND contype = 'p') = 1 THEN
+                    ALTER TABLE team_warps DROP CONSTRAINT team_warps_pkey;
+                    ALTER TABLE team_warps ADD CONSTRAINT team_warps_pkey PRIMARY KEY (team_id, number);
+                END IF;
+            END $$""",
+            "ALTER TABLE teams ADD COLUMN IF NOT EXISTS zone_alarm BOOLEAN NOT NULL DEFAULT TRUE"
     );
 
     private static volatile HikariDataSource dataSource;

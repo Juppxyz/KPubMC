@@ -3,6 +3,7 @@ package xyz.jupp.minecraft;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitWorker;
+import xyz.jupp.minecraft.team.TeamAreaEffects;
 import xyz.jupp.minecraft.team.Relations;
 import xyz.jupp.minecraft.team.TeamViewListener;
 import xyz.jupp.minecraft.team.TeamWarps;
@@ -112,6 +113,7 @@ public final class Main extends JavaPlugin {
         Market.startTasks();
         Bank.startTasks();
         Relations.startTask();
+        TeamAreaEffects.startTask();
         PlayerTracker.startTask();
     }
 

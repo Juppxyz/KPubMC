@@ -314,10 +314,15 @@ public final class TeamView implements InventoryHolder {
         int claimed = Teams.claimedChunks(teamID);
         set(31, Items.named(Material.GRASS_BLOCK, "§aGebiet: §f" + claimed + " von " + Teams.chunkLimit(level) + " Chunks",
                 List.of("", "§e» Klicken zum Gebiet")), () -> show(Tab.AREA));
-        TeamWarps.Warp warp = TeamWarps.get(teamID);
-        String warpState = level < Teams.WARP_LEVEL ? "§7ab Level " + Teams.WARP_LEVEL
-                : warp == null ? "§7noch nicht gesetzt" : "§7gesetzt §8(" + worldLabel(warp.world()) + ")";
-        set(33, Items.named(Material.ENDER_PEARL, "§5Team-Warp", List.of(warpState, "§8Im §a/warp§8-Menü.")), null);
+        List<String> warpLines = new ArrayList<>();
+        for (int number = 1; number <= TeamWarps.COUNT; number++) {
+            TeamWarps.Warp warp = TeamWarps.get(teamID, number);
+            int required = TeamWarps.requiredLevel(number);
+            warpLines.add("§7" + TeamWarps.label(number) + ": §f" + (level < required ? "ab Level " + required
+                    : warp == null ? "nicht gesetzt" : worldLabel(warp.world())));
+        }
+        warpLines.add("§8Im §a/warp§8-Menü.");
+        set(33, Items.named(Material.ENDER_PEARL, "§5Team-Warps", warpLines), null);
 
         List<String> roleLore = new ArrayList<>();
         switch (role) {
@@ -520,11 +525,13 @@ public final class TeamView implements InventoryHolder {
         limits.add("§8neue gibt es erst wieder darunter.");
         set(31, Items.named(Material.MAP, "§fEure Chunks: " + claimed + " von " + limit, limits), null);
 
-        toggle(team, role, 38, AreaOptionsEnum.MOB_GRIEFING, Teams.MOB_GRIEFING_LEVEL, Material.CREEPER_HEAD, "§fMob-Griefing",
+        toggle(team, role, 37, AreaOptionsEnum.MOB_GRIEFING, Teams.MOB_GRIEFING_LEVEL, Material.CREEPER_HEAD, "§fMob-Griefing",
                 team.isZoneOptionMobDamage(), "§7AUS: Creeper & Co. zerstören nichts");
-        toggle(team, role, 40, AreaOptionsEnum.PVP, Teams.PVP_LEVEL, Material.IRON_SWORD, "§fPvP",
+        toggle(team, role, 39, AreaOptionsEnum.PVP, Teams.PVP_LEVEL, Material.IRON_SWORD, "§fPvP",
                 team.isZoneOptionPvP(), "§7AUS: hier wird niemand angegriffen");
-        toggle(team, role, 42, AreaOptionsEnum.INTERACTION, Teams.INTERACTION_LEVEL, Material.LEVER, "§fFremde Interaktionen",
+        toggle(team, role, 41, AreaOptionsEnum.ALARM, Teams.ALARM_LEVEL, Material.BELL, "§fGebiets-Alarm",
+                team.isZoneOptionAlarm(), "§7AN: Meldung, wenn Fremde reinkommen");
+        toggle(team, role, 43, AreaOptionsEnum.INTERACTION, Teams.INTERACTION_LEVEL, Material.LEVER, "§fFremde Interaktionen",
                 team.isZoneOptionInteract(), "§7AUS: Fremde können nichts benutzen");
     }
 
@@ -573,8 +580,9 @@ public final class TeamView implements InventoryHolder {
         }
         inventory.setItem(31, Items.named(Material.SKELETON_SKULL, "§fVorsicht", List.of(
                 "§7Stirbt ein Mitglied durch einen Spieler,",
-                "§7kostet das Team-Punkte. Reichen sie nicht,",
-                "§7sinkt das Level eine Stufe.")));
+                "§7kostet das " + Teams.DEATH_COST + " Team-Punkte. Reichen sie nicht,",
+                "§7fällt das Team eine Stufe und bekommt",
+                "§7deren Preis als Punkte zurück.")));
     }
 
 
@@ -695,7 +703,10 @@ public final class TeamView implements InventoryHolder {
         TeamCacheObject partner = CacheHandler.getInstance().getTeamCacheObject(other);
         if (partner == null) return "§7Team-Warp: §f-";
         if (team.getLevel() < Teams.WARP_LEVEL || partner.getLevel() < Teams.WARP_LEVEL) return "§7Team-Warp: §fab Level " + Teams.WARP_LEVEL + " bei beiden";
-        return TeamWarps.get(other) == null ? "§7Team-Warp: §fnicht gesetzt" : "§7Team-Warp: §fim §a/warp§f-Menü";
+        for (int number = 1; number <= TeamWarps.COUNT; number++) {
+            if (partner.getLevel() >= TeamWarps.requiredLevel(number) && TeamWarps.get(other, number) != null) return "§7Team-Warp: §fim §a/warp§f-Menü";
+        }
+        return "§7Team-Warp: §fnicht gesetzt";
     }
 
     private void openRelation(String other) {

@@ -51,9 +51,6 @@ public final class WarpView implements InventoryHolder {
     private static final int SIZE = 54;
     private static final int[] WARP_SLOTS = {10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25,
             28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43};
-    private static final int SLOT_TEAM_REMOVE = 3;
-    private static final int SLOT_TEAM = 4;
-    private static final int SLOT_TEAM_SET = 5;
     private static final int SLOT_CLOSE = 8;
     private static final int SLOT_OWN_REMOVE = 45;
     private static final int SLOT_PREVIOUS = 48;
@@ -127,7 +124,7 @@ public final class WarpView implements InventoryHolder {
         for (int slot : WARP_SLOTS) inventory.setItem(slot, null);
         set(SLOT_CLOSE, Items.named(Material.BARRIER, "§cSchließen", List.of()), () -> Tasks.sync(viewer::closeInventory));
 
-        renderTeamWarp();
+        renderTeamWarps();
         renderWarps();
         renderOwnWarp();
     }
@@ -186,42 +183,51 @@ public final class WarpView implements InventoryHolder {
         }
     }
 
-    private void renderTeamWarp() {
+    // row 0: first team warp left (remove, warp, set), the second right
+    private void renderTeamWarps() {
         TeamCacheObject team = CacheHandler.getInstance().getPlayerInCache(viewer).getTeamCacheObject();
         if (team == null || Teams.role(team, viewer.getUniqueId()) == Teams.Role.NONE) return;
+        renderTeamWarp(team, 1, 0, 1, 2);
+        renderTeamWarp(team, 2, 5, 6, 7);
+    }
+
+    private void renderTeamWarp(TeamCacheObject team, int number, int removeSlot, int warpSlot, int setSlot) {
         String colour = team.getTeamColor();
+        String label = TeamWarps.label(number);
         boolean manager = Teams.role(team, viewer.getUniqueId()).canManage();
-        if (team.getLevel() < Teams.WARP_LEVEL) {
-            inventory.setItem(SLOT_TEAM, Items.named(Material.GRAY_DYE, colour + "Team-Warp", List.of("§7ab Team-Level " + Teams.WARP_LEVEL)));
+        int required = TeamWarps.requiredLevel(number);
+        if (team.getLevel() < required) {
+            inventory.setItem(warpSlot, Items.named(Material.GRAY_DYE, colour + label, List.of("§7ab Team-Level " + required)));
             return;
         }
-        TeamWarps.Warp warp = TeamWarps.get(team.getTeamID());
+        TeamWarps.Warp warp = TeamWarps.get(team.getTeamID(), number);
         if (warp == null) {
-            inventory.setItem(SLOT_TEAM, Items.named(Material.GRAY_DYE, colour + "Team-Warp", List.of(
+            inventory.setItem(warpSlot, Items.named(Material.GRAY_DYE, colour + label, List.of(
                     "§7Noch nicht gesetzt.", manager ? "§7Setzen: rechts daneben." : "§7Setzen können Boss und Vize.")));
         } else {
-            set(SLOT_TEAM, Items.named(TeamCreateView.colourBanner(colour), colour + "§lTeam-Warp", List.of(
+            set(warpSlot, Items.named(TeamCreateView.colourBanner(colour), colour + "§l" + label, List.of(
                     "§7" + worldLabel(warp.world()) + " §8· §f" + Math.round(warp.x()) + " " + Math.round(warp.y()) + " " + Math.round(warp.z()),
                     "§7Teleport: §f" + TELEPORT_COST + " Schilling",
                     "",
-                    "§e» Klicken zum Teleportieren")), () -> teleport(() -> teamWarpLocation(), "zum Team-Warp"));
+                    "§e» Klicken zum Teleportieren")), () -> teleport(() -> teamWarpLocation(number), "zum " + label));
         }
         if (!manager) return;
         int cost = warp == null ? TeamWarps.SET_COST : TeamWarps.MOVE_COST;
-        set(SLOT_TEAM_SET, Items.named(Material.RESPAWN_ANCHOR, warp == null ? colour + "Team-Warp hier setzen" : colour + "Team-Warp hierher verschieben", List.of(
+        set(setSlot, Items.named(Material.RESPAWN_ANCHOR, colour + label + (warp == null ? " hier setzen" : " hierher verschieben"), List.of(
                 "§7Kostet §f" + Items.format(cost) + " Schilling §7aus der Team-Kasse",
                 "§8Euer Team und eure Partner (ab Level " + Teams.WARP_LEVEL + ") nutzen ihn.",
                 "",
                 "§e» Klicken")), () -> {
             Location here = viewer.getLocation();
-            act(() -> setTeamWarp(here));
+            act(() -> setTeamWarp(here, number));
         });
         if (warp != null) {
-            boolean asking = confirming("team");
-            set(SLOT_TEAM_REMOVE, Items.named(asking ? Material.RED_CONCRETE : Material.LAVA_BUCKET,
-                    asking ? "§c§lWirklich löschen? Nochmal klicken" : "§cTeam-Warp löschen",
+            String key = "team" + number;
+            boolean asking = confirming(key);
+            set(removeSlot, Items.named(asking ? Material.RED_CONCRETE : Material.LAVA_BUCKET,
+                    asking ? "§c§lWirklich löschen? Nochmal klicken" : "§c" + label + " löschen",
                     List.of("§7Das Geld gibt es nicht zurück.")), () -> {
-                if (confirmed("team")) act(this::removeTeamWarp);
+                if (confirmed(key)) act(() -> removeTeamWarp(number));
             });
         }
     }
@@ -393,23 +399,25 @@ public final class WarpView implements InventoryHolder {
         return "§aDein Warp ist gelöscht.";
     }
 
-    private String setTeamWarp(Location here) {
+    private String setTeamWarp(Location here, int number) {
         TeamCacheObject team = CacheHandler.getInstance().getPlayerInCache(viewer).getTeamCacheObject();
         if (team == null) return "Du bist in keinem Team.";
-        TeamWarps.Result result = TeamWarps.set(team, viewer.getUniqueId(), here);
+        String label = TeamWarps.label(number);
+        TeamWarps.Result result = TeamWarps.set(team, viewer.getUniqueId(), number, here);
         return switch (result.outcome()) {
-            case OK -> "§aDer Team-Warp ist " + (result.cost() == TeamWarps.SET_COST ? "gesetzt" : "verschoben")
+            case OK -> "§aDer " + label + " ist " + (result.cost() == TeamWarps.SET_COST ? "gesetzt" : "verschoben")
                     + ". §7(" + Items.format(result.cost()) + " aus der Team-Kasse)";
-            case LEVEL -> "Den Team-Warp gibt es ab Team-Level " + Teams.WARP_LEVEL + ".";
-            case NOT_ALLOWED -> "Den Team-Warp setzen nur Boss und Vize.";
+            case LEVEL -> "Den " + label + " gibt es ab Team-Level " + TeamWarps.requiredLevel(number) + ".";
+            case NOT_ALLOWED -> "Team-Warps setzen nur Boss und Vize.";
             case INSUFFICIENT_FUNDS -> "In der Team-Kasse fehlt Geld §8(" + Items.format(result.cost()) + " Schilling)§f.";
         };
     }
 
-    private String removeTeamWarp() {
+    private String removeTeamWarp(int number) {
         TeamCacheObject team = CacheHandler.getInstance().getPlayerInCache(viewer).getTeamCacheObject();
-        if (team == null || !TeamWarps.remove(team, viewer.getUniqueId())) return "Der Team-Warp ließ sich nicht löschen.";
-        return "§aDer Team-Warp ist gelöscht.";
+        String label = TeamWarps.label(number);
+        if (team == null || !TeamWarps.remove(team, viewer.getUniqueId(), number)) return "Der " + label + " ließ sich nicht löschen.";
+        return "§aDer " + label + " ist gelöscht.";
     }
 
 
@@ -430,33 +438,38 @@ public final class WarpView implements InventoryHolder {
         for (Relations.Relation partnership : Relations.of(team.getTeamID(), Relations.Kind.PARTNER)) {
             String other = partnership.other(team.getTeamID());
             TeamCacheObject partner = CacheHandler.getInstance().getTeamCacheObject(other);
-            TeamWarps.Warp warp = TeamWarps.get(other);
-            if (partner == null || partner.getLevel() < Teams.WARP_LEVEL || warp == null) continue;
-            String name = partner.getTeamColor() + partner.getTeamName();
-            tiles.add(new Tile(Items.named(TeamCreateView.colourBanner(partner.getTeamColor()), name + " §7Team-Warp", List.of(
-                    "§a✦ Partner §8· §7" + worldLabel(warp.world()),
-                    "§7Teleport: §f" + TELEPORT_COST + " Schilling",
-                    "",
-                    "§e» Klicken zum Teleportieren")), () -> teleport(() -> partnerWarpLocation(other), "zum Team-Warp von " + Text.strip(name))));
+            if (partner == null) continue;
+            for (int number = 1; number <= TeamWarps.COUNT; number++) {
+                TeamWarps.Warp warp = TeamWarps.get(other, number);
+                if (partner.getLevel() < TeamWarps.requiredLevel(number) || warp == null) continue;
+                String name = partner.getTeamColor() + partner.getTeamName();
+                String label = TeamWarps.label(number);
+                int warpNumber = number;
+                tiles.add(new Tile(Items.named(TeamCreateView.colourBanner(partner.getTeamColor()), name + " §7" + label, List.of(
+                        "§a✦ Partner §8· §7" + worldLabel(warp.world()),
+                        "§7Teleport: §f" + TELEPORT_COST + " Schilling",
+                        "",
+                        "§e» Klicken zum Teleportieren")), () -> teleport(() -> partnerWarpLocation(other, warpNumber), label + " von " + Text.strip(name))));
+            }
         }
         return tiles;
     }
 
     // main thread, at the moment of the teleport: still partners, both levels still high enough
-    private @Nullable Location partnerWarpLocation(String other) {
+    private @Nullable Location partnerWarpLocation(String other, int number) {
         TeamCacheObject team = CacheHandler.getInstance().getPlayerInCache(viewer).getTeamCacheObject();
         TeamCacheObject partner = CacheHandler.getInstance().getTeamCacheObject(other);
         if (team == null || partner == null || Teams.role(team, viewer.getUniqueId()) == Teams.Role.NONE) return null;
-        if (team.getLevel() < Teams.WARP_LEVEL || partner.getLevel() < Teams.WARP_LEVEL || !Relations.partners(team.getTeamID(), other)) return null;
-        TeamWarps.Warp warp = TeamWarps.get(other);
+        if (team.getLevel() < Teams.WARP_LEVEL || partner.getLevel() < TeamWarps.requiredLevel(number) || !Relations.partners(team.getTeamID(), other)) return null;
+        TeamWarps.Warp warp = TeamWarps.get(other, number);
         return warp == null ? null : warp.toLocation();
     }
 
     // main thread, at the moment of the teleport: still in the team, level still high enough
-    private @Nullable Location teamWarpLocation() {
+    private @Nullable Location teamWarpLocation(int number) {
         TeamCacheObject team = CacheHandler.getInstance().getPlayerInCache(viewer).getTeamCacheObject();
-        if (team == null || team.getLevel() < Teams.WARP_LEVEL || Teams.role(team, viewer.getUniqueId()) == Teams.Role.NONE) return null;
-        TeamWarps.Warp warp = TeamWarps.get(team.getTeamID());
+        if (team == null || team.getLevel() < TeamWarps.requiredLevel(number) || Teams.role(team, viewer.getUniqueId()) == Teams.Role.NONE) return null;
+        TeamWarps.Warp warp = TeamWarps.get(team.getTeamID(), number);
         return warp == null ? null : warp.toLocation();
     }
 

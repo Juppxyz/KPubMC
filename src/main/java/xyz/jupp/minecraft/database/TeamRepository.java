@@ -28,7 +28,7 @@ public final class TeamRepository {
     }
 
     public record TeamData(String teamID, String name, @Nullable String color, UUID owner, int points, int level,
-                           boolean zonePvP, boolean zoneMobDamage, boolean zoneInteract, List<TeamMember> members) {}
+                           boolean zonePvP, boolean zoneMobDamage, boolean zoneInteract, boolean zoneAlarm, List<TeamMember> members) {}
 
     private static Logger log() {
         return Main.getInstance().getSLF4JLogger();
@@ -57,6 +57,7 @@ public final class TeamRepository {
                     row.getBoolean("zone_pvp"),
                     row.getBoolean("zone_mob_damage"),
                     row.getBoolean("zone_interact"),
+                    row.getBoolean("zone_alarm"),
                     members.getOrDefault(row.getString("team_id"), List.of())));
         });
     }
@@ -75,6 +76,7 @@ public final class TeamRepository {
                     row.getBoolean("zone_pvp"),
                     row.getBoolean("zone_mob_damage"),
                     row.getBoolean("zone_interact"),
+                    row.getBoolean("zone_alarm"),
                     members), teamID);
         });
     }
@@ -183,27 +185,6 @@ public final class TeamRepository {
         return true;
     }
 
-    /**
-     * Subtracts amount but never goes below 0, atomically.
-     * Returns the points the team had before (0 if the team does not exist).
-     */
-    public static int withdrawTeamPointsFloored(@NotNull String teamID, int amount) {
-        Integer previousPoints = Database.inTransaction(connection -> {
-            Integer before = Database.queryOne(connection, "SELECT points FROM teams WHERE team_id = ? FOR UPDATE",
-                    row -> row.getInt(1), teamID);
-            if (before == null) return null;
-            Database.update(connection, "UPDATE teams SET points = GREATEST(points - ?, 0) WHERE team_id = ?", amount, teamID);
-            return before;
-        });
-        if (previousPoints == null) {
-            log().warn("teamPoints {} {} failed: team not found", teamID, signed(-amount));
-            return 0;
-        }
-        log().info("teamPoints {} {} -> {}", teamID, signed(-amount), Math.max(0, previousPoints - amount));
-        return previousPoints;
-    }
-
-
     /* level and area options */
 
     /** Pays the price and raises the level in one statement; the new level, null if the points are not enough or the level changed. */
@@ -214,27 +195,19 @@ public final class TeamRepository {
         return newLevel;
     }
 
-    public static void decTeamLevel(@NotNull String teamID) {
-        Database.update("UPDATE teams SET level = level - 1 WHERE team_id = ? AND level > 0", teamID);
-        log().info("update team-level for {}", teamID);
-    }
-
     /** Writes the given value; true if the team exists. */
     public static boolean setAreaOption(@NotNull String teamID, @NotNull AreaOptionsEnum areaOption, boolean value) {
         String column = switch (areaOption) {
             case INTERACTION  -> "zone_interact";
             case PVP          -> "zone_pvp";
             case MOB_GRIEFING -> "zone_mob_damage";
+            case ALARM        -> "zone_alarm";
         };
         boolean matched = Database.update("UPDATE teams SET " + column + " = ? WHERE team_id = ?", value, teamID) > 0;
         log().info("set '{}' to {} for {}", column, value, teamID);
         return matched;
     }
 
-    public static void resetAreaOptions(@NotNull String teamID) {
-        Database.update("UPDATE teams SET zone_interact = TRUE, zone_pvp = TRUE, zone_mob_damage = TRUE WHERE team_id = ?", teamID);
-        log().info("reset area options for {}", teamID);
-    }
 
 
     private static String signed(int value) {

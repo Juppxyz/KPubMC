@@ -22,6 +22,7 @@ public class TeamCacheObject {
     private volatile boolean        zoneOptionPvP;
     private volatile boolean        zoneOptionMobDamage;
     private volatile boolean        zoneOptionInteract;
+    private volatile boolean        zoneOptionAlarm;
 
 
     // roles
@@ -43,6 +44,7 @@ public class TeamCacheObject {
         this.zoneOptionPvP = data.zonePvP();
         this.zoneOptionMobDamage = data.zoneMobDamage();
         this.zoneOptionInteract = data.zoneInteract();
+        this.zoneOptionAlarm = data.zoneAlarm();
     }
 
     // the database has the member already (TeamRepository.joinTeam)
@@ -85,14 +87,12 @@ public class TeamCacheObject {
         return true;
     }
 
-    // the points are reset by the caller
-    public synchronized void downgradeTeamLevel() {
-        if (this.level > 0) this.level--;
-        this.zoneOptionInteract = true;
-        this.zoneOptionPvP = true;
-        this.zoneOptionMobDamage = true;
-        TeamRepository.resetAreaOptions(teamID);
-        TeamRepository.decTeamLevel(teamID);
+    // the database has the lower level already (Teams.deathPenalty); options the level does not have go back to on
+    public synchronized void levelDropped(int newLevel, boolean resetMobGriefing, boolean resetPvP, boolean resetInteraction) {
+        this.level = newLevel;
+        if (resetMobGriefing) this.zoneOptionMobDamage = true;
+        if (resetPvP) this.zoneOptionPvP = true;
+        if (resetInteraction) this.zoneOptionInteract = true;
     }
 
     public synchronized boolean changeAreaSettings(@NotNull AreaOptionsEnum areaOption) {
@@ -100,6 +100,7 @@ public class TeamCacheObject {
             case PVP -> !zoneOptionPvP;
             case INTERACTION -> !zoneOptionInteract;
             case MOB_GRIEFING -> !zoneOptionMobDamage;
+            case ALARM -> !zoneOptionAlarm;
         };
         boolean teamExists = TeamRepository.setAreaOption(teamID, areaOption, newValue);
         if (teamExists) {
@@ -107,6 +108,7 @@ public class TeamCacheObject {
                 case PVP -> this.zoneOptionPvP = newValue;
                 case INTERACTION -> this.zoneOptionInteract = newValue;
                 case MOB_GRIEFING -> this.zoneOptionMobDamage = newValue;
+                case ALARM -> this.zoneOptionAlarm = newValue;
             }
         }
         return teamExists;
@@ -150,5 +152,9 @@ public class TeamCacheObject {
 
     public boolean isZoneOptionInteract() {
         return zoneOptionInteract;
+    }
+
+    public boolean isZoneOptionAlarm() {
+        return zoneOptionAlarm;
     }
 }

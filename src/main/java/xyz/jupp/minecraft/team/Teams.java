@@ -29,14 +29,20 @@ public final class Teams {
     public static final int NAME_MIN = 3;
     public static final int NAME_MAX = 12;
 
-    public static final int MAX_LEVEL = 5;
+    public static final int MAX_LEVEL = 7;
     public static final int CHUNK_COST = 200;
-    private static final int[] CHUNK_LIMITS = {4, 9, 16, 25, 36};
+    private static final int[] CHUNK_LIMITS = {4, 9, 16, 25, 36, 49, 64};
     public static final int MOB_GRIEFING_LEVEL = 2;
     public static final int WARP_LEVEL = 2;
     public static final int PVP_LEVEL = 3;
+    public static final int ALARM_LEVEL = 3;
     public static final int CHAT_LEVEL = 4;
+    public static final int HASTE_LEVEL = 4;
     public static final int INTERACTION_LEVEL = 5;
+    public static final int SECOND_WARP_LEVEL = 6;
+    public static final int STRONG_HASTE_LEVEL = 7;
+    // a member killed by a player costs the team this many points (the killer's team gets them)
+    public static final int DEATH_COST = 500;
 
     public enum Role {
         OWNER("Boss"), VICE("Vize"), MEMBER("Mitglied"), NONE("-");
@@ -93,9 +99,14 @@ public final class Teams {
             case 2 -> 1.25;
             case 3 -> 1.35;
             case 4 -> 1.50;
-            case 5 -> 2.0;
+            case 5, 6, 7 -> 2.0;
             default -> 1.0;
         };
+    }
+
+    /** The haste the team's members get in their own area: -1 none, 0 Eile I, 1 Eile II. */
+    public static int hasteAmplifier(int level) {
+        return level >= STRONG_HASTE_LEVEL ? 1 : level >= HASTE_LEVEL ? 0 : -1;
     }
 
     /** What a level brings, for the level table in the menu. */
@@ -106,8 +117,12 @@ public final class Teams {
         if (level == MOB_GRIEFING_LEVEL) lines.add("§7Neu: §fMob-Griefing abschaltbar");
         if (level == WARP_LEVEL) lines.add("§7Neu: §fTeam-Warp");
         if (level == PVP_LEVEL) lines.add("§7Neu: §fPvP im Gebiet abschaltbar");
+        if (level == ALARM_LEVEL) lines.add("§7Neu: §fAlarm, wenn Fremde euer Gebiet betreten");
         if (level == CHAT_LEVEL) lines.add("§7Neu: §fTeam-Chat mit §a@");
+        if (level == HASTE_LEVEL) lines.add("§7Neu: §fEile I im eigenen Gebiet");
         if (level == INTERACTION_LEVEL) lines.add("§7Neu: §fGebiet für Fremde sperrbar");
+        if (level == SECOND_WARP_LEVEL) lines.add("§7Neu: §fzweiter Team-Warp");
+        if (level == STRONG_HASTE_LEVEL) lines.add("§7Neu: §fEile II im eigenen Gebiet");
         return lines;
     }
 
@@ -162,6 +177,61 @@ public final class Teams {
             int level = team.getLevel();
             if (level >= MAX_LEVEL) return UpgradeOutcome.MAX;
             return team.upgrade(upgradeCost(level)) ? UpgradeOutcome.OK : UpgradeOutcome.NO_POINTS;
+        }
+    }
+
+    /** What a death cost the team: the points taken (the killer's team got them), levels sold back and their points. */
+    public record Penalty(int taken, int levelsLost, int refunded, int newLevel) {}
+
+    /**
+     * A member was killed by a player: the team pays DEATH_COST points. If they are not enough, it drops a level and
+     * gets that level's price back to pay with (never below level 1; there it pays what it has). The killer's team
+     * (null inside the own team) gets what was paid, in the same transaction. Null if the team does not exist.
+     * Example: level 4 with 200 points -> level 3 with 200 - 500 + 15.000 = 14.700 points.
+     */
+    public static @Nullable Penalty deathPenalty(@NotNull TeamCacheObject team, @Nullable String killerTeamID) {
+        String teamID = team.getTeamID();
+        // same monitor as upgrade(): the cached level follows the database
+        synchronized (team) {
+            Penalty penalty = Database.inTransaction(connection -> {
+                // both rows in a fixed order: two teams killing each other at the same moment never deadlock
+                List<String> locked = killerTeamID == null ? List.of(teamID)
+                        : teamID.compareTo(killerTeamID) < 0 ? List.of(teamID, killerTeamID) : List.of(killerTeamID, teamID);
+                for (String id : locked) Database.queryOne(connection, "SELECT 1 FROM teams WHERE team_id = ? FOR UPDATE", row -> 1, id);
+                int[] row = Database.queryOne(connection, "SELECT points, level FROM teams WHERE team_id = ?",
+                        result -> new int[]{result.getInt(1), result.getInt(2)}, teamID);
+                if (row == null) return null;
+                int points = row[0] - DEATH_COST;
+                int level = row[1];
+                int refunded = 0;
+                int lost = 0;
+                while (points < 0 && level > 1) {
+                    level--;
+                    int back = upgradeCost(level);
+                    points += back;
+                    refunded += back;
+                    lost++;
+                }
+                int taken = DEATH_COST + Math.min(0, points);
+                points = Math.max(0, points);
+                // options the lower level does not have any more go back to on
+                Database.update(connection, "UPDATE teams SET points = ?, level = ?, zone_mob_damage = zone_mob_damage OR ?, "
+                                + "zone_pvp = zone_pvp OR ?, zone_interact = zone_interact OR ? WHERE team_id = ?",
+                        points, level, level < MOB_GRIEFING_LEVEL, level < PVP_LEVEL, level < INTERACTION_LEVEL, teamID);
+                if (killerTeamID != null && taken > 0) {
+                    Database.update(connection, "UPDATE teams SET points = points + ? WHERE team_id = ?", taken, killerTeamID);
+                }
+                return new Penalty(taken, lost, refunded, level);
+            });
+            if (penalty != null && penalty.levelsLost() > 0) {
+                int level = penalty.newLevel();
+                team.levelDropped(level, level < MOB_GRIEFING_LEVEL, level < PVP_LEVEL, level < INTERACTION_LEVEL);
+            }
+            if (penalty != null) {
+                Main.getInstance().getSLF4JLogger().info("team {} paid {} for a death{}", teamID, penalty.taken(),
+                        penalty.levelsLost() > 0 ? ", dropped to level " + penalty.newLevel() + " (+" + penalty.refunded() + ")" : "");
+            }
+            return penalty;
         }
     }
 
