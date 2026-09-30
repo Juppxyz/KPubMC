@@ -233,7 +233,7 @@ public final class Services {
         if (!(meta instanceof Damageable damageable) || !damageable.hasDamage()) return 0;
         // custom items (bedrock breaker, flamethrower, ...) keep their durability as part of their balance
         String pluginNamespace = new NamespacedKey(Main.getInstance(), "custom").getNamespace();
-        if (meta.getPersistentDataContainer().getKeys().stream().anyMatch(key -> key.getNamespace().equals(pluginNamespace))) {
+        if (meta.getPersistentDataContainer().getKeys().stream().anyMatch(key -> key.getNamespace().equals(pluginNamespace) && !Goods.isMark(key))) {
             return 0;
         }
         return damageable.getDamage();

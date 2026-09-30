@@ -169,7 +169,7 @@ public final class EmergencySaleView implements InventoryHolder {
                 bought = known;
                 switch (result) {
                     case OK -> {
-                        HondoView.deliver(uuid, material, item.amount());
+                        HondoView.deliver(uuid, material, item.amount(), true);
                         player.sendMessage(ShopView.receipt("§fNotverkauf: §e" + item.amount() + "× ", item,
                                 " §ffür §a" + expected + " Schilling §8(an die Staatskasse)"));
                         player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.8f, 1.4f);
@@ -181,7 +181,7 @@ public final class EmergencySaleView implements InventoryHolder {
                 }
                 render();
             };
-            if (!MainThread.run(onMain) && result == Bankruptcy.Outcome.OK) HondoView.keepForLater(uuid, material, item.amount());
+            if (!MainThread.run(onMain) && result == Bankruptcy.Outcome.OK) HondoView.keepForLater(uuid, material, item.amount(), true);
         });
     }
 

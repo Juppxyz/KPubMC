@@ -22,13 +22,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-import static xyz.jupp.minecraft.economy.ShopView.countPlain;
+import static xyz.jupp.minecraft.economy.ShopView.countGoods;
 import static xyz.jupp.minecraft.economy.ShopView.fail;
 import static xyz.jupp.minecraft.economy.ShopView.freeSpace;
 import static xyz.jupp.minecraft.economy.ShopView.give;
 import static xyz.jupp.minecraft.economy.ShopView.named;
 import static xyz.jupp.minecraft.economy.ShopView.pane;
-import static xyz.jupp.minecraft.economy.ShopView.takePlain;
+import static xyz.jupp.minecraft.economy.ShopView.takeGoods;
 
 /**
  * Hondo's counter: his goods, the exchanges and the friendship offers (rules and prices in {@link Hondo}).
@@ -174,7 +174,7 @@ public final class HondoView implements InventoryHolder {
         List<String> lore = new ArrayList<>();
         lore.add("§7Du gibst: §f" + input + "× " + Hondo.label(exchange.give()));
         lore.add("§7Du bekommst: §f" + exchange.amount() + "× " + Hondo.label(exchange.get()));
-        lore.add("§7Du hast: §f" + countPlain(viewer, exchange.give()));
+        lore.add("§7Du hast: §f" + countGoods(viewer, exchange.give()));
         lore.add("§8Der Kurs folgt dem Shop, Hondos Anteil: " + ShopView.percent(Hondo.fee(level)));
         lore.add("");
         lore.add("§e» Linksklick: tauschen");
@@ -247,7 +247,7 @@ public final class HondoView implements InventoryHolder {
             try {
                 result = HondoRepository.buy(uuid, material, units, expected);
             } catch (RuntimeException e) {
-                unavailable(player, e, null, 0);
+                unavailable(player, e, null);
                 return;
             }
             boolean ok = result.outcome() == HondoRepository.Outcome.OK;
@@ -259,7 +259,7 @@ public final class HondoView implements InventoryHolder {
                 if (fresh != null) friendship = fresh;
                 switch (result.outcome()) {
                     case OK -> {
-                        deliver(uuid, material, units);
+                        deliver(uuid, material, units, true);
                         player.sendMessage(Main.getChatPrefix() + "§fGekauft: §e" + units + "× " + Hondo.label(material) + " §ffür "
                                 + Main.getCurrencyName(result.net() + result.tax()) + " §8(davon " + result.tax() + " Steuer)");
                         player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1f, 2f);
@@ -271,7 +271,7 @@ public final class HondoView implements InventoryHolder {
                 }
                 ShopView.refreshAll();
             };
-            if (!MainThread.run(onMain) && ok) keepForLater(uuid, material, units);
+            if (!MainThread.run(onMain) && ok) keepForLater(uuid, material, units, true);
         });
     }
 
@@ -282,7 +282,7 @@ public final class HondoView implements InventoryHolder {
         if (give == null || get == null) return;
         int input = Hondo.exchangeInput(give, get, exchange.amount(), Hondo.fee(friendship.level()));
         if (input == 0) return;
-        if (countPlain(player, exchange.give()) < input) {
+        if (countGoods(player, exchange.give()) < input) {
             fail(player, "§fDafür brauchst du §e" + input + "× " + Hondo.label(exchange.give()) + "§f.");
             return;
         }
@@ -292,25 +292,27 @@ public final class HondoView implements InventoryHolder {
         }
         UUID uuid = player.getUniqueId();
         // taken right away on the main thread, so the same items cannot be exchanged twice
-        takePlain(player, exchange.give(), input);
+        Goods.Taken taken = takeGoods(player, exchange.give(), input);
         busy = true;
         Tasks.async(() -> {
             HondoRepository.Result result;
             try {
                 result = HondoRepository.exchange(uuid, index, input);
             } catch (RuntimeException e) {
-                unavailable(player, e, exchange.give(), input);
+                unavailable(player, e, taken);
                 return;
             }
             boolean ok = result.outcome() == HondoRepository.Outcome.OK;
             HondoRepository.Friendship fresh = ok ? result.friendship() : friendshipOrNull(uuid);
-            // what the player gets now: Hondo's goods, or the own items back
-            Material receive = ok ? exchange.get() : exchange.give();
-            int quantity = ok ? exchange.amount() : input;
+            // what the player gets now: Hondo's goods, or the own items back as they were
             Runnable onMain = () -> {
                 busy = false;
                 if (fresh != null) friendship = fresh;
-                deliver(uuid, receive, quantity);
+                if (ok) {
+                    deliver(uuid, exchange.get(), exchange.amount(), true);
+                } else {
+                    giveBack(uuid, taken);
+                }
                 if (ok) {
                     player.sendMessage(Main.getChatPrefix() + "§fGetauscht: §e" + input + "× " + Hondo.label(exchange.give())
                             + " §f→ §e" + exchange.amount() + "× " + Hondo.label(exchange.get()));
@@ -323,7 +325,13 @@ public final class HondoView implements InventoryHolder {
                 }
                 ShopView.refreshAll();
             };
-            if (!MainThread.run(onMain)) keepForLater(uuid, receive, quantity);
+            if (!MainThread.run(onMain)) {
+                if (ok) {
+                    keepForLater(uuid, exchange.get(), exchange.amount(), true);
+                } else {
+                    keepBack(uuid, taken);
+                }
+            }
         });
     }
 
@@ -348,7 +356,7 @@ public final class HondoView implements InventoryHolder {
             try {
                 result = HondoRepository.claim(uuid, offer.level(), expected);
             } catch (RuntimeException e) {
-                unavailable(player, e, null, 0);
+                unavailable(player, e, null);
                 return;
             }
             boolean ok = result.outcome() == HondoRepository.Outcome.OK;
@@ -360,7 +368,7 @@ public final class HondoView implements InventoryHolder {
                 if (fresh != null) friendship = fresh;
                 switch (result.outcome()) {
                     case OK -> {
-                        deliver(uuid, offer.material(), offer.amount());
+                        deliver(uuid, offer.material(), offer.amount(), true);
                         player.sendMessage(Hondo.PREFIX + "Für dich, mein Freund. Erzähl es nicht herum.");
                         player.sendMessage(Main.getChatPrefix() + "§fGekauft: §e" + offer.amount() + "× " + Hondo.label(offer.material())
                                 + " §ffür " + Main.getCurrencyName(result.net()) + " §8(steuerfrei)");
@@ -375,7 +383,7 @@ public final class HondoView implements InventoryHolder {
                 }
                 render();
             };
-            if (!MainThread.run(onMain) && ok) keepForLater(uuid, offer.material(), offer.amount());
+            if (!MainThread.run(onMain) && ok) keepForLater(uuid, offer.material(), offer.amount(), true);
         });
     }
 
@@ -397,39 +405,52 @@ public final class HondoView implements InventoryHolder {
     }
 
     // worker thread: the booking failed with a database error, nothing was booked
-    private void unavailable(Player player, RuntimeException error, @Nullable Material giveBack, int quantity) {
+    private void unavailable(Player player, RuntimeException error, @Nullable Goods.Taken giveBack) {
         Main.getInstance().getSLF4JLogger().warn("Hondo trade of {} failed: {}", player.getName(), error.toString());
         UUID uuid = player.getUniqueId();
         boolean scheduled = MainThread.run(() -> {
             busy = false;
-            if (giveBack != null) deliver(uuid, giveBack, quantity);
+            if (giveBack != null) giveBack(uuid, giveBack);
             fail(player, "§fHondo ist gerade nicht erreichbar, bitte versuche es gleich nochmal.");
         });
-        if (!scheduled && giveBack != null) keepForLater(uuid, giveBack, quantity);
+        if (!scheduled && giveBack != null) keepBack(uuid, giveBack);
     }
 
 
     /* delivery: a Player object from before a logout is never saved again, so the goods go to the player online now */
 
-    // main thread
-    static void deliver(UUID uuid, Material material, int quantity) {
+    // main thread; bought: goods from a trader (Nomad does not take them), false for the player's own items back
+    static void deliver(UUID uuid, Material material, int quantity, boolean bought) {
+        if (quantity <= 0) return;
         Player online = Bukkit.getPlayer(uuid);
         if (online != null) {
-            give(online, material, quantity);
+            give(online, material, quantity, bought);
         } else {
             try {
-                Tasks.async(() -> keepForLater(uuid, material, quantity));
+                Tasks.async(() -> keepForLater(uuid, material, quantity, bought));
             } catch (IllegalPluginAccessException e) {
                 // server stop (MainThread.runPending): the database is still open
-                keepForLater(uuid, material, quantity);
+                keepForLater(uuid, material, quantity, bought);
             }
         }
     }
 
+    // main thread: what a failed trade took, back as it was (plain stays plain, bought stays bought)
+    static void giveBack(UUID uuid, Goods.Taken taken) {
+        deliver(uuid, taken.material(), taken.plain(), false);
+        deliver(uuid, taken.material(), taken.bought(), true);
+    }
+
+    // worker thread: the same, stored until the next join
+    static void keepBack(UUID uuid, Goods.Taken taken) {
+        if (taken.plain() > 0) keepForLater(uuid, taken.material(), taken.plain(), false);
+        if (taken.bought() > 0) keepForLater(uuid, taken.material(), taken.bought(), true);
+    }
+
     // worker thread: stored until the next join
-    static void keepForLater(UUID uuid, Material material, int quantity) {
+    static void keepForLater(UUID uuid, Material material, int quantity, boolean bought) {
         try {
-            HondoRepository.addPending(uuid, material, quantity);
+            HondoRepository.addPending(uuid, material, quantity, bought);
             Main.getInstance().getSLF4JLogger().info("Hondo keeps {}x {} for {} until the next join", quantity, material, uuid);
         } catch (RuntimeException e) {
             Main.getInstance().getSLF4JLogger().error("Hondo could not keep {}x {} for {}", quantity, material, uuid, e);
@@ -449,11 +470,11 @@ public final class HondoView implements InventoryHolder {
             }
             if (pending.isEmpty()) return;
             boolean scheduled = MainThread.run(() -> {
-                for (HondoRepository.Pending goods : pending) deliver(uuid, goods.material(), goods.quantity());
+                for (HondoRepository.Pending goods : pending) deliver(uuid, goods.material(), goods.quantity(), goods.bought());
                 Player online = Bukkit.getPlayer(uuid);
                 if (online != null) online.sendMessage(Hondo.PREFIX + "Du bist neulich so schnell weg gewesen. Hier, das gehört dir noch.");
             });
-            if (!scheduled) pending.forEach(goods -> keepForLater(uuid, goods.material(), goods.quantity()));
+            if (!scheduled) pending.forEach(goods -> keepForLater(uuid, goods.material(), goods.quantity(), goods.bought()));
         });
     }
 

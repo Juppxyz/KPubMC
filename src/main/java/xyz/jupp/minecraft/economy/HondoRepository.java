@@ -227,16 +227,17 @@ public final class HondoRepository {
 
     /* goods the player did not receive (left during the booking, server stop): handed out at the next join */
 
-    public static void addPending(@NotNull UUID player, @NotNull Material material, int quantity) {
-        Database.update("INSERT INTO hondo_pending (player_uuid, material, quantity) VALUES (?, ?, ?)", player, material.name(), quantity);
+    public static void addPending(@NotNull UUID player, @NotNull Material material, int quantity, boolean bought) {
+        Database.update("INSERT INTO hondo_pending (player_uuid, material, quantity, bought) VALUES (?, ?, ?, ?)", player, material.name(), quantity, bought);
     }
 
-    public record Pending(Material material, int quantity) {}
+    // bought: goods from a trader, handed out with the mark
+    public record Pending(Material material, int quantity, boolean bought) {}
 
     /** Removes and returns the player's pending goods. */
     public static List<Pending> takePending(@NotNull UUID player) {
-        return Database.query("DELETE FROM hondo_pending WHERE player_uuid = ? RETURNING material, quantity",
-                row -> new Pending(Material.matchMaterial(row.getString(1)), row.getInt(2)), player)
+        return Database.query("DELETE FROM hondo_pending WHERE player_uuid = ? RETURNING material, quantity, bought",
+                row -> new Pending(Material.matchMaterial(row.getString(1)), row.getInt(2), row.getBoolean(3)), player)
                 .stream().filter(pending -> pending.material() != null).toList();
     }
 

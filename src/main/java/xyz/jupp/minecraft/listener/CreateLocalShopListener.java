@@ -1,5 +1,7 @@
 package xyz.jupp.minecraft.listener;
 
+import java.util.ArrayList;
+import java.util.List;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
@@ -18,6 +20,7 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.Nullable;
+import xyz.jupp.minecraft.economy.Goods;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.inventory.MainThread;
@@ -160,8 +163,8 @@ public class CreateLocalShopListener implements Listener {
 
     // main thread: takes the goods out of the chest (looked up again, it may be gone by now), the bookings run async
     private static void handOver(Player player, Block chestBlock, @Nullable Material shopItem, int amount, int sellPrice, OfflinePlayer offlinePlayer, String secondLine) {
-        boolean successfullyRemoved = chestBlock.getState(false) instanceof Chest chest && removeItems(chest, shopItem, amount);
-        if (!successfullyRemoved) {
+        int bought = chestBlock.getState(false) instanceof Chest chest ? removeItems(chest, shopItem, amount) : -1;
+        if (bought < 0) {
             Tasks.async(() -> PlayerRepository.addMoney(player, sellPrice));
             player.sendMessage(Main.getChatPrefix() + "§fDer Shop von §6" + secondLine + " §fist aktuell nicht ausreichend gefüllt.");
             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 1f);
@@ -171,7 +174,12 @@ public class CreateLocalShopListener implements Listener {
         // by uuid, the shop owner may be offline
         Tasks.async(() -> PlayerRepository.addMoney(offlinePlayer.getUniqueId(), sellPrice));
 
-        player.getInventory().addItem(new ItemStack(shopItem, amount));
+        // bought goods stay marked (Nomad does not take them), the rest is plain
+        List<ItemStack> goods = new ArrayList<>();
+        if (amount - bought > 0) goods.add(Goods.stack(shopItem, amount - bought, false));
+        if (bought > 0) goods.add(Goods.stack(shopItem, bought, true));
+        player.getInventory().addItem(goods.toArray(ItemStack[]::new)).values()
+                .forEach(rest -> player.getWorld().dropItemNaturally(player.getLocation(), rest));
         Logger.console(String.format("%s bought %s(%d) from %s", player.getName(), shopItem.name(), amount, offlinePlayer.getName()));
 
         player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_TRADE, 1f, 1f);
@@ -302,26 +310,27 @@ public class CreateLocalShopListener implements Listener {
         return firstMaterial;
     }
 
-    // main thread only
-    private static boolean removeItems(Chest chest, @Nullable Material material, int amountToRemove) {
+    // main thread only: how many of the removed pieces were bought goods; -1 (and nothing removed) if the chest has too few
+    private static int removeItems(Chest chest, @Nullable Material material, int amountToRemove) {
         Inventory inventory = chest.getInventory();
-        int remainingAmount = amountToRemove;
-        for (ItemStack item : inventory.getContents()) {
-            if (item != null && item.getType() == material) {
-                int itemAmount = item.getAmount();
-                if (itemAmount <= remainingAmount) {
-                    remainingAmount -= itemAmount;
-                    inventory.remove(item);
-                } else {
-                    item.setAmount(itemAmount - remainingAmount);
-                    remainingAmount = 0;
-                }
-                if (remainingAmount <= 0) {
-                    return true;
-                }
-            }
+        ItemStack[] contents = inventory.getContents();
+        int available = 0;
+        for (ItemStack item : contents) {
+            if (item != null && item.getType() == material) available += item.getAmount();
         }
-        return remainingAmount <= 0;
+        if (material == null || available < amountToRemove) return -1;
+        int remainingAmount = amountToRemove;
+        int bought = 0;
+        for (ItemStack item : contents) {
+            if (remainingAmount <= 0) break;
+            if (item == null || item.getType() != material) continue;
+            int part = Math.min(remainingAmount, item.getAmount());
+            if (Goods.isBought(item)) bought += part;
+            item.setAmount(item.getAmount() - part);
+            remainingAmount -= part;
+        }
+        inventory.setContents(contents);
+        return bought;
     }
 
 }
