@@ -166,6 +166,7 @@ public class ShopAdminCommand implements TabExecutor {
             case "display_name" -> item.displayName();
             case "description" -> item.description();
             case "tax_class" -> item.taxClassOverride() == null ? null : item.taxClassOverride().name();
+            case "hourly_limit" -> Market.hourlyLimitOverride(material);
             case "emergency_sale" -> Database.queryOne("SELECT emergency_sale FROM market_items WHERE material = ?",
                     row -> row.getBoolean(1), material.name());
             default -> null;
@@ -272,6 +273,12 @@ public class ShopAdminCommand implements TabExecutor {
         boolean none = raw.equals("-") || raw.equalsIgnoreCase("auto");
         return switch (column) {
             case "min_price", "max_price" -> none ? null : Integer.parseInt(raw);
+            case "hourly_limit" -> {
+                if (none) yield null;
+                int bundles = Integer.parseInt(raw);
+                if (bundles < 1) throw new IllegalArgumentException("mindestens 1 Bündel pro Stunde, oder auto");
+                yield bundles;
+            }
             case "base_price", "amount", "rotation_weight" -> Integer.parseInt(raw);
             case "sell_ratio", "elasticity" -> Double.parseDouble(raw.replace(',', '.'));
             case "core", "enabled", "buyable", "sellable", "emergency_sale" -> switch (raw.toLowerCase(Locale.ROOT)) {

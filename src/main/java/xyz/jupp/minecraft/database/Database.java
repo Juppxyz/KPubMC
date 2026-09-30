@@ -378,7 +378,9 @@ public final class Database {
                     ALTER TABLE team_warps ADD CONSTRAINT team_warps_pkey PRIMARY KEY (team_id, number);
                 END IF;
             END $$""",
-            "ALTER TABLE teams ADD COLUMN IF NOT EXISTS zone_alarm BOOLEAN NOT NULL DEFAULT TRUE"
+            "ALTER TABLE teams ADD COLUMN IF NOT EXISTS zone_alarm BOOLEAN NOT NULL DEFAULT TRUE",
+            // purchases per player and item within an hour, in bundles (null: the category's default)
+            "ALTER TABLE market_items ADD COLUMN IF NOT EXISTS hourly_limit INTEGER CHECK (hourly_limit > 0)"
     );
 
     private static volatile HikariDataSource dataSource;

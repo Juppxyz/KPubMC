@@ -28,6 +28,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 
 /**
  * The shop GUI of the "Händler".
@@ -363,6 +364,7 @@ public final class ShopView implements InventoryHolder {
         ItemMeta meta = good.getItemMeta();
         List<String> lore = new ArrayList<>(priceLines(item));
         lore.add("§7Im Inventar: §f" + owned + " Stück");
+        if (item.buyable()) lore.add("§8Höchstens " + Market.hourlyLimitItems(item) + " Stück pro Stunde kaufen");
         meta.lore(Text.lore(lore));
         good.setItemMeta(meta);
         inventory.setItem(SLOT_GOOD, good);
@@ -719,6 +721,7 @@ public final class ShopView implements InventoryHolder {
                 return;
             }
             Market.update(trade.item());
+            String limit = trade.outcome() == MarketRepository.Outcome.LIMIT ? limitMessage(player.getUniqueId(), item) : null;
             Integer money = HondoView.moneyOrNull(player.getUniqueId());
             Runnable onMain = () -> {
                 busy = false;
@@ -733,6 +736,7 @@ public final class ShopView implements InventoryHolder {
                     }
                     case INSUFFICIENT_FUNDS -> fail(player, "§fDafür fehlen dir Schilling §8(benötigt: " + (trade.net() + trade.tax()) + ")§f.");
                     case PRICE_CHANGED -> fail(player, "§fDer Preis hat sich gerade geändert, bitte prüfe den neuen Preis.");
+                    case LIMIT -> fail(player, limit);
                     case UNAVAILABLE -> fail(player, "§fDieses Item gibt es gerade nicht zu kaufen.");
                 }
                 refreshAll();
@@ -796,6 +800,7 @@ public final class ShopView implements InventoryHolder {
                 unavailable(player, e, null, 0);
                 return;
             }
+            String limit = trade.outcome() == MarketRepository.Outcome.LIMIT ? limitMessage(player.getUniqueId(), item) : null;
             Integer money = HondoView.moneyOrNull(player.getUniqueId());
             Runnable onMain = () -> {
                 busy = false;
@@ -806,6 +811,8 @@ public final class ShopView implements InventoryHolder {
                             " §ffür " + Main.getCurrencyName(trade.net() + trade.tax()) + " §8(davon " + trade.tax() + " Steuer)"));
                     player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f, 2f);
                     if (isSpawnEgg(item.material())) spawnEggNotice(player);
+                } else if (limit != null) {
+                    fail(player, limit);
                 } else {
                     fail(player, "§fDafür fehlen dir Schilling §8(benötigt: " + (trade.net() + trade.tax()) + ")§f.");
                 }
@@ -819,6 +826,18 @@ public final class ShopView implements InventoryHolder {
 
 
     /* helpers */
+
+    // worker thread: the hourly limit was reached; how many and when it frees up again
+    static String limitMessage(UUID player, MarketItem item) {
+        int wait;
+        try {
+            wait = MarketRepository.limitWaitMinutes(player, item.material());
+        } catch (RuntimeException e) {
+            wait = 60;
+        }
+        return "§fMehr davon gibt es für dich diese Stunde nicht §8(höchstens " + Market.hourlyLimitItems(item)
+                + " Stück pro Stunde)§f. Wieder in etwa §e" + wait + " Min§f.";
+    }
 
     // worker thread: a booking failed with a database error, nothing was booked
     private void unavailable(Player player, RuntimeException error, @Nullable Material giveBack, int quantity) {

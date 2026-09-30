@@ -48,6 +48,12 @@ public final class Market {
     private static final double RANDOM_ITEM_SHARE = 0.8;
 
     private static final Map<Material, MarketItem> items = new ConcurrentHashMap<>();
+    // purchases per player and item within an hour, in bundles: a safety net where the price reaction is not enough;
+    // building blocks get more, rare items less; /shopadmin set <item> limit overrides it
+    private static final int HOURLY_LIMIT_BLOCKS = 64;
+    private static final int HOURLY_LIMIT_RARE = 2;
+    private static final int HOURLY_LIMIT_DEFAULT = 16;
+    private static volatile Map<Material, Integer> hourlyLimits = Map.of();
     private static volatile List<Material> dailyOffers = List.of();
     private static volatile LocalDate offersDay = null;
     private static final AtomicBoolean updating = new AtomicBoolean();
@@ -73,6 +79,28 @@ public final class Market {
         for (MarketItem item : MarketRepository.loadAll()) loaded.put(item.material(), item);
         items.keySet().retainAll(loaded.keySet());
         items.putAll(loaded);
+        hourlyLimits = MarketRepository.hourlyLimits();
+    }
+
+    /** Bundles a player may buy of this item within an hour (shop, random item and Hondo together). */
+    public static int hourlyLimit(@NotNull MarketItem item) {
+        Integer override = hourlyLimits.get(item.material());
+        if (override != null) return override;
+        return switch (item.category()) {
+            case BLOCKS -> HOURLY_LIMIT_BLOCKS;
+            case RARE -> HOURLY_LIMIT_RARE;
+            default -> HOURLY_LIMIT_DEFAULT;
+        };
+    }
+
+    /** The same in pieces. */
+    public static int hourlyLimitItems(@NotNull MarketItem item) {
+        return hourlyLimit(item) * item.amount();
+    }
+
+    /** The limit set with /shopadmin, null for the category default. */
+    public static @Nullable Integer hourlyLimitOverride(@NotNull Material material) {
+        return hourlyLimits.get(material);
     }
 
     public static void startTasks() {

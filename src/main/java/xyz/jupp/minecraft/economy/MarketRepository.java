@@ -25,7 +25,7 @@ public final class MarketRepository {
 
     private MarketRepository() {}
 
-    public enum Outcome { OK, INSUFFICIENT_FUNDS, PRICE_CHANGED, UNAVAILABLE }
+    public enum Outcome { OK, INSUFFICIENT_FUNDS, PRICE_CHANGED, UNAVAILABLE, LIMIT }
 
     /** Result of a trade; item is the catalog entry with the new demand (null if the item does not exist). */
     public record Trade(Outcome outcome, int net, int tax, @Nullable MarketItem item) {}
@@ -44,6 +44,7 @@ public final class MarketRepository {
             Map.entry("aktiv", "enabled"),
             Map.entry("kaufbar", "buyable"),
             Map.entry("verkaufbar", "sellable"),
+            Map.entry("limit", "hourly_limit"),
             Map.entry("name", "display_name"),
             Map.entry("beschreibung", "description"),
             Map.entry("steuerklasse", "tax_class"),
@@ -174,6 +175,10 @@ public final class MarketRepository {
         Trade trade = Database.inTransaction(connection -> {
             MarketItem item = lock(connection, material);
             if (item == null || !item.enabled() || !item.buyable()) return new Trade(Outcome.UNAVAILABLE, 0, 0, item);
+            // the catalog row is locked: parallel purchases of the same item are checked one after another
+            if (boughtLastHour(connection, player, material) + bundles * item.amount() > Market.hourlyLimitItems(item)) {
+                return new Trade(Outcome.LIMIT, 0, 0, item);
+            }
 
             int net = item.buyTotal(bundles, discount);
             int tax = Taxes.taxOn(net, item.taxClass());
@@ -216,6 +221,10 @@ public final class MarketRepository {
     public static Trade buyFixed(@NotNull UUID player, @NotNull Material material, int quantity, int net, @NotNull TaxClass taxClass) {
         int tax = Taxes.taxOn(net, taxClass);
         Trade trade = Database.inTransaction(connection -> {
+            MarketItem item = lock(connection, material);
+            if (item != null && boughtLastHour(connection, player, material) + quantity > Market.hourlyLimitItems(item)) {
+                return new Trade(Outcome.LIMIT, net, tax, item);
+            }
             if (Database.update(connection, "UPDATE players SET money = money - ? WHERE uuid = ? AND money >= ?",
                     net + tax, player, net + tax) == 0) {
                 return new Trade(Outcome.INSUFFICIENT_FUNDS, net, tax, null);
@@ -226,6 +235,33 @@ public final class MarketRepository {
         });
         if (trade.outcome() == Outcome.OK) Treasury.committed(tax);
         return trade;
+    }
+
+    /** Pieces the player bought of this material within the last hour (shop, random item, Hondo; not Hondo's exchanges). */
+    static int boughtLastHour(Connection connection, UUID player, Material material) throws SQLException {
+        Long bought = Database.queryOne(connection, "SELECT COALESCE(SUM(quantity), 0) FROM market_transactions WHERE player_uuid = ? AND material = ? "
+                        + "AND kind = 'BUY' AND moves_money AND created_at > now() - interval '1 hour'",
+                row -> row.getLong(1), player, material.name());
+        return bought == null ? 0 : (int) Math.min(Integer.MAX_VALUE, bought);
+    }
+
+    /** Minutes until the oldest purchase of the last hour stops counting (at least 1). */
+    public static int limitWaitMinutes(@NotNull UUID player, @NotNull Material material) {
+        Double seconds = Database.queryOne("SELECT EXTRACT(EPOCH FROM MIN(created_at) + interval '1 hour' - now()) FROM market_transactions "
+                        + "WHERE player_uuid = ? AND material = ? AND kind = 'BUY' AND moves_money AND created_at > now() - interval '1 hour'",
+                row -> row.getObject(1) == null ? null : row.getDouble(1), player, material.name());
+        return seconds == null ? 1 : (int) Math.max(1, Math.ceil(seconds / 60.0));
+    }
+
+    /** The limits set with /shopadmin (bundles per hour). */
+    public static Map<Material, Integer> hourlyLimits() {
+        Map<Material, Integer> limits = new java.util.HashMap<>();
+        Database.query("SELECT material, hourly_limit FROM market_items WHERE hourly_limit IS NOT NULL", row -> {
+            Material material = Material.matchMaterial(row.getString(1));
+            if (material != null) limits.put(material, row.getInt(2));
+            return null;
+        });
+        return Map.copyOf(limits);
     }
 
     static void logTrade(Connection connection, UUID player, Material material, String kind, int quantity,

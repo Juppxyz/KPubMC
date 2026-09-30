@@ -27,7 +27,7 @@ public final class HondoRepository {
 
     private HondoRepository() {}
 
-    public enum Outcome { OK, INSUFFICIENT_FUNDS, PRICE_CHANGED, UNAVAILABLE, ALREADY_CLAIMED, LEVEL_TOO_LOW }
+    public enum Outcome { OK, INSUFFICIENT_FUNDS, PRICE_CHANGED, UNAVAILABLE, ALREADY_CLAIMED, LEVEL_TOO_LOW, LIMIT }
 
     /**
      * The friendship as the GUI shows it; the trades of today decide whether the points shrink over night,
@@ -134,6 +134,8 @@ public final class HondoRepository {
         Result result = Database.inTransaction(connection -> {
             MarketItem item = MarketRepository.lock(connection, material);
             if (item == null || !item.enabled() || !EndAccess.isAvailable(material)) return Result.of(Outcome.UNAVAILABLE);
+            // the same hourly limit as in the shop (the catalog row is locked)
+            if (MarketRepository.boughtLastHour(connection, player, material) + units > Market.hourlyLimitItems(item)) return Result.of(Outcome.LIMIT);
             Friend friend = lockFriend(connection, player);
             int level = Hondo.level(friend.points());
 

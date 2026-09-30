@@ -251,6 +251,7 @@ public final class HondoView implements InventoryHolder {
                 return;
             }
             boolean ok = result.outcome() == HondoRepository.Outcome.OK;
+            String limit = result.outcome() == HondoRepository.Outcome.LIMIT ? ShopView.limitMessage(uuid, item) : null;
             Integer money = moneyOrNull(uuid);
             HondoRepository.Friendship fresh = ok ? result.friendship() : friendshipOrNull(uuid);
             Runnable onMain = () -> {
@@ -266,6 +267,7 @@ public final class HondoView implements InventoryHolder {
                         traded(player, result);
                     }
                     case INSUFFICIENT_FUNDS -> fail(player, "§fDafür fehlen dir Schilling §8(benötigt: " + (result.net() + result.tax()) + ")§f.");
+                    case LIMIT -> fail(player, limit);
                     case PRICE_CHANGED -> fail(player, "§fDer Preis hat sich gerade geändert, bitte prüfe den neuen Preis.");
                     default -> fail(player, "§fDas hat Hondo gerade nicht.");
                 }
