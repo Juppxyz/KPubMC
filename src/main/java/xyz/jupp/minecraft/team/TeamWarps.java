@@ -93,6 +93,11 @@ public final class TeamWarps {
         return result;
     }
 
+    /** A dissolved team: its warps are gone (the database removed them with the team). */
+    public static void forgetTeam(@NotNull String teamID) {
+        warps.keySet().removeIf(key -> key.teamID().equals(teamID));
+    }
+
     /** Owner or vice: removes a team warp (no money back). */
     public static boolean remove(@NotNull TeamCacheObject team, @NotNull UUID actor, int number) {
         if (!Teams.role(team, actor).canManage()) return false;

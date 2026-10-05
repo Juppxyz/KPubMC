@@ -380,7 +380,9 @@ public final class Database {
             END $$""",
             "ALTER TABLE teams ADD COLUMN IF NOT EXISTS zone_alarm BOOLEAN NOT NULL DEFAULT TRUE",
             // purchases per player and item within an hour, in bundles (null: the category's default)
-            "ALTER TABLE market_items ADD COLUMN IF NOT EXISTS hourly_limit INTEGER CHECK (hourly_limit > 0)"
+            "ALTER TABLE market_items ADD COLUMN IF NOT EXISTS hourly_limit INTEGER CHECK (hourly_limit > 0)",
+            // when a member joined: the vice longest in the team takes over when the boss leaves
+            "ALTER TABLE team_members ADD COLUMN IF NOT EXISTS joined_at TIMESTAMPTZ NOT NULL DEFAULT now()"
     );
 
     private static volatile HikariDataSource dataSource;

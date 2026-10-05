@@ -1,5 +1,6 @@
 package xyz.jupp.minecraft.cache;
 
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.database.DatabaseException;
@@ -61,6 +62,12 @@ final class TeamCache {
 
     static java.util.Collection<TeamCacheObject> all() {
         return java.util.List.copyOf(teamCacheMap.values());
+    }
+
+    // a dissolved team: gone from the cache, and never loaded again
+    static void forget(@NotNull String teamID) {
+        teamCacheMap.remove(teamID);
+        unknownTeamIDs.add(teamID);
     }
 
     // called when a team was created

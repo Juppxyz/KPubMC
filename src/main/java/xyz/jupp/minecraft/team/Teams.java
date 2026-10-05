@@ -4,6 +4,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import xyz.jupp.minecraft.economy.TeamBank;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.ChunkCache;
@@ -232,6 +233,67 @@ public final class Teams {
                         penalty.levelsLost() > 0 ? ", dropped to level " + penalty.newLevel() + " (+" + penalty.refunded() + ")" : "");
             }
             return penalty;
+        }
+    }
+
+    /** What happened when the boss left: the new boss, or a dissolved team with its treasury payout. */
+    public record Handover(@Nullable UUID newOwner, @Nullable String newOwnerName, boolean dissolved, long paid, long tax) {}
+
+    // who takes over when the boss leaves: the vice longest in the team, without vices the member longest in it;
+    // on the same day the one with more Nomad points, then by name
+    static final String SUCCESSOR_SQL = """
+            SELECT m.uuid, m.nickname FROM team_members m
+            LEFT JOIN (SELECT player_uuid, SUM(points) AS points FROM nomad_deliveries WHERE team_id = ? GROUP BY player_uuid) d
+                ON d.player_uuid = m.uuid
+            WHERE m.team_id = ? AND m.role <> 'owner'
+            ORDER BY (m.role = 'vice') DESC, date_trunc('day', m.joined_at), COALESCE(d.points, 0) DESC, lower(m.nickname)
+            LIMIT 1""";
+
+    /**
+     * Worker: the boss leaves. The next vice takes over (see SUCCESSOR_SQL). A boss alone dissolves the team: chunks,
+     * warps and relations go with it, the team treasury is paid out to them with the tax of a cash withdrawal.
+     * Null if the player is not the boss.
+     */
+    public static @Nullable Handover ownerLeaves(@NotNull TeamCacheObject team, @NotNull UUID owner) {
+        if (role(team, owner) != Role.OWNER) return null;
+        String teamID = team.getTeamID();
+        synchronized (team) {
+            Handover handover = Database.inTransaction(connection -> {
+                if (Database.queryOne(connection, "SELECT 1 FROM teams WHERE team_id = ? AND owner_uuid = ? FOR UPDATE", row -> 1, teamID, owner) == null) {
+                    return null;
+                }
+                UUID[] next = new UUID[1];
+                String nextName = Database.queryOne(connection, SUCCESSOR_SQL, row -> {
+                    next[0] = row.getObject(1, UUID.class);
+                    return row.getString(2);
+                }, teamID, teamID);
+                if (next[0] != null) {
+                    Database.update(connection, "UPDATE teams SET owner_uuid = ? WHERE team_id = ?", next[0], teamID);
+                    Database.update(connection, "UPDATE team_members SET role = 'owner' WHERE team_id = ? AND uuid = ?", teamID, next[0]);
+                    Database.update(connection, "DELETE FROM team_members WHERE team_id = ? AND uuid = ?", teamID, owner);
+                    Database.update(connection, "UPDATE players SET team_id = NULL WHERE uuid = ? AND team_id = ?", owner, teamID);
+                    return new Handover(next[0], nextName, false, 0, 0);
+                }
+                TeamBank.Payout payout = TeamBank.payOutAll(connection, teamID, owner);
+                // chunks, members, warps, relations, requests and the ledger go with the team (ON DELETE CASCADE)
+                Database.update(connection, "DELETE FROM teams WHERE team_id = ?", teamID);
+                Database.update(connection, "UPDATE players SET team_id = NULL WHERE uuid = ? AND team_id = ?", owner, teamID);
+                return new Handover(null, null, true, payout.paid(), payout.tax());
+            });
+            if (handover == null) return null;
+            if (handover.dissolved()) {
+                TeamBank.committed(handover.tax());
+                ChunkCache.getInstance().forgetTeam(teamID);
+                TeamWarps.forgetTeam(teamID);
+                Relations.forgetTeam(teamID);
+                CacheHandler.getInstance().forgetTeam(teamID);
+                Main.getInstance().getSLF4JLogger().info("team {} dissolved by {} (+{} from the treasury)", teamID, owner, handover.paid());
+            } else {
+                team.ownerChanged(handover.newOwner(), owner);
+                Main.getInstance().getSLF4JLogger().info("team {}: {} left, {} is the new owner", teamID, owner, handover.newOwner());
+            }
+            CacheHandler.getInstance().clearTeamIfCached(owner, teamID);
+            return handover;
         }
     }
 

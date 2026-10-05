@@ -82,6 +82,25 @@ public final class TeamBank {
         return new Payout(Outcome.OK, paid, tax);
     }
 
+    /** Inside a transaction: a dissolved team's whole treasury to its last member, minus the tax of a cash withdrawal. */
+    public static Payout payOutAll(@NotNull Connection connection, @NotNull String teamID, @NotNull UUID player) throws SQLException {
+        Long balance = Database.queryOne(connection, "SELECT treasury FROM teams WHERE team_id = ?", row -> row.getLong(1), teamID);
+        if (balance == null || balance <= 0) return new Payout(Outcome.OK, 0, 0);
+        int amount = (int) Math.min(Integer.MAX_VALUE, balance);
+        int tax = Taxes.taxOn(amount, TaxClass.STANDARD);
+        long paid = amount - tax;
+        Database.update(connection, "UPDATE teams SET treasury = treasury - ? WHERE team_id = ?", amount, teamID);
+        Database.update(connection, "UPDATE players SET money = money + ? WHERE uuid = ?", paid, player);
+        Treasury.deposit(connection, Treasury.Source.WITHDRAW_TAX, tax, player);
+        BankLog.add(connection, player, BankLog.TEAM_WITHDRAW, paid, null);
+        return new Payout(Outcome.OK, paid, tax);
+    }
+
+    /** After the commit of payOutAll: the state treasury's cached balance. */
+    public static void committed(long tax) {
+        Treasury.committed(tax);
+    }
+
     /** Inside a transaction: pays a team expense (the team warp); false if the treasury does not cover it. */
     public static boolean pay(@NotNull Connection connection, @NotNull String teamID, @NotNull UUID actor, @NotNull String kind, long amount)
             throws SQLException {

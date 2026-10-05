@@ -72,12 +72,13 @@ public final class TeamView implements InventoryHolder {
         }
     }
 
-    private enum Page { TABS, MEMBER, INVITE, TEAMS, RELATION }
+    private enum Page { TABS, MEMBER, INVITE, TEAMS, RELATION, LEAVE }
 
     private record Member(UUID uuid, String name, Teams.Role role, @Nullable Instant lastSeen, long weekPoints, long totalPoints) {}
 
+    // successor: who becomes boss when the boss leaves (null: the team would be dissolved)
     private record State(int points, long treasury, @Nullable Instant founded, List<Member> members, List<TeamBank.Entry> history,
-                         long weekPoints, int racePlace, int rankPlace, int teamCount, long money) {}
+                         long weekPoints, int racePlace, int rankPlace, int teamCount, long money, @Nullable String successor) {}
 
     // what a change reports: a message (may be null) and a follow-up on the main thread (names, team messages)
     private record Feedback(boolean ok, @Nullable String message, @Nullable Runnable after) {
@@ -208,7 +209,7 @@ public final class TeamView implements InventoryHolder {
         }
         return new State(row == null ? 0 : row.points(), row == null ? 0 : row.treasury(), row == null ? null : row.founded(),
                 members, TeamBank.history(teamID, HISTORY_LINES), weekPoints, racePlace, rankPlace, ranking.size(),
-                PlayerRepository.getMoney(viewer));
+                PlayerRepository.getMoney(viewer), Database.queryOne(Teams.SUCCESSOR_SQL, result -> result.getString(2), teamID, teamID));
     }
 
     private @Nullable TeamCacheObject team() {
@@ -254,6 +255,7 @@ public final class TeamView implements InventoryHolder {
             case INVITE -> renderInvite(team);
             case TEAMS -> renderTeams();
             case RELATION -> renderRelation(role);
+            case LEAVE -> renderLeave(team, role);
         }
     }
 
@@ -273,12 +275,31 @@ public final class TeamView implements InventoryHolder {
         set(SLOT_TEAM, Items.named(TeamCreateView.colourBanner(colour), colour + "§l" + team.getTeamName(), List.of(
                 "§7Level §f" + team.getLevel() + " §8· §f" + Items.format(state.points()) + " §7Team-Punkte",
                 "§7Deine Rolle: " + colour + role.label())), null);
-        if (role == Teams.Role.OWNER) return;
-        boolean asking = confirming("leave");
-        set(SLOT_LEAVE, Items.named(asking ? Material.RED_CONCRETE : Material.DARK_OAK_DOOR,
-                asking ? "§c§lWirklich verlassen? Nochmal klicken" : "§cTeam verlassen", List.of()), () -> {
-            if (confirmed("leave")) act(this::leave);
+        boolean dissolve = role == Teams.Role.OWNER && state.successor() == null;
+        set(SLOT_LEAVE, Items.named(dissolve ? Material.TNT : Material.DARK_OAK_DOOR, dissolve ? "§cTeam auflösen" : "§cTeam verlassen",
+                List.of()), () -> {
+            page = Page.LEAVE;
+            render();
         });
+    }
+
+    // the question before leaving: what happens, yes or no
+    private void renderLeave(TeamCacheObject team, Teams.Role role) {
+        set(SLOT_BACK, Items.named(Material.ARROW, "§f◀ Zurück", List.of()), () -> backTo(Tab.OVERVIEW));
+        boolean dissolve = role == Teams.Role.OWNER && state.successor() == null;
+        List<String> lore = new ArrayList<>();
+        if (dissolve) {
+            lore.add("§7Du bist allein: das Team wird aufgelöst.");
+            lore.add("§7Chunks, Warps und Beziehungen fallen weg,");
+            lore.add("§7die Team-Kasse bekommst du §8(minus Steuer)§7.");
+        } else if (role == Teams.Role.OWNER) {
+            lore.add("§7Neuer Boss wird §f" + state.successor() + "§7.");
+        }
+        String label = team.getTeamColor() + team.getTeamName();
+        inventory.setItem(SLOT_INFO, Items.named(dissolve ? Material.TNT : Material.DARK_OAK_DOOR,
+                (dissolve ? "§fWillst du " + label + " §fwirklich auflösen?" : "§fWillst du " + label + " §fwirklich verlassen?"), lore));
+        set(20, Items.named(Material.RED_CONCRETE, dissolve ? "§c§lJa, auflösen" : "§c§lJa, verlassen", List.of()), () -> act(this::leave));
+        set(24, Items.named(Material.LIME_CONCRETE, "§a§lNein, zurück", List.of()), () -> backTo(Tab.OVERVIEW));
     }
 
     private void renderOverview(TeamCacheObject team, Teams.Role role) {
@@ -1039,12 +1060,40 @@ public final class TeamView implements InventoryHolder {
     private Feedback leave() {
         TeamCacheObject team = team();
         if (team == null) return Feedback.fail("Dein Team gibt es nicht mehr.");
-        if (Teams.role(team, viewer.getUniqueId()) == Teams.Role.OWNER) return Feedback.fail("Als Boss kannst du das Team nicht verlassen.");
+        if (Teams.role(team, viewer.getUniqueId()) == Teams.Role.OWNER) return ownerLeaves(team);
         CacheHandler.getInstance().removePlayerFromTeam(viewer, team);
         return Feedback.ok("Du hast das Team " + team.getTeamColor() + team.getTeamName() + " §fverlassen.", () -> {
             viewer.closeInventory();
             if (viewer.isOnline()) JailHandler.refreshPlayerName(viewer, CacheHandler.getInstance().getPlayerInCache(viewer));
             Teams.notifyTeam(teamID, teamInfo() + "§f" + viewer.getName() + " hat das Team verlassen.");
+        });
+    }
+
+
+    // worker thread: the boss leaves, the next vice takes over, or the team is dissolved
+    private Feedback ownerLeaves(TeamCacheObject team) {
+        String label = team.getTeamColor() + team.getTeamName();
+        Teams.Handover handover = Teams.ownerLeaves(team, viewer.getUniqueId());
+        if (handover == null) return Feedback.fail("Das ging gerade nicht, versuch es gleich nochmal.");
+        if (handover.dissolved()) {
+            return Feedback.ok("Das Team " + label + " §fist aufgelöst." + (handover.paid() > 0
+                    ? " §7Aus der Kasse: §a+" + Items.format(handover.paid()) + " Schilling §8(Steuer " + Items.format(handover.tax()) + ")" : ""), () -> {
+                viewer.closeInventory();
+                if (viewer.isOnline()) JailHandler.refreshPlayerName(viewer, CacheHandler.getInstance().getPlayerInCache(viewer));
+                broadcast("§7Das Team " + label + " §7wurde aufgelöst.");
+            });
+        }
+        UUID newOwner = handover.newOwner();
+        return Feedback.ok("Du hast das Team " + label + " §fverlassen. §7Neuer Boss: §f" + handover.newOwnerName(), () -> {
+            viewer.closeInventory();
+            if (viewer.isOnline()) JailHandler.refreshPlayerName(viewer, CacheHandler.getInstance().getPlayerInCache(viewer));
+            broadcast("§7♛ §f" + handover.newOwnerName() + " §7ist jetzt Boss von " + label + " §8(" + viewer.getName() + " hat das Team verlassen)");
+            Player boss = newOwner == null ? null : Bukkit.getPlayer(newOwner);
+            if (boss != null) {
+                boss.sendMessage(teamInfo() + "§aDu bist jetzt der Boss eures Teams.");
+                boss.playSound(boss.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 0.8f, 1f);
+                JailHandler.refreshPlayerName(boss, CacheHandler.getInstance().getPlayerInCache(boss));
+            }
         });
     }
 

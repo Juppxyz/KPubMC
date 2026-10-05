@@ -62,6 +62,11 @@ public class ChunkCache {
         return count;
     }
 
+    /** A dissolved team: its claims are gone (the database removed them with the team). */
+    public void forgetTeam(@NotNull String teamID) {
+        chunkCache.values().removeIf(claim -> teamID.equals(claim.getTeamID()));
+    }
+
     /** After Teams.claim wrote the claim to the database. */
     public void claimed(@NotNull String teamID, @NotNull String worldName, int x, int z) {
         chunkCache.put(new ChunkKey(worldName, x, z), new ChunkCacheObject(teamID));

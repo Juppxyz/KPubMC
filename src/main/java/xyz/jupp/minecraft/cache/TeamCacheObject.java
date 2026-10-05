@@ -26,7 +26,7 @@ public class TeamCacheObject {
 
 
     // roles
-    private final String            teamOwner;
+    private volatile String         teamOwner;
     private final List<String>      teamVices = new CopyOnWriteArrayList<>();
 
     TeamCacheObject(@NotNull TeamData data) {
@@ -77,6 +77,14 @@ public class TeamCacheObject {
         String newRole = isVice ? "vice" : "member";
         TeamRepository.setMemberRole(teamID, uuid, newRole);
         return newRole;
+    }
+
+    // the database has it already (Teams.ownerLeaves): the next one is boss, the old boss is out
+    public synchronized void ownerChanged(@NotNull UUID newOwner, @NotNull UUID oldOwner) {
+        this.teamOwner = newOwner.toString();
+        teamVices.remove(newOwner.toString());
+        membersList.removeIf(member -> member.uuid().equals(oldOwner));
+        membersList.replaceAll(member -> member.uuid().equals(newOwner) ? new TeamMember(member.uuid(), "owner", member.nickname()) : member);
     }
 
     // points and level in one statement, the cache follows only when it went through

@@ -225,6 +225,14 @@ public final class Relations {
         }
     }
 
+    /** A dissolved team: its partnerships, wars and requests are gone (the database removed them with the team). */
+    public static void forgetTeam(@NotNull String teamID) {
+        synchronized (LOCK) {
+            relations.keySet().removeIf(pair -> pair.a().equals(teamID) || pair.b().equals(teamID));
+            requests.keySet().removeIf(key -> key.from().equals(teamID) || key.to().equals(teamID));
+        }
+    }
+
     /** After a kill between two teams: a war between them goes on. True if they are at war. */
     public static boolean warKill(@NotNull String killerTeam, @NotNull String victimTeam) {
         synchronized (LOCK) {

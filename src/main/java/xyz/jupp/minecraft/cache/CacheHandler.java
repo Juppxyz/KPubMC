@@ -121,6 +121,11 @@ public class CacheHandler {
     }
 
 
+    /** A dissolved team: out of the team cache for good. */
+    public void forgetTeam(@NotNull String teamID) {
+        TeamCache.forget(teamID);
+    }
+
     /** Every team in the cache (all are loaded at startup). */
     public java.util.Collection<TeamCacheObject> getAllTeams() {
         return TeamCache.all();
