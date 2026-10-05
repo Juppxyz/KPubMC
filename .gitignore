@@ -125,3 +125,6 @@ __pycache__/
 
 # Claude Code agent worktrees
 .claude/worktrees/
+
+# Produktions-Secrets
+deploy/.env

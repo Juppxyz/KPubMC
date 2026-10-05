@@ -1,0 +1,138 @@
+# KPubMC Produktions-Stack (Hetzner EX-44)
+#
+# Nach aussen offen ist nur 25565/tcp (Minecraft). BlueMap ist NICHT veroeffentlicht,
+# sondern nur ueber den Cloudflare Tunnel (cloudflared -> mc:8100) erreichbar.
+# PostgreSQL haengt in einem internen Netz ohne Internetzugang.
+#
+# Start:  docker compose up -d
+# Konsole: docker compose exec mc rcon-cli
+
+name: kpubmc
+
+x-hardening: &hardening
+  security_opt:
+    - no-new-privileges:true
+  restart: unless-stopped
+  logging:
+    driver: local
+    options:
+      max-size: "20m"
+      max-file: "5"
+
+services:
+  mc:
+    <<: *hardening
+    image: itzg/minecraft-server:java25
+    container_name: kpubmc-mc
+    user: "${MC_UID}:${MC_GID}"
+    cap_drop: [ALL]
+    stop_grace_period: 2m
+    tty: true
+    stdin_open: true
+    environment:
+      EULA: "TRUE"
+      TYPE: PAPER
+      VERSION: "${MC_VERSION}"
+      TZ: "${TZ}"
+      MEMORY: "${MC_MEMORY}"
+      USE_AIKAR_FLAGS: "true"
+      ONLINE_MODE: "TRUE"
+      ENFORCE_SECURE_PROFILE: "TRUE"
+      ENABLE_QUERY: "FALSE"
+      ENABLE_RCON: "TRUE"
+      RCON_PASSWORD: "${RCON_PASSWORD}"
+      CREATE_CONSOLE_IN_PIPE: "true"
+      STOP_DURATION: "60"
+      # BlueMap automatisch von Modrinth; eigene Plugins liegen in ./plugins (read-only gemountet)
+      MODRINTH_PROJECTS: "bluemap"
+      KPUB_DATABASE_URL: "jdbc:postgresql://db:5432/${POSTGRES_DB}?user=${POSTGRES_USER}&password=${POSTGRES_PASSWORD}"
+    volumes:
+      - ./data/mc:/data
+      - ./plugins:/plugins:ro
+    ports:
+      - "25565:25565/tcp"
+    mem_limit: "${MC_MEM_LIMIT}"
+    pids_limit: 2048
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [public, db]
+
+  db:
+    <<: *hardening
+    image: postgres:17
+    container_name: kpubmc-db
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB}"
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      TZ: "${TZ}"
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    shm_size: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [db]
+
+  cloudflared:
+    <<: *hardening
+    image: cloudflare/cloudflared:latest
+    container_name: kpubmc-cloudflared
+    cap_drop: [ALL]
+    read_only: true
+    # http2 = nur TCP ausgehend; spart eine UDP-Regel in der zustandslosen Robot-Firewall
+    command: tunnel --no-autoupdate --protocol http2 run
+    environment:
+      TUNNEL_TOKEN: "${TUNNEL_TOKEN}"
+    networks: [public]
+
+  mc-backup:
+    <<: *hardening
+    image: itzg/mc-backup:latest
+    container_name: kpubmc-mc-backup
+    environment:
+      TZ: "${TZ}"
+      BACKUP_METHOD: tar
+      BACKUP_INTERVAL: "6h"
+      INITIAL_DELAY: "5m"
+      PRUNE_BACKUPS_DAYS: "7"
+      RCON_HOST: mc
+      RCON_PASSWORD: "${RCON_PASSWORD}"
+      # BlueMap-Kacheln lassen sich neu rendern und sind riesig
+      EXCLUDES: "*.jar,cache,logs,bluemap"
+    volumes:
+      - ./data/mc:/data:ro
+      - ./backups/mc:/backups
+    depends_on: [mc]
+    networks: [public]
+
+  db-backup:
+    <<: *hardening
+    image: prodrigestivill/postgres-backup-local:17
+    container_name: kpubmc-db-backup
+    environment:
+      TZ: "${TZ}"
+      POSTGRES_HOST: db
+      POSTGRES_DB: "${POSTGRES_DB}"
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      SCHEDULE: "@every 6h"
+      BACKUP_KEEP_DAYS: "7"
+      BACKUP_KEEP_WEEKS: "4"
+      BACKUP_KEEP_MONTHS: "3"
+    volumes:
+      - ./backups/db:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [db]
+
+networks:
+  public: {}
+  db:
+    internal: true
