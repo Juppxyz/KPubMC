@@ -370,7 +370,9 @@ public final class ShopView implements InventoryHolder {
         inventory.setItem(SLOT_GOOD, good);
 
         // buy row
-        inventory.setItem(SLOT_BUY_LABEL, named(Material.LIME_CONCRETE, "§a§lKaufen", List.of()));
+        inventory.setItem(SLOT_BUY_LABEL, item.buyable()
+                ? named(Material.LIME_CONCRETE, "§a§lKaufen", List.of())
+                : named(Material.GRAY_CONCRETE, "§7§lKaufen", List.of()));
         if (!item.buyable()) {
             inventory.setItem(CENTER_BUY_SLOT, named(Material.GRAY_STAINED_GLASS_PANE, "§7Hier nicht kaufbar",
                     item.description() != null ? List.of("§7" + item.description()) : List.of()));
@@ -401,7 +403,9 @@ public final class ShopView implements InventoryHolder {
         }
 
         // sell row
-        inventory.setItem(SLOT_SELL_LABEL, named(Material.RED_CONCRETE, "§c§lVerkaufen", List.of("§7Nur unbenannte Items", "§7aus deinem Inventar.")));
+        inventory.setItem(SLOT_SELL_LABEL, item.sellable()
+                ? named(Material.RED_CONCRETE, "§c§lVerkaufen", List.of("§7Nur unbenannte Items", "§7aus deinem Inventar."))
+                : named(Material.GRAY_CONCRETE, "§7§lVerkaufen", List.of()));
         if (!item.sellable()) {
             inventory.setItem(SELL_SLOTS[0], named(Material.GRAY_STAINED_GLASS_PANE, "§7Wird nicht angekauft", List.of()));
             return;
@@ -432,16 +436,18 @@ public final class ShopView implements InventoryHolder {
                 || item.material().getMaxStackSize() == 1 || isSpawnEgg(item.material());
     }
 
-    // 1 Paket, 1 Stack and Max (what fits into the inventory) without duplicates; single items only 1 Paket
+    // 1 Paket, 1 Stack and Max (what fits into the inventory and the hourly limit) without duplicates; single items only 1 Paket
     private List<BuyOption> buyOptions(MarketItem item) {
         int fitting = Math.min(64, freeSpace(viewer, item.material()) / item.amount());
         if (fitting < 1) return List.of();
+        // an option above the hourly limit could never be bought
+        int most = Math.min(fitting, Market.hourlyLimit(item));
         List<BuyOption> options = new ArrayList<>();
         options.add(new BuyOption("1 Paket", 1));
         if (isSingleBuy(item)) return options;
         int stack = Math.max(1, item.material().getMaxStackSize() / item.amount());
-        if (stack > 1 && stack <= fitting) options.add(new BuyOption("1 Stack", stack));
-        if (fitting > options.getLast().bundles()) options.add(new BuyOption("Max", fitting));
+        if (stack > 1 && stack <= most) options.add(new BuyOption("1 Stack", stack));
+        if (most > options.getLast().bundles()) options.add(new BuyOption("Max", most));
         return options;
     }
 
@@ -827,15 +833,22 @@ public final class ShopView implements InventoryHolder {
 
     /* helpers */
 
-    // worker thread: the hourly limit was reached; how many and when it frees up again
+    // worker thread: the purchase would go over the hourly limit; how many are still allowed, or when it frees up again
     static String limitMessage(UUID player, MarketItem item) {
+        int limit = Market.hourlyLimitItems(item);
+        int left;
         int wait;
         try {
-            wait = MarketRepository.limitWaitMinutes(player, item.material());
+            left = limit - MarketRepository.boughtLastHour(player, item.material());
+            wait = left > 0 ? 0 : MarketRepository.limitWaitMinutes(player, item.material());
         } catch (RuntimeException e) {
+            left = 0;
             wait = 60;
         }
-        return "§fMehr davon gibt es für dich diese Stunde nicht §8(höchstens " + Market.hourlyLimitItems(item)
+        if (left > 0) {
+            return "§fDiese Stunde kannst du davon nur noch §e" + left + " Stück §fkaufen §8(höchstens " + limit + " pro Stunde)§f.";
+        }
+        return "§fMehr davon gibt es für dich diese Stunde nicht §8(höchstens " + limit
                 + " Stück pro Stunde)§f. Wieder in etwa §e" + wait + " Min§f.";
     }
 

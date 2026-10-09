@@ -237,11 +237,20 @@ public final class MarketRepository {
         return trade;
     }
 
+    private static final String BOUGHT_LAST_HOUR = "SELECT COALESCE(SUM(quantity), 0) FROM market_transactions WHERE player_uuid = ? AND material = ? "
+            + "AND kind = 'BUY' AND moves_money AND created_at > now() - interval '1 hour'";
+
     /** Pieces the player bought of this material within the last hour (shop, random item, Hondo; not Hondo's exchanges). */
     static int boughtLastHour(Connection connection, UUID player, Material material) throws SQLException {
-        Long bought = Database.queryOne(connection, "SELECT COALESCE(SUM(quantity), 0) FROM market_transactions WHERE player_uuid = ? AND material = ? "
-                        + "AND kind = 'BUY' AND moves_money AND created_at > now() - interval '1 hour'",
-                row -> row.getLong(1), player, material.name());
+        return pieces(Database.queryOne(connection, BOUGHT_LAST_HOUR, row -> row.getLong(1), player, material.name()));
+    }
+
+    /** The same outside a trade, for the messages. */
+    public static int boughtLastHour(@NotNull UUID player, @NotNull Material material) {
+        return pieces(Database.queryOne(BOUGHT_LAST_HOUR, row -> row.getLong(1), player, material.name()));
+    }
+
+    private static int pieces(@Nullable Long bought) {
         return bought == null ? 0 : (int) Math.min(Integer.MAX_VALUE, bought);
     }
 
