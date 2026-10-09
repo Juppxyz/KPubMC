@@ -44,7 +44,7 @@ public class TeamAreaListener implements Listener {
     }
 
     // the player behind the damage: melee, projectiles, TNT, crystals and potion clouds (Paper's damage source), a tamed animal's owner
-    private static @Nullable Player responsiblePlayer(EntityDamageByEntityEvent event) {
+    static @Nullable Player responsiblePlayer(EntityDamageByEntityEvent event) {
         if (event.getDamager() instanceof Player player) return player;
         if (event.getDamageSource().getCausingEntity() instanceof Player player) return player;
         if (event.getDamager() instanceof Projectile projectile && projectile.getShooter() instanceof Player player) return player;

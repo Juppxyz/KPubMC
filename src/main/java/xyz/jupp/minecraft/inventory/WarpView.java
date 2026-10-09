@@ -25,6 +25,7 @@ import xyz.jupp.minecraft.team.Relations;
 import xyz.jupp.minecraft.team.TeamCreateView;
 import xyz.jupp.minecraft.team.TeamWarps;
 import xyz.jupp.minecraft.team.Teams;
+import xyz.jupp.minecraft.utils.CombatLock;
 import xyz.jupp.minecraft.utils.PlayerTeleport;
 import xyz.jupp.minecraft.utils.Tasks;
 import xyz.jupp.minecraft.utils.Text;
@@ -291,6 +292,7 @@ public final class WarpView implements InventoryHolder {
 
     // pays the teleport on a worker, then teleports after the usual 5 s; moving or leaving gives the money back
     private void teleport(Supplier<Location> target, String what) {
+        if (CombatLock.denies(viewer)) return;
         busy = true;
         UUID uuid = viewer.getUniqueId();
         Tasks.async(() -> {

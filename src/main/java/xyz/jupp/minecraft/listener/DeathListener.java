@@ -46,7 +46,7 @@ public class DeathListener implements Listener {
     // the listener is created in onEnable, so the plugin instance exists here
     private static final KeepInventoryItem KEEP_INVENTORY_ITEM = new KeepInventoryItem();
 
-    private static boolean isPlayerInArena(Player player) {
+    static boolean isPlayerInArena(Player player) {
         Location location = player.getLocation();
         if (!location.getWorld().getName().equals(ARENA_WORLD)) {
             return false;

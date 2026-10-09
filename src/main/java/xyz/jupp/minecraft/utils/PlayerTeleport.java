@@ -25,6 +25,10 @@ public class PlayerTeleport {
             Tasks.sync(() -> teleportAfter(player, targetLocation, onAbort, onDone));
             return;
         }
+        if (CombatLock.denies(player)) {
+            abort(onAbort);
+            return;
+        }
 
         player.sendMessage(Main.getChatPrefix() + "§6Nicht bewegen, du wirst in 5 Sekunden teleportiert..");
         Location initialLocation = player.getLocation();
@@ -37,6 +41,13 @@ public class PlayerTeleport {
             Location currentLocation = player.getLocation();
             // after a world change the distance check used to throw, nothing else happened
             if (currentLocation.getWorld() != initialLocation.getWorld()) {
+                abort(onAbort);
+                return;
+            }
+            // a hit during the countdown that did not move the player (no knockback)
+            if (CombatLock.isInCombat(player)) {
+                player.sendMessage(Main.getChatPrefix() + "§cDu bist in einen Kampf geraten, der Teleport wurde abgebrochen.");
+                player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f,1f);
                 abort(onAbort);
                 return;
             }
