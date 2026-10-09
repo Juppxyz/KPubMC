@@ -82,6 +82,7 @@ public final class Main extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new SpawnListener(), this);
         Bukkit.getPluginManager().registerEvents(new TeamAreaListener(), this);
         Bukkit.getPluginManager().registerEvents(new AntiBugListener(), this);
+        Bukkit.getPluginManager().registerEvents(new CombatListener(), this);
 
         // afk
         Bukkit.getPluginManager().registerEvents(new AfkListener(), this);
@@ -90,6 +91,7 @@ public final class Main extends JavaPlugin {
     private void registerTasks() {
         Logger.console("register tasks..");
         new PlayerUpdaterTask().startTask();
+        CombatLock.tickTask().runTaskTimer(this, 20L, 20L);
     }
 
 

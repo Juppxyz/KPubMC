@@ -10,6 +10,7 @@ import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.PlayerCacheObject;
 import xyz.jupp.minecraft.cache.TeamCacheObject;
+import xyz.jupp.minecraft.utils.CombatLock;
 
 public class EnderchestCommand implements CommandExecutor {
 
@@ -17,6 +18,7 @@ public class EnderchestCommand implements CommandExecutor {
     public boolean onCommand(@NotNull CommandSender commandSender, @NotNull Command command, @NotNull String s, @NotNull String @NotNull [] strings) {
 
         if (commandSender instanceof Player player) {
+            if (CombatLock.denies(player)) return false;
             PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
             TeamCacheObject team = playerCacheObject.getTeamCacheObject();
             if (playerCacheObject.getTeamID() == null || team == null || team.getLevel() < 3) {

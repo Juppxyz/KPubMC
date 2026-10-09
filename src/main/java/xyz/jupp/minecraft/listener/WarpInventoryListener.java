@@ -20,6 +20,7 @@ import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.inventory.MainThread;
 import xyz.jupp.minecraft.inventory.Menu;
 import xyz.jupp.minecraft.inventory.WarpInventory;
+import xyz.jupp.minecraft.utils.CombatLock;
 import xyz.jupp.minecraft.utils.PlayerTeleport;
 import xyz.jupp.minecraft.utils.Tasks;
 import xyz.jupp.minecraft.utils.Text;
@@ -136,6 +137,8 @@ public class WarpInventoryListener implements Listener {
     }
 
     private static void teleportToOwnWarp(Player player) {
+        // the menu may have been open before the fight started; checked before the price is paid
+        if (CombatLock.denies(player)) return;
         WarpCacheObject ownWarpObject = WarpCache.getInstance().getWarp(player.getUniqueId());
         if (ownWarpObject == null) {
             player.sendMessage(Main.getChatPrefix() + "§cDu hast aktuell keinen gültigen Warp gesetzt.");
@@ -167,6 +170,7 @@ public class WarpInventoryListener implements Listener {
     private static void teleportToWarp(Player player, Material clickedType, ItemMeta clickedMeta) {
         boolean isWarpHead = clickedType == Material.PLAYER_HEAD && clickedMeta instanceof SkullMeta;
         String ownerUuidStr = isWarpHead ? clickedMeta.getPersistentDataContainer().get(WARP_OWNER_KEY, PersistentDataType.STRING) : null;
+        if (CombatLock.denies(player)) return;
 
         Tasks.async(() -> {
             if (PlayerRepository.getMoney(player) < 200) {

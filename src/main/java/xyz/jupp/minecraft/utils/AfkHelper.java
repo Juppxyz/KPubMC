@@ -14,7 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class AfkHelper {
 
-    private static final long AFK_SECONDS = 600;
+    private static final long AFK_SECONDS = 30 * 60;
     private static final long WARN_SECONDS = 30;
     private static final long KICK_AFTER_MS = AFK_SECONDS * 1000L;
     private static final long WARN_AT_MS = (AFK_SECONDS - WARN_SECONDS) * 1000L;

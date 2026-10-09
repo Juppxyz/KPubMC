@@ -7,12 +7,6 @@ import xyz.jupp.minecraft.cache.CacheHandler;
 
 public class PlayerUpdaterTask {
 
-    // 72 empty runs of 15 minutes, the shutdown follows in the 73rd empty run (about 18 h)
-    private static final int MAX_EMPTY_RUNS = 72;
-
-    // only used on the main thread
-    private int serverEmptyCheck = 0;
-
     public boolean startTask() {
         Bukkit.getScheduler().runTaskTimerAsynchronously(Main.getInstance(), this::update, 0, 20L * 900);
         return false;
@@ -29,16 +23,6 @@ public class PlayerUpdaterTask {
 
     private void updateOnMainThread() {
         TabListUtil.updateTabForAll();
-
-        if (Bukkit.getOnlinePlayers().isEmpty()) {
-            if (serverEmptyCheck >= MAX_EMPTY_RUNS) {
-                Bukkit.shutdown();
-            }
-            serverEmptyCheck++;
-            Logger.console("increased emptyServerCheck to " + serverEmptyCheck);
-            return;
-        }
-        serverEmptyCheck = 0;
     }
 
 }
