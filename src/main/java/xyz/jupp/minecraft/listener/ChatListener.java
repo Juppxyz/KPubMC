@@ -9,6 +9,7 @@ import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import xyz.jupp.minecraft.team.Teams;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.PlayerCacheObject;
@@ -38,8 +39,8 @@ public class ChatListener implements Listener {
                 return;
             }
 
-            if (team.getLevel() < 4) {
-                deny(event, player, "§fFür den TeamChat muss dein Team mindestens Level §a4 §fsein.");
+            if (team.getLevel() < Teams.CHAT_LEVEL) {
+                deny(event, player, "§fFür den TeamChat muss dein Team mindestens Level §a" + Teams.CHAT_LEVEL + " §fsein.");
                 return;
             }
 

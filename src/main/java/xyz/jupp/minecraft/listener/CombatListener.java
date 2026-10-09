@@ -2,8 +2,6 @@ package xyz.jupp.minecraft.listener;
 
 import org.bukkit.GameMode;
 import org.bukkit.entity.Player;
-import org.bukkit.entity.Projectile;
-import org.bukkit.entity.Tameable;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -11,7 +9,6 @@ import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.PlayerQuitEvent;
-import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.utils.CombatLock;
 import xyz.jupp.minecraft.utils.Text;
@@ -26,26 +23,17 @@ public class CombatListener implements Listener {
     // killed for leaving in combat, while the death event runs; main thread only
     private final Set<UUID> loggingOut = new HashSet<>();
 
-    // the player behind the damage: melee, projectiles, TNT, crystals and potions (Paper's damage source), a tamed animal's owner
-    private static @Nullable Player responsiblePlayer(EntityDamageByEntityEvent event) {
-        if (event.getDamager() instanceof Player player) return player;
-        if (event.getDamageSource().getCausingEntity() instanceof Player player) return player;
-        if (event.getDamager() instanceof Projectile projectile && projectile.getShooter() instanceof Player player) return player;
-        if (event.getDamager() instanceof Tameable tameable && tameable.getOwner() instanceof Player player) return player;
-        return null;
-    }
-
     // admins in creative or spectator do not fight, the arena keeps the inventory anyway
     private static boolean canFight(Player player) {
         GameMode mode = player.getGameMode();
         return (mode == GameMode.SURVIVAL || mode == GameMode.ADVENTURE) && !DeathListener.isPlayerInArena(player);
     }
 
-    // MONITOR: only a hit that really lands starts a fight, not one a protected team area cancelled
+    // MONITOR: only a hit that really lands starts a fight, not one a protected team area or a partnership cancelled
     @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
     public void onPlayerHit(EntityDamageByEntityEvent event) {
         if (!(event.getEntity() instanceof Player victim)) return;
-        Player attacker = responsiblePlayer(event);
+        Player attacker = TeamAreaListener.responsiblePlayer(event);
         // own arrows or TNT are no fight, neither are snowballs and eggs (no damage)
         if (attacker == null || attacker == victim || !attacker.isOnline() || event.getDamage() <= 0) return;
         if (!canFight(victim) || !canFight(attacker)) return;

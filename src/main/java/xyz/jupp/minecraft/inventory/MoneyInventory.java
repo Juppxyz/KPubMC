@@ -8,8 +8,9 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.SkullMeta;
 import org.jetbrains.annotations.NotNull;
+import xyz.jupp.minecraft.economy.Taxes;
+import xyz.jupp.minecraft.economy.TaxClass;
 import xyz.jupp.minecraft.Main;
-import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.utils.Tasks;
 import xyz.jupp.minecraft.utils.Text;
@@ -83,7 +84,7 @@ public class MoneyInventory {
         inventory.setItem(49, createItemStack("§a+ 1", Material.LIME_DYE));
         inventory.setItem(50, createItemStack("§a+ 10", Material.LIME_WOOL));
         inventory.setItem(51, createItemStack("§a+ 100", Material.LIME_WOOL));
-        inventory.setItem(52, createItemStack("§aAbheben §8(§6-" + Math.round(ConfigManager.getManager().getTradeTax()*100) + "%§8)", Material.NETHER_STAR));
+        inventory.setItem(52, createItemStack("§aAbheben §8(§6-" + Math.round(Taxes.rate(TaxClass.STANDARD) * 100) + "%§8)", Material.NETHER_STAR));
         inventory.setItem(53, createItemStack(closeInventoryName, Material.BARRIER));
         return inventory;
     }

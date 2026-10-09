@@ -6,6 +6,7 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
+import xyz.jupp.minecraft.utils.Npcs;
 import xyz.jupp.minecraft.utils.Text;
 
 // shared by the /create... commands, the ShopListener recognizes the NPCs by their custom name
@@ -13,7 +14,7 @@ final class NpcSpawner {
 
     private NpcSpawner() {}
 
-    // spawns an invulnerable NPC without AI, gravity and collision at the player's position
+    // spawns an invulnerable NPC without AI, gravity and collision at the player's position, it never despawns
     static <T extends LivingEntity> T spawn(@NotNull Player player, @NotNull EntityType type, @NotNull Class<T> entityClass,
                                             @NotNull String name, boolean nameVisible) {
         T npc = entityClass.cast(player.getWorld().spawnEntity(player.getLocation(), type));
@@ -23,6 +24,7 @@ final class NpcSpawner {
         npc.setAI(false);
         npc.setGravity(false);
         npc.setCollidable(false);
+        Npcs.keep(npc);
         return npc;
     }
 

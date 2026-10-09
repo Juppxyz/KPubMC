@@ -14,12 +14,14 @@ import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.TeamCacheObject;
+import xyz.jupp.minecraft.economy.HondoView;
 import xyz.jupp.minecraft.commands.SpecCommand;
 import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.utils.JailHandler;
 import xyz.jupp.minecraft.utils.LastSeen;
 import xyz.jupp.minecraft.utils.Locations;
 import xyz.jupp.minecraft.utils.TabListUtil;
+import xyz.jupp.minecraft.economy.Bank;
 import xyz.jupp.minecraft.utils.Tasks;
 import xyz.jupp.minecraft.utils.Text;
 
@@ -27,12 +29,23 @@ import java.util.UUID;
 
 public class JoinQuitListener implements Listener {
 
+    // without the player loaded, every step on the main thread would wait for the database: no login then
     @EventHandler
     public void onPreLogin(AsyncPlayerPreLoginEvent event) {
+        if (event.getLoginResult() != AsyncPlayerPreLoginEvent.Result.ALLOWED) return;
         UUID uuid = event.getUniqueId();
-        PlayerRepository.createIfAbsent(uuid);
-        if (event.getLoginResult() == AsyncPlayerPreLoginEvent.Result.ALLOWED) {
-            CacheHandler.getInstance().preloadPlayer(uuid);
+        boolean loaded;
+        try {
+            PlayerRepository.createIfAbsent(uuid);
+            PlayerRepository.touch(uuid);
+            loaded = CacheHandler.getInstance().preloadPlayer(uuid);
+        } catch (RuntimeException e) {
+            Main.getInstance().getSLF4JLogger().warn("Pre-login database access failed for {}: {}", uuid, e.getMessage());
+            loaded = false;
+        }
+        if (!loaded) {
+            event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
+                    Component.text("Die Datenbank ist gerade nicht erreichbar, bitte versuch es gleich nochmal."));
         }
     }
 
@@ -74,6 +87,10 @@ public class JoinQuitListener implements Listener {
 
         // jail handling, JailHandler.handleJoin can write to the database
         Tasks.async(() -> JailHandler.handleJoin(player));
+        // goods from a Hondo trade the player left during
+        HondoView.deliverPending(player);
+        // a loan due soon
+        Tasks.async(() -> Bank.remindAtJoin(player.getUniqueId()));
 
     }
 

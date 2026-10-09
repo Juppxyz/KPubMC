@@ -4,6 +4,7 @@ public enum AreaOptionsEnum {
 
     PVP,
     MOB_GRIEFING,
-    INTERACTION
+    INTERACTION,
+    ALARM
 
 }

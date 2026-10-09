@@ -13,11 +13,14 @@ import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
+import xyz.jupp.minecraft.team.Teams;
+import xyz.jupp.minecraft.team.Relations;
+import xyz.jupp.minecraft.economy.Taxes;
 import xyz.jupp.minecraft.Main;
+import xyz.jupp.minecraft.economy.Loans;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.PlayerCacheObject;
 import xyz.jupp.minecraft.cache.TeamCacheObject;
-import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.database.TeamRepository;
 import xyz.jupp.minecraft.items.KeepInventoryItem;
@@ -39,7 +42,6 @@ public class DeathListener implements Listener {
     private static final double ARENA_MAX_Y = 290.0D;
     private static final double ARENA_MIN_Z = 150218.0D;
     private static final double ARENA_MAX_Z = 150257.0D;
-    private final static int killCost = 250;
 
     // the listener is created in onEnable, so the plugin instance exists here
     private static final KeepInventoryItem KEEP_INVENTORY_ITEM = new KeepInventoryItem();
@@ -147,21 +149,17 @@ public class DeathListener implements Listener {
 
     // worker thread
     private static void chargeDeathTax(Player player) {
-        float deathTaxRate = ConfigManager.getManager().getDeathTax();
-        int money = PlayerRepository.getMoney(player);
+        Taxes.BalanceTax tax = Taxes.chargeDeathTax(player.getUniqueId());
 
         String message;
-        if (money <= 250) {
+        if (tax.tax() == 0) {
             message = Main.getChatPrefix() + "Dir wurde §ckeine §fTodes-Steuer berechnet.";
         } else {
-            int tax = Math.round(money * deathTaxRate);
-            PlayerRepository.addMoney(player, -tax);
-
             message = String.format(
                     "%sDir wurden §a%s §8(§2%.0f%%§8) §fals Todes-Steuer berechnet.",
                     Main.getChatPrefix(),
-                    Main.getCurrencyName(tax),
-                    deathTaxRate * 100
+                    Main.getCurrencyName(tax.tax()),
+                    Taxes.deathRate() * 100
             );
         }
         sync(() -> player.sendMessage(message));
@@ -184,6 +182,9 @@ public class DeathListener implements Listener {
             sync(() -> killer.sendMessage(Main.getChatPrefix() + "§cDu kannst keine Belohnung von deinem Teamteamkollegen eintreiben."));
             return;
         }
+        // catching a wanted enemy is a kill in a war as well
+        String victimTeamID = playerCacheObject.getTeamID();
+        if (killerTeamID != null && victimTeamID != null) Relations.warKill(killerTeamID, victimTeamID);
 
         boolean alreadyCollected = JailHandler.getAlreadyKilledPlayer().contains(player.getUniqueId());
         sync(() -> {
@@ -194,8 +195,9 @@ public class DeathListener implements Listener {
         });
         if (alreadyCollected) return;
 
-        PlayerRepository.addMoney(killer, 10000);
-        sync(() -> killer.sendMessage(Main.getChatPrefix() + "§a+" + Main.getCurrencyName(10000)));
+        int reward = Loans.bounty(player.getUniqueId());
+        if (reward > 0) PlayerRepository.addMoney(killer, reward);
+        sync(() -> killer.sendMessage(Main.getChatPrefix() + "§a+" + Main.getCurrencyName(reward)));
 
         if (killerTeamID != null) {
             TeamRepository.addTeamPoints(killerTeamID, 1000);
@@ -223,29 +225,24 @@ public class DeathListener implements Listener {
         TeamCacheObject playerTeam = playerCacheObject.getTeamCacheObject();
         if (killerTeam == null || playerTeam == null) return;
 
-        // a kill inside the own team only costs the points (the credit was always overwritten before)
-        if (!killerTeam.getTeamID().equals(playerTeam.getTeamID())) {
-            TeamRepository.addTeamPoints(killerTeam.getTeamID(), killCost);
-        }
-        // never below 0, returns the points before the kill
-        int playerTeamPoints = TeamRepository.withdrawTeamPointsFloored(playerTeam.getTeamID(), killCost);
-        int earnedPoints = killCost;
-        if (playerTeamPoints < killCost) {
-            earnedPoints = playerTeamPoints;
-            playerTeam.downgradeTeamLevel();
-        }
-
-        int points = earnedPoints;
+        // partners never fight: a death between them (TNT, a wolf, ...) moves nothing
+        if (Relations.partners(killerTeamID, playerTeamID)) return;
+        boolean ownTeam = killerTeamID.equals(playerTeamID);
+        // the dead member's team pays; without enough points it sells a level back; the killer's team gets what was paid
+        Teams.Penalty penalty = Teams.deathPenalty(playerTeam, ownTeam ? null : killerTeamID);
+        if (penalty == null) return;
+        // a kill keeps a war between the two teams going
+        String war = !ownTeam && Relations.warKill(killerTeamID, playerTeamID) ? " §8(Krieg)" : "";
         sync(() -> {
-            forEachOnlineTeamMember(killerTeamID, online ->
-                    online.sendMessage(Main.getChatPrefix() + "§a+" + points + " Team-Punkte §ffür den Kill an " + player.getDisplayName()));
+            if (!ownTeam) {
+                forEachOnlineTeamMember(killerTeamID, online ->
+                        online.sendMessage(Main.getChatPrefix() + "§a+" + penalty.taken() + " Team-Punkte §ffür den Kill an " + player.getDisplayName() + war));
+            }
             forEachOnlineTeamMember(playerTeamID, online -> {
-                online.sendMessage(Main.getChatPrefix() + "§c-" + points + " Team-Punkte §fwegen dem Tod durch " + killer.getDisplayName());
-                if (points < killCost) {
-                    online.sendMessage(Main.getChatPrefix() + "§cEuer Team wurde ein Level herunter gestuft!");
-                    online.sendMessage(Main.getChatPrefix() + "§fAchtet in Zukunft immer auf genügend Team-Punkte!");
-                    online.sendMessage(" ");
-                    online.sendMessage("§f§oEure Optionen im Gebiets-Manager wurden zurückgesetzt.");
+                online.sendMessage(Main.getChatPrefix() + "§c-" + penalty.taken() + " Team-Punkte §fwegen dem Tod durch " + killer.getDisplayName() + war);
+                if (penalty.levelsLost() > 0) {
+                    online.sendMessage(Main.getChatPrefix() + "§cDie Punkte reichten nicht: euer Team ist jetzt Level " + penalty.newLevel()
+                            + "§c. §8(Die Stufe brachte " + penalty.refunded() + " Punkte zurück.)");
                 }
             });
         });

@@ -148,7 +148,7 @@ public class CreateLocalShopListener implements Listener {
             }
 
             // pay first, so the goods are only taken out of the chest for a covered purchase
-            if (!PlayerRepository.tryWithdrawMoney(player, sellPrice)) {
+            if (!PlayerRepository.tryWithdrawMoney(player.getUniqueId(), sellPrice)) {
                 notifyBuyer(player, "§cDein Konto ist aktuell leider nicht ausreichend gedeckt.");
                 return;
             }
@@ -171,7 +171,8 @@ public class CreateLocalShopListener implements Listener {
         // by uuid, the shop owner may be offline
         Tasks.async(() -> PlayerRepository.addMoney(offlinePlayer.getUniqueId(), sellPrice));
 
-        player.getInventory().addItem(new ItemStack(shopItem, amount));
+        player.getInventory().addItem(new ItemStack(shopItem, amount)).values()
+                .forEach(rest -> player.getWorld().dropItemNaturally(player.getLocation(), rest));
         Logger.console(String.format("%s bought %s(%d) from %s", player.getName(), shopItem.name(), amount, offlinePlayer.getName()));
 
         player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_TRADE, 1f, 1f);
@@ -302,26 +303,25 @@ public class CreateLocalShopListener implements Listener {
         return firstMaterial;
     }
 
-    // main thread only
+    // main thread only: false (and nothing removed) if the chest has too few; before, the rest was taken and lost
     private static boolean removeItems(Chest chest, @Nullable Material material, int amountToRemove) {
         Inventory inventory = chest.getInventory();
-        int remainingAmount = amountToRemove;
-        for (ItemStack item : inventory.getContents()) {
-            if (item != null && item.getType() == material) {
-                int itemAmount = item.getAmount();
-                if (itemAmount <= remainingAmount) {
-                    remainingAmount -= itemAmount;
-                    inventory.remove(item);
-                } else {
-                    item.setAmount(itemAmount - remainingAmount);
-                    remainingAmount = 0;
-                }
-                if (remainingAmount <= 0) {
-                    return true;
-                }
-            }
+        ItemStack[] contents = inventory.getContents();
+        int available = 0;
+        for (ItemStack item : contents) {
+            if (item != null && item.getType() == material) available += item.getAmount();
         }
-        return remainingAmount <= 0;
+        if (material == null || available < amountToRemove) return false;
+        int remainingAmount = amountToRemove;
+        for (ItemStack item : contents) {
+            if (remainingAmount <= 0) break;
+            if (item == null || item.getType() != material) continue;
+            int part = Math.min(remainingAmount, item.getAmount());
+            item.setAmount(item.getAmount() - part);
+            remainingAmount -= part;
+        }
+        inventory.setContents(contents);
+        return true;
     }
 
 }

@@ -32,6 +32,7 @@ public class HelpCommand implements CommandExecutor {
         player.sendMessage("§8§l» §a/invites §8- §fÄndert, ob du offen für Team-Anfragen bist.");
         player.sendMessage("§8§l» §a/slimechunk §8- §fÜberprüft ob du in einem SlimeChunk bist.");
         player.sendMessage("§8§l» §a/money §8- §fRuft dein Konto auf.");
+        player.sendMessage("§8§l» §a/staatskasse §8- §fZeigt Stand und Einnahmen der Staatskasse.");
         player.sendMessage("§8§l» §a/ranking §8- §fZeigt das Team Ranking an.");
         player.sendMessage("§8§l» §a/wanted §8- §fZeigt aktuell gesuchte Spieler an.");
         player.sendMessage("§8§l» §a/sit §8- §fErmöglicht es dir sich zu setzen.");
@@ -42,7 +43,8 @@ public class HelpCommand implements CommandExecutor {
         if (PermissionsUtil.isPlayerAdmin(player)) {
             player.sendMessage(" ");
             player.sendMessage("§cAdmin§8» ");
-            player.sendMessage("§8§l» §a/config §8- §fLade die Config + Shop neu. ");
+            player.sendMessage("§8§l» §a/config §8- §fLade die Config neu. ");
+            player.sendMessage("§8§l» §a/shopadmin §8- §fVerwaltet Katalog, Preise und Tagesangebote.");
             player.sendMessage("§8§l» §a/spec §8- §fSei Undercover!");
             player.sendMessage("§8§l» §a/hover <Text ..> §8- §fErstellt einen neuen HoverText");
             player.sendMessage("§8§l» §a/createshop §8- §fErstellt einen neuen Villager Händler.");

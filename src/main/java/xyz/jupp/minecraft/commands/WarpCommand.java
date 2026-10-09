@@ -8,7 +8,7 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
-import xyz.jupp.minecraft.inventory.WarpInventory;
+import xyz.jupp.minecraft.inventory.WarpView;
 import xyz.jupp.minecraft.utils.CombatLock;
 
 public class WarpCommand implements CommandExecutor {
@@ -23,7 +23,7 @@ public class WarpCommand implements CommandExecutor {
                 return false;
             }
             if (CombatLock.denies(player)) return false;
-            WarpInventory.openInventory(player, 1);
+            WarpView.open(player);
         }
         return false;
     }

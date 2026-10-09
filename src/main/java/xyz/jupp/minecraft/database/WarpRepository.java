@@ -1,7 +1,6 @@
 package xyz.jupp.minecraft.database;
 
 import org.bukkit.Location;
-import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.utils.Logger;
 
@@ -23,26 +22,27 @@ public final class WarpRepository {
                 row.getObject("uuid", UUID.class), row.getString("world"), row.getDouble("x"), row.getDouble("y"), row.getDouble("z")));
     }
 
-    /* creates the warp only if the player has none yet */
-    public static void createNewPlayerWarp(@NotNull Player player) {
-        Location loc = player.getLocation();
+    /** Creates the warp only if the player has none yet; false if there was one already. */
+    public static boolean create(@NotNull UUID owner, @NotNull Location loc) {
         int created = Database.update("INSERT INTO warps (uuid, world, x, y, z) VALUES (?, ?, ?, ?, ?) ON CONFLICT (uuid) DO NOTHING",
-                player.getUniqueId(), loc.getWorld().getName(), loc.getX(), loc.getY(), loc.getZ());
-        if (created == 0) return;
-        Logger.console("created player warp for %s on %d,%d,%d (%s)".formatted(player.getName(), loc.getBlockX(), loc.getBlockY(), loc.getBlockZ(), loc.getWorld().getName()));
+                owner, loc.getWorld().getName(), loc.getX(), loc.getY(), loc.getZ());
+        if (created == 0) return false;
+        Logger.console("created player warp for %s on %d,%d,%d (%s)".formatted(owner, loc.getBlockX(), loc.getBlockY(), loc.getBlockZ(), loc.getWorld().getName()));
+        return true;
     }
 
-    public static void updatePlayerWarp(@NotNull Player player) {
-        Location loc = player.getLocation();
+    /** Moves an existing warp; false if the player has none. */
+    public static boolean update(@NotNull UUID owner, @NotNull Location loc) {
         int updated = Database.update("UPDATE warps SET world = ?, x = ?, y = ?, z = ? WHERE uuid = ?",
-                loc.getWorld().getName(), loc.getX(), loc.getY(), loc.getZ(), player.getUniqueId());
-        if (updated == 0) return;
-        Logger.console("updated player warp for %s on %d,%d,%d (%s)".formatted(player.getName(), loc.getBlockX(), loc.getBlockY(), loc.getBlockZ(), loc.getWorld().getName()));
+                loc.getWorld().getName(), loc.getX(), loc.getY(), loc.getZ(), owner);
+        if (updated == 0) return false;
+        Logger.console("updated player warp for %s on %d,%d,%d (%s)".formatted(owner, loc.getBlockX(), loc.getBlockY(), loc.getBlockZ(), loc.getWorld().getName()));
+        return true;
     }
 
-    public static void removePlayerWarp(@NotNull Player player) {
-        Database.update("DELETE FROM warps WHERE uuid = ?", player.getUniqueId());
-        Logger.console("deleted player warp for %s".formatted(player.getName()));
+    public static void remove(@NotNull UUID owner) {
+        Database.update("DELETE FROM warps WHERE uuid = ?", owner);
+        Logger.console("deleted player warp for %s".formatted(owner));
     }
 
 }

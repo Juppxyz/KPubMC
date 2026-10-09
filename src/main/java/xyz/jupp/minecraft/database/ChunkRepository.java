@@ -14,14 +14,6 @@ public final class ChunkRepository {
 
     public record ChunkData(String world, int x, int z, String teamID) {}
 
-    /** false if the chunk was already claimed in the database. */
-    public static boolean claim(@NotNull String teamID, @NotNull String world, int x, int z) {
-        boolean claimed = Database.update("INSERT INTO chunks (world, x, z, team_id) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING",
-                world, x, z, teamID) > 0;
-        if (claimed) Main.getInstance().getSLF4JLogger().info("claimed chunk {}:{}:{} for team {}", world, x, z, teamID);
-        return claimed;
-    }
-
     public static void release(@NotNull String teamID, @NotNull String world, int x, int z) {
         Database.update("DELETE FROM chunks WHERE world = ? AND x = ? AND z = ? AND team_id = ?", world, x, z, teamID);
         Main.getInstance().getSLF4JLogger().info("released chunk {}:{}:{} of team {}", world, x, z, teamID);

@@ -8,62 +8,61 @@ import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
-import xyz.jupp.minecraft.cache.PlayerCacheObject;
 import xyz.jupp.minecraft.database.PlayerRepository;
-import xyz.jupp.minecraft.inventory.TeamInventory;
+import xyz.jupp.minecraft.team.TeamCreateView;
+import xyz.jupp.minecraft.team.TeamView;
+import xyz.jupp.minecraft.team.Teams;
 import xyz.jupp.minecraft.utils.Tasks;
 
-
+// /team opens the team menu, /team neu <Name> founds a team
 public class TeamCommand implements CommandExecutor {
+
+    private record Check(int money, boolean taken) {}
 
     @Override
     public boolean onCommand(@NotNull CommandSender commandSender, @NotNull Command command, @NotNull String s, @NotNull String[] args) {
-        if (commandSender instanceof Player player) {
-            PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
+        if (!(commandSender instanceof Player player)) return true;
+        boolean inTeam = CacheHandler.getInstance().getPlayerInCache(player).getTeamID() != null;
 
-            // open create new Team Inventory
-            if (playerCacheObject.getTeamID() == null && args.length == 2 && args[0].equals("neu")) {
-                if (player.getExpToLevel() < 40) {
-                    player.sendMessage(Main.getChatPrefix() + "Du brauchst §a40 §fLevel, um ein Team zu erstellen.");
-                    player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
-                    return false;
-                }
-
-                if (args[1].length() < 3 || args[1].length() > 12) {
-                    player.sendMessage(Main.getChatPrefix() + "Bitte achte darauf, dass der Name des Teams §amin. 3 §fund §amax. 12 §fZeichen lang ist.");
-                    player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
-                    return false;
-                }
-
-                String teamName = args[1];
-                Tasks.supplyAsync(() -> PlayerRepository.getMoney(player), money -> {
-                    if (money < 2500) {
-                        player.sendMessage(Main.getChatPrefix() + "Das gründen eines Teams kostet " + Main.getCurrencyName(2500) + "§f.");
-                        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
-                        return;
+        if (args.length >= 1 && args[0].equalsIgnoreCase("neu")) {
+            if (inTeam) {
+                fail(player, "Du bist schon in einem Team.");
+            } else if (args.length != 2) {
+                fail(player, "So geht's: §a/team neu <Name>");
+            } else if (player.getLevel() < Teams.CREATION_LEVEL) {
+                fail(player, "Du brauchst §a" + Teams.CREATION_LEVEL + " §fLevel, um ein Team zu gründen §8(sie werden nicht abgezogen)§f.");
+            } else if (!TeamCreateView.NAME.matcher(args[1]).matches()) {
+                fail(player, "Der Name braucht §a" + Teams.NAME_MIN + " bis " + Teams.NAME_MAX + " §fZeichen: Buchstaben, Zahlen, _ oder -.");
+            } else {
+                String name = args[1];
+                Tasks.supplyAsync(() -> new Check(PlayerRepository.getMoney(player.getUniqueId()), Teams.nameTaken(name)), check -> {
+                    if (!player.isOnline()) return;
+                    if (check.taken()) {
+                        fail(player, "Den Namen §e" + name + " §fgibt es schon.");
+                    } else if (check.money() < Teams.CREATION_COST) {
+                        fail(player, "Das Gründen kostet " + Main.getCurrencyName(Teams.CREATION_COST) + "§f.");
+                    } else {
+                        TeamCreateView.open(player, name);
                     }
-
-                    TeamInventory.openInventory(player, TeamInventory.TeamInventoryTypes.CREATE, teamName);
                 });
-                return false;
             }
-
-            if (playerCacheObject.getTeamID() == null) {
-                player.sendMessage(Main.getChatPrefix() + "Du bist derzeit in noch keinem " + Main.getTeamName() + ".");
-                player.sendMessage(Main.getChatPrefix() + "Dein eigenes Team kannst du so erstellen: §a/team neu <Name>");
-                player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
-                return false;
-            }
-
-            if (args.length == 1 || args.length > 2) {
-                player.sendMessage(Main.getChatPrefix() + "Bitte nutze für Hilfe: §a/team <hilfe/help>");
-                player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
-                return false;
-            }
-            TeamInventory.openInventory(player, TeamInventory.TeamInventoryTypes.MAIN);
-            player.playSound(player.getLocation(), Sound.ITEM_BOOK_PAGE_TURN, 2f,2f);
+            return true;
         }
-        return false;
+
+        if (!inTeam) {
+            player.sendMessage(Main.getChatPrefix() + "Du bist noch in keinem " + Main.getTeamName() + "§f.");
+            player.sendMessage(Main.getChatPrefix() + "Gründe eins mit §a/team neu <Name> §8(ab Level " + Teams.CREATION_LEVEL
+                    + ", " + Teams.CREATION_COST + " Schilling)§f, oder lass dich aufnehmen: §a/invites§f.");
+            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 1f);
+            return true;
+        }
+        TeamView.open(player);
+        return true;
+    }
+
+    private static void fail(Player player, String message) {
+        player.sendMessage(Main.getChatPrefix() + message);
+        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 1f);
     }
 
 }

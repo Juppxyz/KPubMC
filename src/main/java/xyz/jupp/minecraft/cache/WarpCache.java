@@ -1,7 +1,6 @@
 package xyz.jupp.minecraft.cache;
 
 import org.bukkit.Location;
-import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.database.WarpRepository;
@@ -13,16 +12,18 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * The player warps (one per player), loaded completely in onEnable; changes are written through (blocking).
+ * The positions are passed in: they are read on the main thread, the writes run on a worker.
+ */
 public class WarpCache {
-
-    // The Warp Cache is standalone and not integrated in the main CacheHandler.
 
     private final static WarpCache instance = new WarpCache();
     public static WarpCache getInstance() {
         return instance;
     }
 
-    // warp owner -> warp, loaded completely in onEnable
+    // warp owner -> warp
     private final ConcurrentHashMap<UUID, WarpCacheObject> warpCache = new ConcurrentHashMap<>();
 
     // blocking, called once in onEnable
@@ -49,37 +50,30 @@ public class WarpCache {
         return warpCache.containsKey(owner);
     }
 
-    public int size() {
-        return warpCache.size();
+    /** Blocking: false if the player has a warp already. */
+    public boolean create(@NotNull UUID owner, @NotNull Location location) {
+        if (warpCache.containsKey(owner) || !WarpRepository.create(owner, location)) return false;
+        warpCache.put(owner, of(location));
+        return true;
     }
 
-    public void addNewPlayerWarp(@NotNull Player player) {
-        WarpCacheObject warpCacheObject = createWarpCacheObject(player);
-        if (!warpCache.containsKey(player.getUniqueId())) {
-            WarpRepository.createNewPlayerWarp(player);
-            warpCache.putIfAbsent(player.getUniqueId(), warpCacheObject);
+    /** Blocking: false if the player has no warp. */
+    public boolean move(@NotNull UUID owner, @NotNull Location location) {
+        if (!warpCache.containsKey(owner) || !WarpRepository.update(owner, location)) return false;
+        warpCache.put(owner, of(location));
+        return true;
+    }
+
+    /** Blocking. */
+    public void remove(@NotNull UUID owner) {
+        if (warpCache.containsKey(owner)) {
+            WarpRepository.remove(owner);
+            warpCache.remove(owner);
         }
     }
 
-    public void removePlayerWarp(@NotNull Player player) {
-        if (warpCache.containsKey(player.getUniqueId())) {
-            WarpRepository.removePlayerWarp(player);
-            warpCache.remove(player.getUniqueId());
-        }
-    }
-
-    public void updatePlayerWarp(@NotNull Player player) {
-        if (warpCache.containsKey(player.getUniqueId())) {
-            WarpRepository.updatePlayerWarp(player);
-
-            WarpCacheObject warpCacheObject = createWarpCacheObject(player);
-            warpCache.computeIfPresent(player.getUniqueId(), (owner, oldWarp) -> warpCacheObject);
-        }
-    }
-
-    private static WarpCacheObject createWarpCacheObject(@NotNull Player player) {
-        Location location = player.getLocation();
-        return new WarpCacheObject(location.getX(), location.getY(), location.getZ(), player.getWorld().getName());
+    private static WarpCacheObject of(@NotNull Location location) {
+        return new WarpCacheObject(location.getX(), location.getY(), location.getZ(), location.getWorld().getName());
     }
 
 }

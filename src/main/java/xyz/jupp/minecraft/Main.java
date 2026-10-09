@@ -3,11 +3,28 @@ package xyz.jupp.minecraft;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitWorker;
+import xyz.jupp.minecraft.team.TeamAreaEffects;
+import xyz.jupp.minecraft.team.Relations;
+import xyz.jupp.minecraft.team.TeamViewListener;
+import xyz.jupp.minecraft.team.TeamWarps;
+import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.ChunkCache;
 import xyz.jupp.minecraft.cache.WarpCache;
 import xyz.jupp.minecraft.commands.*;
 import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.database.Database;
+import xyz.jupp.minecraft.economy.Bank;
+import xyz.jupp.minecraft.economy.Bankruptcy;
+import xyz.jupp.minecraft.inventory.MainThread;
+import xyz.jupp.minecraft.inventory.WarpView;
+import xyz.jupp.minecraft.economy.Economy;
+import xyz.jupp.minecraft.economy.Hondo;
+import xyz.jupp.minecraft.economy.Market;
+import xyz.jupp.minecraft.economy.Nomad;
+import xyz.jupp.minecraft.economy.Services;
+import xyz.jupp.minecraft.economy.ShopViewListener;
+import xyz.jupp.minecraft.economy.Treasury;
+import xyz.jupp.minecraft.economy.Vault;
 import xyz.jupp.minecraft.listener.*;
 import xyz.jupp.minecraft.utils.*;
 
@@ -18,7 +35,7 @@ public final class Main extends JavaPlugin {
     private final static String financeVillagerFredName = "§5§lBasil";
     private final static String jewelerVillagerName = "§b§lHondo";
     private final static String blackMarketDealerVillagerName = "§8§lMorpheus";
-    private final static String teamPointsDealerVillagerName = "§6§lNomad der Punktemakler";
+    private final static String teamPointsDealerVillagerName = "§6§lNomad";
 
     private final static String currencyName = "Schilling";
     private final static String teamName = "§aTeam";
@@ -60,6 +77,8 @@ public final class Main extends JavaPlugin {
         this.getCommand("wanted").setExecutor(new WantedCommand());
         this.getCommand("origin").setExecutor(new NullpointCommand());
         this.getCommand("removechunk").setExecutor(new RemoveChunkCommand());
+        this.getCommand("staatskasse").setExecutor(new TreasuryCommand());
+        this.getCommand("shopadmin").setExecutor(new ShopAdminCommand());
     }
 
     private void registerListener() {
@@ -68,11 +87,11 @@ public final class Main extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new JoinQuitListener(), this);
         Bukkit.getPluginManager().registerEvents(new ChatListener(), this);
         Bukkit.getPluginManager().registerEvents(new CommandBlockListener(), this);
-        Bukkit.getPluginManager().registerEvents(new TeamInventoryListener(), this);
+        Bukkit.getPluginManager().registerEvents(new TeamViewListener(), this);
         Bukkit.getPluginManager().registerEvents(new NetherTransferListener(), this);
         Bukkit.getPluginManager().registerEvents(new DeathListener(), this);
         Bukkit.getPluginManager().registerEvents(new ShopListener(), this);
-        Bukkit.getPluginManager().registerEvents(new WarpInventoryListener(), this);
+        Bukkit.getPluginManager().registerEvents(new ShopViewListener(), this);
         Bukkit.getPluginManager().registerEvents(new CreateLocalShopListener(), this);
         Bukkit.getPluginManager().registerEvents(new MobLimiterListener(), this);
         Bukkit.getPluginManager().registerEvents(new PlayerMovementListener(), this);
@@ -82,6 +101,7 @@ public final class Main extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new SpawnListener(), this);
         Bukkit.getPluginManager().registerEvents(new TeamAreaListener(), this);
         Bukkit.getPluginManager().registerEvents(new AntiBugListener(), this);
+        Bukkit.getPluginManager().registerEvents(new CashGuardListener(), this);
         Bukkit.getPluginManager().registerEvents(new CombatListener(), this);
 
         // afk
@@ -91,6 +111,11 @@ public final class Main extends JavaPlugin {
     private void registerTasks() {
         Logger.console("register tasks..");
         new PlayerUpdaterTask().startTask();
+        Market.startTasks();
+        Bank.startTasks();
+        Relations.startTask();
+        TeamAreaEffects.startTask();
+        PlayerTracker.startTask();
         CombatLock.tickTask().runTaskTimer(this, 20L, 20L);
     }
 
@@ -114,10 +139,26 @@ public final class Main extends JavaPlugin {
         Logger.console("init warps..");
         int warps = WarpCache.getInstance().load();
         int claimedChunks = ChunkCache.getInstance().load();
+        int teams = CacheHandler.getInstance().loadTeams();
+        int teamWarps = TeamWarps.load();
+        int relations = Relations.load();
+        Logger.console("loaded " + teams + " teams, " + teamWarps + " team warps, " + relations + " team relations");
         Logger.console("loaded " + warps + " warps and " + claimedChunks + " claimed chunks");
+        Logger.console("init market..");
+        Bank.load();
+        Treasury.load();
+        Economy.load();
+        Bankruptcy.loadState();
+        Market.load();
+        Services.load();
+        Nomad.load();
+        Hondo.load();
+        Bankruptcy.load();
+        Logger.console("loaded " + Market.all().size() + " market items, " + Market.dailyOffers().size() + " daily offers");
         registerCommands();
         registerListener();
         registerTasks();
+        Npcs.keepLoaded();
 
         JailHandler.initJails(Locations.getJailCorner1(), Locations.getJailCorner2());
         JailHandler.startJailWatcherTask();
@@ -129,6 +170,9 @@ public final class Main extends JavaPlugin {
     public void onDisable() {
         getServer().getScheduler().cancelTasks(this);
         awaitRunningWorkers(5_000L);
+        MainThread.runPending();
+        WarpView.refundPending();
+        Vault.shutdown();
         Database.close();
     }
 

@@ -13,7 +13,7 @@ import xyz.jupp.minecraft.utils.Text;
  */
 public final class Menu implements InventoryHolder {
 
-    public enum Type { MONEY, SHOP, JEWELER, BLACK_MARKET, TEAM_CREATE, TEAM_MAIN, TEAM_AREA, TEAM_INVITE, TEAM_ROLES, WARP }
+    public enum Type { MONEY }
 
     private final Type type;
     private final int page;
