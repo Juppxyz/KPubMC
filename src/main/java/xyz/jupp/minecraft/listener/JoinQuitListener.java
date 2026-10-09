@@ -2,6 +2,7 @@ package xyz.jupp.minecraft.listener;
 
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -60,14 +61,14 @@ public class JoinQuitListener implements Listener {
         TabListUtil.updateTabFor(player);
 
         if (activeState == 1) {
-            player.teleport(Locations.getCurrentSpawn());
+            teleportToSpawn(player);
             Bukkit.broadcast(Text.section(
                     "§8§l[§a§l+§8§l] §a§l" + player.getName() + " §f§lhat den Server zum ersten Mal betreten."
             ));
             sendWelcome(player);
 
         } else if (activeState == 2) {
-            player.teleport(Locations.getCurrentSpawn());
+            teleportToSpawn(player);
             Bukkit.broadcast(Text.section(
                     "§8§l[§a§l+§8§l] §a§l" + player.getName() + " §f§list nach langer Zeit wieder zurückgekehrt"
             ));
@@ -111,6 +112,17 @@ public class JoinQuitListener implements Listener {
                 "§8[§c-§8] §a" + Text.legacy(player.playerListName()) + " §fhat den Server verlassen."));
     }
 
+
+    // without the spawn world (e.g. a test server without world_MCWinter) the teleport used to throw
+    // and the rest of the join (messages, jail, deliveries) was skipped
+    private static void teleportToSpawn(Player player) {
+        Location spawn = Locations.getCurrentSpawn();
+        if (spawn.getWorld() == null) {
+            Main.getInstance().getSLF4JLogger().warn("The spawn world is not loaded, {} stays where the server placed them", player.getName());
+            return;
+        }
+        player.teleport(spawn);
+    }
 
     private void applyTeamDisplayNames(Player player) {
         TeamCacheObject team = CacheHandler.getInstance().getPlayerInCache(player).getTeamCacheObject();
