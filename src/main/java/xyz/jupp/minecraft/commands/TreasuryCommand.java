@@ -51,7 +51,7 @@ public class TreasuryCommand implements CommandExecutor {
             }
             long owed = Bank.owedDeposits();
             lines.add("§fStand: " + Main.getCurrencyName((int) Math.min(Integer.MAX_VALUE, Treasury.balance()))
-                    + (owed > 0 ? " §8(davon " + owed + " Festgeld der Spieler)" : ""));
+                    + (owed > 0 ? " §7(davon " + owed + " Festgeld der Spieler)" : ""));
             long today = income(day);
             long lastWeek = income(week);
             lines.add("§fEingenommen: §a" + today + " §7heute§8, §a" + lastWeek + " §7diese Woche");

@@ -177,7 +177,7 @@ public final class BankView implements InventoryHolder {
             int paidOut = Math.max(0, amount - tax) / 10 * 10;
             inventory.setItem(WITHDRAW_START + i, named(Material.PAPER, "§e" + format(amount) + " Schilling abheben", List.of(
                     "§7Du bekommst §f" + format(paidOut) + " §7in Scheinen",
-                    "§7Steuer: §f" + tax + " §8(" + ShopView.percent(Taxes.rate(TaxClass.STANDARD)) + ")",
+                    "§7Steuer: §f" + tax + " §7(" + ShopView.percent(Taxes.rate(TaxClass.STANDARD)) + ")",
                     "",
                     "§e» Linksklick: abheben")));
         }
@@ -194,9 +194,9 @@ public final class BankView implements InventoryHolder {
             termLore.add("§7Zinsen gerade: §a" + rate(offer.rate()));
             termLore.add("§7Basil nimmt noch bis §f" + format(offer.capacity()) + " Schilling");
         }
-        termLore.add("§8Der Zins richtet sich nach der Staatskasse und steht");
-        termLore.add("§8beim Anlegen fest. Höchstens " + Bank.MAX_TERMS + " gleichzeitig.");
-        termLore.add("§8Vorzeitig auflösen geht, dann ohne Zinsen.");
+        termLore.add("§7Der Zins richtet sich nach der Staatskasse und steht");
+        termLore.add("§7beim Anlegen fest. Höchstens " + Bank.MAX_TERMS + " gleichzeitig.");
+        termLore.add("§7Vorzeitig auflösen geht, dann ohne Zinsen.");
         inventory.setItem(SLOT_TERM_INFO, named(Material.CLOCK, "§6Festgeld", termLore));
         Material[] termIcons = {Material.GOLD_NUGGET, Material.GOLD_INGOT, Material.GOLD_BLOCK};
         for (int i = 0; i < Bank.TERM_AMOUNTS.length; i++) {
@@ -208,7 +208,7 @@ public final class BankView implements InventoryHolder {
             }
             inventory.setItem(TERM_START + i, named(termIcons[i], "§6Festgeld: " + format(amount) + " Schilling", List.of(
                     "§7Nach " + Bank.TERM_DAYS + " Tagen: §a" + format(amount + Math.round(amount * offer.rate())) + " Schilling",
-                    "§8(" + rate(offer.rate()) + " Zinsen)",
+                    "§7(" + rate(offer.rate()) + " Zinsen)",
                     "",
                     "§e» Linksklick: anlegen")));
         }
@@ -216,10 +216,10 @@ public final class BankView implements InventoryHolder {
             if (i < state.terms().size()) {
                 Bank.Term term = state.terms().get(i);
                 inventory.setItem(RUNNING_START + i, named(Material.SUNFLOWER, "§6Laufend: " + format(term.amount()) + " Schilling", List.of(
-                        "§7Zinsen: §a+" + term.interest() + " §8(" + rate(term.rate()) + ")",
+                        "§7Zinsen: §a+" + term.interest() + " §7(" + rate(term.rate()) + ")",
                         "§7Fällig in: §f" + remaining(term.endsAt()),
                         "",
-                        "§c» Rechtsklick: vorzeitig auflösen §8(ohne Zinsen)")));
+                        "§c» Rechtsklick: vorzeitig auflösen §7(ohne Zinsen)")));
             } else {
                 inventory.setItem(RUNNING_START + i, named(Material.LIGHT_GRAY_STAINED_GLASS_PANE, "§7Kein Festgeld", List.of()));
             }
@@ -243,7 +243,7 @@ public final class BankView implements InventoryHolder {
                     "§7er zahlt dir §a" + Math.round((1 + Bonds.RETURN) * 100) + " % §7zurück, sobald",
                     "§7er sich erholt hat und es sich leisten kann."));
             if (bonds.amount() > 0) lore.add("§7Deine Anleihen: §f" + format(bonds.amount()) + " §7→ zurück §a" + format(bonds.payout()));
-            lore.add("§8Höchstens " + format(Bonds.MAX_TOTAL) + " pro Spieler.");
+            lore.add("§7Höchstens " + format(Bonds.MAX_TOTAL) + " pro Spieler.");
             lore.add("");
             lore.add("§e» Linksklick: " + format(Bonds.AMOUNTS[0]) + " kaufen");
             lore.add("§e» Rechtsklick: " + format(Bonds.AMOUNTS[1]) + " kaufen");
@@ -293,15 +293,15 @@ public final class BankView implements InventoryHolder {
                 "§7Geld sofort, zurück in §f" + Loans.DAYS + " Tagen§7.",
                 "§7Zinsen gerade: §f" + rate(state.loanRate()) + " §7pro Woche,",
                 "§7je früher zurück, desto weniger.",
-                "§7Für dich bis zu §f" + format(max) + " Schilling §8(nach Kontostand)",
-                "§8Vor dem Kredit zeigt Basil dir alle Regeln.")));
+                "§7Für dich bis zu §f" + format(max) + " Schilling §7(nach Kontostand)",
+                "§7Vor dem Kredit zeigt Basil dir alle Regeln.")));
         Instant now = Instant.now();
         if (loan != null && loan.state() == Loans.State.OPEN) {
             inventory.setItem(SLOT_LOAN_STATUS, named(Material.PAPER, "§6Offener Kredit: " + format(loan.principal()) + " Schilling", List.of(
                     "§7Heute zurückzahlen: §f" + format(loan.debt(now)) + " Schilling",
                     "§7Am " + Loans.DAYS + ". Tag: §f" + format(loan.debt(loan.dueAt())) + " Schilling",
                     "§7Fällig in: §f" + remaining(loan.dueAt()),
-                    "§8Geliehenes Geld nicht für Festgeld oder Anleihen")));
+                    "§7Geliehenes Geld nicht für Festgeld oder Anleihen")));
             inventory.setItem(SLOT_LOAN_ACTION, named(Material.LIME_CONCRETE, "§a§lJetzt zurückzahlen", List.of(
                     "§7Kostet heute §f" + format(loan.debt(now)) + " Schilling",
                     "",
@@ -315,7 +315,7 @@ public final class BankView implements InventoryHolder {
                     : List.of("§cDu wirst gesucht oder sitzt im Gefängnis.", "§7Erst nach deiner Strafe kannst du", "§7dich bei Basil entschuldigen.")));
             inventory.setItem(SLOT_LOAN_ACTION, free
                     ? named(Material.GOLD_BLOCK, "§6Entschuldigung zahlen", List.of(
-                            "§7Kostet §f" + format(loan.apologyLeft()) + " Schilling §8(" + Loans.APOLOGY_FACTOR + "-fach, abzüglich eingezogen)",
+                            "§7Kostet §f" + format(loan.apologyLeft()) + " Schilling §7(" + Loans.APOLOGY_FACTOR + "-fach, abzüglich eingezogen)",
                             "§7Danach sind wieder Kredite möglich.",
                             "",
                             "§e» Linksklick: zahlen"))
@@ -354,7 +354,7 @@ public final class BankView implements InventoryHolder {
                 "   §cund du wirst gesucht§f, bis dich jemand erwischt.",
                 "   §fDann §c72 Stunden Gefängnis§f.",
                 "§c6. §fNeue Kredite erst nach einer Entschuldigung",
-                "   §fvon §c" + format(Loans.apology(amount)) + " Schilling §8(" + Loans.APOLOGY_FACTOR + "-fach)§f.")));
+                "   §fvon §c" + format(Loans.apology(amount)) + " Schilling §7(" + Loans.APOLOGY_FACTOR + "-fach)§f.")));
         inventory.setItem(SLOT_CONFIRM, named(Material.LIME_CONCRETE, "§a§lJa, Kredit aufnehmen", List.of(
                 "§7Zinsen: §f" + rate(rate) + " §7pro Woche")));
         inventory.setItem(SLOT_CANCEL, named(Material.RED_CONCRETE, "§cAbbrechen", List.of()));
@@ -471,7 +471,7 @@ public final class BankView implements InventoryHolder {
         if (state.statement().isEmpty()) lore.add(line("§7Noch keine Buchungen."));
         for (Bank.Entry entry : state.statement()) {
             String amount = entry.amount() >= 0 ? "§a+" + format(entry.amount()) : "§c-" + format(-entry.amount());
-            lore.add(line("§8" + DATE.format(entry.at()) + " " + amount + " §7").append(label(entry, state.names())));
+            lore.add(line("§7" + DATE.format(entry.at()) + " " + amount + " §7").append(label(entry, state.names())));
         }
         meta.lore(lore);
         book.setItemMeta(meta);
@@ -663,7 +663,7 @@ public final class BankView implements InventoryHolder {
             MainThread.deliverOrRefund(uuid, withdrawal.cash() + withdrawal.tax(), () -> {
                 Bank.handOut(uuid, withdrawal.cash());
                 player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f, 2f);
-                player.sendMessage(Bank.PREFIX + "Hier, §a" + format(withdrawal.cash()) + " Schilling §fin Scheinen §8(Steuer: " + withdrawal.tax() + ")");
+                player.sendMessage(Bank.PREFIX + "Hier, §a" + format(withdrawal.cash()) + " Schilling §fin Scheinen §7(Steuer: " + withdrawal.tax() + ")");
             });
             reload();
         });
@@ -687,7 +687,7 @@ public final class BankView implements InventoryHolder {
                         player.sendMessage(Bank.PREFIX + "§a" + format(amount) + " Schilling §fliegen jetzt " + Bank.TERM_DAYS + " Tage fest.");
                     }
                     case INSUFFICIENT_FUNDS -> fail(player, notEnough());
-                    case LIMIT -> fail(player, "§fMehr Festgeld geht für dich gerade nicht §8(höchstens " + Bank.MAX_TERMS
+                    case LIMIT -> fail(player, "§fMehr Festgeld geht für dich gerade nicht §7(höchstens " + Bank.MAX_TERMS
                             + " gleichzeitig, und alle sollen etwas abbekommen)§f.");
                     case CLOSED -> fail(player, "§fSo viel Festgeld nimmt Basil gerade nicht an, die Staatskasse gibt nicht mehr her.");
                     default -> fail(player, "§fBasil kann gerade nichts buchen, versuch es gleich nochmal.");

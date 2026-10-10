@@ -84,7 +84,7 @@ public class ShopAdminCommand implements TabExecutor {
     private static void help(CommandSender sender) {
         sender.sendMessage(Main.getChatPrefix() + "§fShop-Verwaltung§8:");
         sender.sendMessage("§8» §a/shopadmin info <Material>");
-        sender.sendMessage("§8» §a/shopadmin set <Material> <Feld> <Wert> §8(Felder: " + String.join(", ", MarketRepository.EDITABLE_COLUMNS.keySet()) + ")");
+        sender.sendMessage("§8» §a/shopadmin set <Material> <Feld> <Wert> §7(Felder: " + String.join(", ", MarketRepository.EDITABLE_COLUMNS.keySet()) + ")");
         sender.sendMessage("§8» §a/shopadmin add <Material> <Kategorie> <Preis> [Menge]");
         sender.sendMessage("§8» §a/shopadmin remove <Material> §8- deaktiviert das Item");
         sender.sendMessage("§8» §a/shopadmin rotate §8- neue Tagesangebote ziehen");
@@ -110,7 +110,7 @@ public class ShopAdminCommand implements TabExecutor {
             lines.add("§fNachfrage: §a" + String.format(Locale.ROOT, "%.2f", item.demand())
                     + " §8| §fKauf: §a" + item.buyPrice() + " §8| §fAnkauf: §a" + item.sellPrice());
             for (long[] volume : MarketRepository.volumeSince(material, 7)) {
-                lines.add("§f7 Tage " + (volume[0] == 1 ? "gekauft" : "verkauft") + ": §a" + volume[1] + " Stück §8(" + volume[2] + " Schilling)");
+                lines.add("§f7 Tage " + (volume[0] == 1 ? "gekauft" : "verkauft") + ": §a" + volume[1] + " Stück §7(" + volume[2] + " Schilling)");
             }
             return lines;
         }, lines -> lines.forEach(sender::sendMessage));
@@ -180,8 +180,8 @@ public class ShopAdminCommand implements TabExecutor {
             String report = Economy.latestAiSummary();
             if (report != null) lines.add("§7KI-Bericht: §o" + report);
             for (MarketRepository.Adjustment adjustment : MarketRepository.recentAdjustments(12)) {
-                lines.add("§8#" + adjustment.id() + " §7" + adjustment.day() + " §f" + adjustment.material() + " §7" + fieldName(adjustment.field())
-                        + " §c" + adjustment.oldValue() + " §7→ §a" + adjustment.newValue() + " §8(" + adjustment.source() + ": " + adjustment.reason() + ")");
+                lines.add("§7#" + adjustment.id() + " §7" + adjustment.day() + " §f" + adjustment.material() + " §7" + fieldName(adjustment.field())
+                        + " §c" + adjustment.oldValue() + " §7→ §a" + adjustment.newValue() + " §7(" + adjustment.source() + ": " + adjustment.reason() + ")");
             }
             if (lines.size() == 1) lines.add("§7Noch keine Anpassungen.");
             return lines;
@@ -193,7 +193,7 @@ public class ShopAdminCommand implements TabExecutor {
         try {
             id = Long.parseLong(args.length > 1 ? args[1].replace("#", "") : "");
         } catch (NumberFormatException e) {
-            sender.sendMessage(Main.getChatPrefix() + "§c/shopadmin undo <Nr> §8(Nr aus /shopadmin verlauf)");
+            sender.sendMessage(Main.getChatPrefix() + "§c/shopadmin undo <Nr> §7(Nr aus /shopadmin verlauf)");
             return;
         }
         String admin = sender.getName();
@@ -325,7 +325,7 @@ public class ShopAdminCommand implements TabExecutor {
         }
         MarketItem item = new MarketItem(material, category, null, null, amount, price, null, null,
                 Market.defaultElasticity(category), 0.5, true, false, true, 1, true, 0, null);
-        change(sender, () -> MarketRepository.insert(item), "§f" + material + " ist im Katalog §8(verkaufbar per set ... verkaufbar ja)§f.");
+        change(sender, () -> MarketRepository.insert(item), "§f" + material + " ist im Katalog §7(verkaufbar per set ... verkaufbar ja)§f.");
     }
 
     private static @Nullable Material material(CommandSender sender, String[] args, int index) {

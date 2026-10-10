@@ -259,7 +259,7 @@ public final class Nomad {
             used.add(created.material());
             announcements.add(Text.section(PREFIX + "Neuer Auftrag: §e" + created.required() + "× ")
                     .append(Component.translatable(created.material().translationKey()))
-                    .append(Text.section(" §8(§a+" + created.reward() + " Team-Punkte§8)")));
+                    .append(Text.section(" §7(§a+" + created.reward() + " Team-Punkte§7)")));
         }
 
 
@@ -544,7 +544,7 @@ public final class Nomad {
         announcements.add(Text.section(PREFIX + "§6Das Wochen-Rennen ist vorbei!"));
         for (int place = 0; place < winners.size(); place++) {
             announcements.add(Text.section("§6" + (place + 1) + ". §f" + teamName(winners.get(place).teamID())
-                    + " §8(" + winners.get(place).points() + " Punkte) §a+" + RACE_PRIZES[place] + " Bonus"));
+                    + " §7(" + winners.get(place).points() + " Punkte) §a+" + RACE_PRIZES[place] + " Bonus"));
         }
         return announcements;
     }

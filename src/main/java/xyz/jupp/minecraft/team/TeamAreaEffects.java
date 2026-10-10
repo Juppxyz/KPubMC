@@ -72,7 +72,7 @@ public final class TeamAreaEffects {
 
         boolean enemy = Relations.atWar(area.getTeamID(), playerTeamID);
         String message = area.getTeamColor() + "Team-Alarm §8» " + (enemy ? "§c⚔ " : "§e") + player.getName()
-                + " §fist in eurem Gebiet §8(" + at.getBlockX() + ", " + at.getBlockZ() + ")";
+                + " §fist in eurem Gebiet §7(" + at.getBlockX() + ", " + at.getBlockZ() + ")";
         for (Player member : Bukkit.getOnlinePlayers()) {
             if (member != player && area.getTeamID().equals(CacheHandler.getInstance().getPlayerInCache(member).getTeamID())) {
                 member.sendMessage(message);

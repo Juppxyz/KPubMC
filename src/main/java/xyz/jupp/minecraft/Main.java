@@ -103,6 +103,7 @@ public final class Main extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new AntiBugListener(), this);
         Bukkit.getPluginManager().registerEvents(new CashGuardListener(), this);
         Bukkit.getPluginManager().registerEvents(new CombatListener(), this);
+        Bukkit.getPluginManager().registerEvents(new DntLootListener(), this);
 
         // afk
         Bukkit.getPluginManager().registerEvents(new AfkListener(), this);

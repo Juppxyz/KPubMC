@@ -98,7 +98,7 @@ public final class Relations {
                 return;
             }
             if (!ended.isEmpty()) MainThread.run(() -> ended.forEach(war -> Bukkit.broadcast(Text.section(Main.getChatPrefix() + "§7☮ Der Krieg zwischen "
-                    + label(war.teamA()) + " §7und " + label(war.teamB()) + " §7ist vorbei §8(3 Tage ohne Kill)§7."))));
+                    + label(war.teamA()) + " §7und " + label(war.teamB()) + " §7ist vorbei §7(3 Tage ohne Kill)§7."))));
         }, 20L * 60, 20L * 60 * 5);
     }
 

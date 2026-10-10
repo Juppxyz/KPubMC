@@ -109,7 +109,7 @@ public final class BlackMarketView implements InventoryHolder {
             lore.add("");
             lore.add("§7Morpheus will: §c" + talk.asking() + " Schilling");
             lore.add("§7Dein Bargeld: §f" + Cash.total(viewer) + " Schilling");
-            lore.add("§8Nur Bargeld. Steuerfrei, aber nicht ohne Risiko.");
+            lore.add("§7Nur Bargeld. Steuerfrei, aber nicht ohne Risiko.");
             meta.lore(Text.lore(lore));
             item.setItemMeta(meta);
             inventory.setItem(SLOT_ITEM, item);
@@ -197,7 +197,7 @@ public final class BlackMarketView implements InventoryHolder {
         if (!Cash.pay(player, price)) {
             BlackMarketHandler.release(offerId);
             player.playSound(player, Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
-            player.sendMessage(prefix() + "Ich nehme nur Bares, und davon hast du zu wenig. §8(" + price + " Schilling in Scheinen, du hast "
+            player.sendMessage(prefix() + "Ich nehme nur Bares, und davon hast du zu wenig. §7(" + price + " Schilling in Scheinen, du hast "
                     + Cash.total(player) + ")");
             return;
         }
@@ -207,7 +207,7 @@ public final class BlackMarketView implements InventoryHolder {
             player.getInventory().addItem(item).values()
                     .forEach(rest -> player.getWorld().dropItemNaturally(player.getLocation(), rest));
         }
-        player.sendMessage(Main.getChatPrefix() + "§c-" + price + " " + Main.getCurrencyName() + " §8(bar, steuerfrei)");
+        player.sendMessage(Main.getChatPrefix() + "§c-" + price + " " + Main.getCurrencyName() + " §7(bar, steuerfrei)");
         player.sendMessage(prefix() + "Besuche mich gerne bald wieder! Viel Spaß damit.");
         player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.4f, 0.2f);
         player.playSound(player.getLocation(), Sound.ENTITY_ITEM_PICKUP, 2f, 2f);

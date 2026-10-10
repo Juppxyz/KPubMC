@@ -98,6 +98,18 @@ public final class MarketRepository {
                 String.valueOf(version));
     }
 
+    /**
+     * Once per database: every good reacts a quarter less to demand (16 to 25 pieces moved the price too much).
+     * Runs before the catalog seed, whose defaults are already eased. Returns the eased goods, 0 if already done.
+     */
+    public static int easeElasticityOnce(double factor) {
+        return Database.inTransaction(connection -> {
+            if (Database.update(connection, "INSERT INTO market_meta (key, value) VALUES ('elasticity_eased', ?) ON CONFLICT (key) DO NOTHING",
+                    String.valueOf(factor)) == 0) return 0;
+            return Database.update(connection, "UPDATE market_items SET elasticity = elasticity * ?", factor);
+        });
+    }
+
     public static int count() {
         Integer count = Database.queryOne("SELECT COUNT(*) FROM market_items", row -> row.getInt(1));
         return count == null ? 0 : count;

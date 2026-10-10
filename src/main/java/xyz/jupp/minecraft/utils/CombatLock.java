@@ -86,7 +86,7 @@ public final class CombatLock {
     }
 
     private static void showTimer(Player player, long seconds) {
-        player.sendActionBar(Text.of("§c⚔ Im Kampf §8» §f" + seconds + "s §8(nicht ausloggen)"));
+        player.sendActionBar(Text.of("§c⚔ Im Kampf §8» §f" + seconds + "s §7(nicht ausloggen)"));
     }
 
     private static long seconds(long ms) {

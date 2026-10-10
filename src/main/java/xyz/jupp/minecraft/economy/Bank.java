@@ -309,7 +309,7 @@ public final class Bank {
     static void announce(@NotNull Payout payout) {
         Player player = Bukkit.getPlayer(payout.player());
         if (player == null) return;
-        player.sendMessage(PREFIX + "Dein Festgeld ist fällig: §a+" + (payout.amount() + payout.interest()) + " Schilling §8(davon "
+        player.sendMessage(PREFIX + "Dein Festgeld ist fällig: §a+" + (payout.amount() + payout.interest()) + " Schilling §7(davon "
                 + payout.interest() + " Zinsen)");
     }
 

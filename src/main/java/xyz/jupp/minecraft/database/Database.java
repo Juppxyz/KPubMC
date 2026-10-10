@@ -94,7 +94,7 @@ public final class Database {
                 base_price      INTEGER NOT NULL CHECK (base_price > 0),
                 min_price       INTEGER CHECK (min_price > 0),
                 max_price       INTEGER CHECK (max_price > 0),
-                elasticity      DOUBLE PRECISION NOT NULL DEFAULT 0.02 CHECK (elasticity >= 0),
+                elasticity      DOUBLE PRECISION NOT NULL DEFAULT 0.015 CHECK (elasticity >= 0),
                 sell_ratio      DOUBLE PRECISION NOT NULL DEFAULT 0.5 CHECK (sell_ratio >= 0 AND sell_ratio <= 0.9),
                 buyable         BOOLEAN NOT NULL DEFAULT TRUE,
                 sellable        BOOLEAN NOT NULL DEFAULT FALSE,

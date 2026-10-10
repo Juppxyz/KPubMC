@@ -109,7 +109,7 @@ public final class NomadView implements InventoryHolder {
         if (teamID == null) {
             // Nomad only trades with teams: explain how to get into one instead of opening the menu
             player.sendMessage(Nomad.PREFIX + "Ich handle nur mit Teams, Fremder.");
-            player.sendMessage(Nomad.PREFIX + "Gründe dein eigenes mit §a/team neu <Name> §8(ab Level "
+            player.sendMessage(Nomad.PREFIX + "Gründe dein eigenes mit §a/team neu <Name> §7(ab Level "
                     + Teams.CREATION_LEVEL + ", kostet " + Teams.CREATION_COST + " Schilling)§f,");
             player.sendMessage(Nomad.PREFIX + "oder lass dich einladen: Mit §a/invites §fstellst du ein, ob du Einladungen annimmst.");
             player.playSound(player.getLocation(), Sound.ENTITY_WANDERING_TRADER_NO, 1f, 1f);
@@ -241,7 +241,7 @@ public final class NomadView implements InventoryHolder {
         List<String> lore = new ArrayList<>();
         boolean done = state != null && state.completed();
         if (Nomad.isSpecial(contract)) lore.add("§d★ Sonderauftrag");
-        if (Nomad.isDaily(contract)) lore.add("§b☀ Tagesaufgabe §8(endet heute)");
+        if (Nomad.isDaily(contract)) lore.add("§b☀ Tagesaufgabe §7(endet heute)");
         if (Nomad.theme(contract) != null) lore.add("§7Thema: §f" + Nomad.theme(contract));
         lore.add("§7Belohnung: §a+" + contract.reward() + " Team-Punkte");
         if (!done) lore.add("§7Erstes Team: §a+" + Nomad.firstTeamBonus(contract.reward()) + " Bonus");
@@ -467,7 +467,7 @@ public final class NomadView implements InventoryHolder {
                                     + (Nomad.isDaily(contract) ? " §fhat die Tagesaufgabe §e" : " §fhat den Auftrag §e")
                                     + contract.required() + "× ").append(Component.translatable(contract.material().translationKey()))
                                     .append(Text.section(" §ferledigt! §a+" + delivery.points() + " Team-Punkte"
-                                            + (delivery.first() ? " §8(als erstes Team, mit Bonus)" : "")));
+                                            + (delivery.first() ? " §7(als erstes Team, mit Bonus)" : "")));
                             // the first team is news for everyone
                             if (delivery.first()) {
                                 Bukkit.broadcast(done);

@@ -185,7 +185,7 @@ public class MoneyInventoryListener implements Listener {
             MainThread.deliverOrRefund(player.getUniqueId(), netAmount + withdrawal.tax(), () -> {
                 Bank.handOut(player.getUniqueId(), netAmount);
                 player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f, 2f);
-                player.sendMessage(Main.getChatPrefix() + "§fDu hast §2" + netAmount + " " + Main.getCurrencyName() + " §fabgehoben §8(Steuer: " + withdrawal.tax() + ")");
+                player.sendMessage(Main.getChatPrefix() + "§fDu hast §2" + netAmount + " " + Main.getCurrencyName() + " §fabgehoben §7(Steuer: " + withdrawal.tax() + ")");
             });
         });
     }

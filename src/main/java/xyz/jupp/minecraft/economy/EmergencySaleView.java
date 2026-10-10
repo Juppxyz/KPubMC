@@ -84,7 +84,7 @@ public final class EmergencySaleView implements InventoryHolder {
                 "§7Der Staat ist pleite und verkauft heute",
                 "§7diese Waren günstiger. Der ganze Preis",
                 "§7geht an die Staatskasse, ohne Steuer.",
-                "§8Jedes Stück einmal am Tag pro Spieler.")));
+                "§7Jedes Stück einmal am Tag pro Spieler.")));
         for (int i = 0; i < sale.size() && i < 7; i++) {
             MarketItem item = Market.get(sale.get(i));
             if (item == null) continue;
@@ -105,7 +105,7 @@ public final class EmergencySaleView implements InventoryHolder {
         meta.customName(ShopView.name(item).decoration(TextDecoration.ITALIC, false));
         List<String> lore = new ArrayList<>();
         lore.add("§7" + item.amount() + " Stück für §a" + price + " Schilling");
-        if (normal > price) lore.add("§8statt " + normal + (item.buyable() ? " im Laden" : " bei Hondo") + " (inkl. Steuer)");
+        if (normal > price) lore.add("§7statt " + normal + (item.buyable() ? " im Laden" : " bei Hondo") + " (inkl. Steuer)");
         lore.add("");
         lore.add(done ? "§7Heute schon gekauft." : "§e» Linksklick: kaufen");
         meta.lore(Text.lore(lore));
@@ -171,11 +171,11 @@ public final class EmergencySaleView implements InventoryHolder {
                     case OK -> {
                         HondoView.deliver(uuid, material, item.amount());
                         player.sendMessage(ShopView.receipt("§fNotverkauf: §e" + item.amount() + "× ", item,
-                                " §ffür §a" + expected + " Schilling §8(an die Staatskasse)"));
+                                " §ffür §a" + expected + " Schilling §7(an die Staatskasse)"));
                         player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.8f, 1.4f);
                     }
                     case ALREADY_BOUGHT -> fail(player, "§fDas hast du heute schon gekauft.");
-                    case INSUFFICIENT_FUNDS -> fail(player, "§fDafür fehlen dir Schilling §8(benötigt: " + expected + ")§f.");
+                    case INSUFFICIENT_FUNDS -> fail(player, "§fDafür fehlen dir Schilling §7(benötigt: " + expected + ")§f.");
                     case PRICE_CHANGED -> fail(player, "§fDer Preis hat sich gerade geändert, bitte prüfe den neuen Preis.");
                     default -> fail(player, "§fDer Notverkauf ist vorbei.");
                 }

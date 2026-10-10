@@ -62,6 +62,8 @@ public final class Market {
     /* lifecycle (blocking parts run in onEnable or on workers) */
 
     public static void load() {
+        int eased = MarketRepository.easeElasticityOnce(0.75);
+        if (eased > 0) Main.getInstance().getSLF4JLogger().info("price reaction of {} goods eased (elasticity x0.75)", eased);
         seedCatalog();
         reload();
         LocalDate today = LocalDate.now(ZONE);
@@ -167,8 +169,8 @@ public final class Market {
             Tasks.sync(() -> {
                 nomadNews.forEach(Bukkit::broadcast);
                 if (!offers.isEmpty()) {
-                    Component announcement = Text.section(Main.getChatPrefix() + "§6Der Händler hat neue Tagesangebote! §8(§a-"
-                            + Math.round(dailyDiscount() * 100) + "%§8)");
+                    Component announcement = Text.section(Main.getChatPrefix() + "§6Der Händler hat neue Tagesangebote! §7(§a-"
+                            + Math.round(dailyDiscount() * 100) + "%§7)");
                     Bukkit.broadcast(announcement);
                 }
                 ShopView.refreshAll();
@@ -347,10 +349,10 @@ public final class Market {
 
     public static double defaultElasticity(Category category) {
         return switch (category) {
-            case BLOCKS -> 0.01;
-            case RARE -> 0.12;
-            case MISC -> 0.03;
-            default -> 0.02;
+            case BLOCKS -> 0.0075;
+            case RARE -> 0.09;
+            case MISC -> 0.0225;
+            default -> 0.015;
         };
     }
 

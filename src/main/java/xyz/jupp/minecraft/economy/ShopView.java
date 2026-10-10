@@ -186,7 +186,7 @@ public final class ShopView implements InventoryHolder {
                     "§7Mehr Rabatt auf Tagesangebote,",
                     "§7Notverkauf unten links,",
                     "§7Staatsanleihen bei Basil.",
-                    "§8/staatskasse")));
+                    "§7/staatskasse")));
             List<Component> sale = new ArrayList<>();
             sale.add(Text.of("§7Der Staat verkauft heute günstiger:"));
             sale.addAll(EmergencySaleView.summary());
@@ -201,7 +201,7 @@ public final class ShopView implements InventoryHolder {
             inventory.setItem(SLOT_TREASURY, named(Material.GOLD_BLOCK, "§6Staatskasse: " + Main.getCurrencyName((int) Math.min(Integer.MAX_VALUE, Treasury.balance())),
                     List.of("§7Hier landen alle Steuern.",
                             "§7Steuern gerade: " + Economy.levelWord(),
-                            "§8/staatskasse")));
+                            "§7/staatskasse")));
         }
     }
 
@@ -253,11 +253,11 @@ public final class ShopView implements InventoryHolder {
             case INFO -> lore.add("§7Preise und Steuern erklärt");
             case SERVICES -> {
                 lore.add("§7Tränke-Effekte und Dienste");
-                lore.add("§8" + Services.all().size() + " Angebote");
+                lore.add("§7" + Services.all().size() + " Angebote");
             }
             default -> {
                 lore.add("§7Kategorie");
-                lore.add("§8" + goods(candidate).size() + " Items");
+                lore.add("§7" + goods(candidate).size() + " Items");
             }
         }
         lore.add("");
@@ -287,11 +287,11 @@ public final class ShopView implements InventoryHolder {
         if (item.buyable()) {
             int net = item.buyTotal(1, daily ? Market.dailyDiscount() : 0);
             int tax = Taxes.taxOn(net, item.taxClass());
-            lore.add("§7Kaufen: " + Main.getCurrencyName(net + tax) + " §8(inkl. " + tax + " Steuer)");
+            lore.add("§7Kaufen: " + Main.getCurrencyName(net + tax) + " §7(inkl. " + tax + " Steuer)");
         } else {
-            lore.add("§7Kaufen: §8nicht hier" + (item.description() != null ? " §8(" + item.description() + ")" : ""));
+            lore.add("§7Kaufen: §7nicht hier" + (item.description() != null ? " §7(" + item.description() + ")" : ""));
         }
-        lore.add(item.sellable() ? "§7Verkaufen: " + Main.getCurrencyName(item.sellPrice()) : "§7Verkaufen: §8wird nicht angekauft");
+        lore.add(item.sellable() ? "§7Verkaufen: " + Main.getCurrencyName(item.sellPrice()) : "§7Verkaufen: §7wird nicht angekauft");
         String trend = trendLine(item);
         if (trend != null) lore.add(trend);
         if (daily && item.buyable()) lore.add("§6★ Tagesangebot §a-" + percent(Market.dailyDiscount()));
@@ -327,13 +327,13 @@ public final class ShopView implements InventoryHolder {
                 "§7  Essen & Farm-Sachen: §a" + percent(Taxes.rate(TaxClass.BASIC)),
                 "§7  Normale Waren: §a" + percent(Taxes.rate(TaxClass.STANDARD)),
                 "§7  Seltenes & Luxus: §a" + percent(Taxes.rate(TaxClass.LUXURY)),
-                "§7Beim Sterben: §a" + percent(Taxes.deathRate()) + " §7deines Geldes §8(ab 250)",
+                "§7Beim Sterben: §a" + percent(Taxes.deathRate()) + " §7deines Geldes §7(ab 250)",
                 "§7Beim Nether-Portal: je mehr Geld",
-                "§7du hast, desto mehr §8(bis " + percent(Taxes.topNetherRate()) + ")",
+                "§7du hast, desto mehr §7(bis " + percent(Taxes.topNetherRate()) + ")",
                 "",
                 "§7Steuern gerade: " + Economy.levelWord(),
-                "§8Ist viel Geld im Umlauf, steigen sie etwas,",
-                "§8sonst sinken sie wieder."));
+                "§7Ist viel Geld im Umlauf, steigen sie etwas,",
+                "§7sonst sinken sie wieder."));
         inventory.setItem(22, named(Material.PAPER, "§cSteuern", taxes));
 
         ZonedDateTime now = ZonedDateTime.now(Market.ZONE);
@@ -345,7 +345,7 @@ public final class ShopView implements InventoryHolder {
         inventory.setItem(31, named(Material.GOLD_BLOCK, "§6Staatskasse", List.of(
                 "§7Alle Steuern landen hier.",
                 "§7Stand: " + Main.getCurrencyName((int) Math.min(Integer.MAX_VALUE, Treasury.balance())),
-                "§8/staatskasse")));
+                "§7/staatskasse")));
     }
 
 
@@ -364,7 +364,7 @@ public final class ShopView implements InventoryHolder {
         ItemMeta meta = good.getItemMeta();
         List<String> lore = new ArrayList<>(priceLines(item));
         lore.add("§7Im Inventar: §f" + owned + " Stück");
-        if (item.buyable()) lore.add("§8Höchstens " + Market.hourlyLimitItems(item) + " Stück pro Stunde kaufen");
+        if (item.buyable()) lore.add("§7Höchstens " + Market.hourlyLimitItems(item) + " Stück pro Stunde kaufen");
         meta.lore(Text.lore(lore));
         good.setItemMeta(meta);
         inventory.setItem(SLOT_GOOD, good);
@@ -389,7 +389,7 @@ public final class ShopView implements InventoryHolder {
                 int net = item.buyTotal(option.bundles(), discount);
                 int tax = Taxes.taxOn(net, item.taxClass());
                 List<String> buttonLore = new ArrayList<>();
-                buttonLore.add("§7Preis: " + Main.getCurrencyName(net + tax) + " §8(inkl. " + tax + " Steuer)");
+                buttonLore.add("§7Preis: " + Main.getCurrencyName(net + tax) + " §7(inkl. " + tax + " Steuer)");
                 if (net + tax > balance) buttonLore.add("§cDir fehlen " + (net + tax - balance) + " Schilling");
                 buttonLore.add("");
                 if (isSpawnEgg(item.material())) buttonLore.add(SPAWN_EGG_WARNING);
@@ -458,9 +458,9 @@ public final class ShopView implements InventoryHolder {
         inventory.setItem(SLOT_GOOD, named(Material.EXPERIENCE_BOTTLE, "§5§oZufall", List.of(
                 "§7Du bekommst ein zufälliges Paket",
                 "§7aus den heutigen Tagesangeboten.",
-                "§7Preis: " + Main.getCurrencyName(net + tax) + " §8(inkl. " + tax + " Steuer)")));
+                "§7Preis: " + Main.getCurrencyName(net + tax) + " §7(inkl. " + tax + " Steuer)")));
         if (net <= 0) return;
-        List<String> lore = new ArrayList<>(List.of("§7Preis: " + Main.getCurrencyName(net + tax) + " §8(inkl. " + tax + " Steuer)"));
+        List<String> lore = new ArrayList<>(List.of("§7Preis: " + Main.getCurrencyName(net + tax) + " §7(inkl. " + tax + " Steuer)"));
         if (net + tax > balance) lore.add("§cDir fehlen " + (net + tax - balance) + " Schilling");
         lore.add("");
         lore.add("§e» Linksklick zum Kaufen");
@@ -489,16 +489,16 @@ public final class ShopView implements InventoryHolder {
         List<String> lore = new ArrayList<>();
         int net = offer.price();
         int tax = Taxes.taxOn(net, offer.taxClass());
-        String price = "§7Preis: " + Main.getCurrencyName(net + tax) + " §8(inkl. " + tax + " Steuer)";
+        String price = "§7Preis: " + Main.getCurrencyName(net + tax) + " §7(inkl. " + tax + " Steuer)";
         switch (offer.kind()) {
             case EFFECT -> {
                 lore.add("§7Wirkt §f" + minutes(offer.durationSeconds()));
-                lore.add("§8Nochmal kaufen verlängert (max. " + minutes(offer.maxSeconds()) + ")");
+                lore.add("§7Nochmal kaufen verlängert (max. " + minutes(offer.maxSeconds()) + ")");
                 lore.add(price);
             }
             case REPAIR -> {
                 lore.add("§7Repariert das Item in deiner Hand.");
-                lore.add("§7Preis: je nach Schaden §8(ab " + (net + tax) + ")");
+                lore.add("§7Preis: je nach Schaden §7(ab " + (net + tax) + ")");
             }
             case WEATHER -> {
                 lore.add("§7Beendet Regen und Gewitter");
@@ -542,7 +542,7 @@ public final class ShopView implements InventoryHolder {
             if (max > 0) lore.add("§7Schaden: §f" + Math.round(100.0 * damage / max) + " %");
         }
         int tax = Taxes.taxOn(net, offer.taxClass());
-        lore.add("§7Preis: " + Main.getCurrencyName(net + tax) + " §8(inkl. " + tax + " Steuer)");
+        lore.add("§7Preis: " + Main.getCurrencyName(net + tax) + " §7(inkl. " + tax + " Steuer)");
         if (net + tax > balance) lore.add("§cDir fehlen " + (net + tax - balance) + " Schilling");
         lore.add("");
         lore.add("§e» Linksklick zum Kaufen");
@@ -586,7 +586,7 @@ public final class ShopView implements InventoryHolder {
                     case OK -> {
                         if (Services.apply(player, Objects.requireNonNull(purchase.offer()), repairTarget)) {
                             player.sendMessage(Text.section(Main.getChatPrefix() + "§fGekauft: ").append(Services.name(offer))
-                                    .append(Text.section(" §ffür " + Main.getCurrencyName(purchase.total()) + " §8(davon " + purchase.tax() + " Steuer)")));
+                                    .append(Text.section(" §ffür " + Main.getCurrencyName(purchase.total()) + " §7(davon " + purchase.tax() + " Steuer)")));
                             player.playSound(player.getLocation(), Sound.BLOCK_BREWING_STAND_BREW, 1f, 1.2f);
                         } else {
                             Tasks.async(() -> Services.refund(player.getUniqueId(), purchase));
@@ -594,7 +594,7 @@ public final class ShopView implements InventoryHolder {
                             fail(player, "§fDas ging gerade nicht, du bekommst dein Geld zurück.");
                         }
                     }
-                    case INSUFFICIENT_FUNDS -> fail(player, "§fDafür fehlen dir Schilling §8(benötigt: " + purchase.total() + ")§f.");
+                    case INSUFFICIENT_FUNDS -> fail(player, "§fDafür fehlen dir Schilling §7(benötigt: " + purchase.total() + ")§f.");
                     case PRICE_CHANGED -> fail(player, "§fDer Preis hat sich gerade geändert, bitte prüfe den neuen Preis.");
                     case UNAVAILABLE -> fail(player, "§fDas gibt es gerade nicht.");
                 }
@@ -736,11 +736,11 @@ public final class ShopView implements InventoryHolder {
                     case OK -> {
                         HondoView.deliver(player.getUniqueId(), item.material(), bundles * item.amount());
                         player.sendMessage(receipt("§fGekauft: §e" + bundles * item.amount() + "× ", item,
-                                " §ffür " + Main.getCurrencyName(trade.net() + trade.tax()) + " §8(davon " + trade.tax() + " Steuer)"));
+                                " §ffür " + Main.getCurrencyName(trade.net() + trade.tax()) + " §7(davon " + trade.tax() + " Steuer)"));
                         player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f, 2f);
                         if (isSpawnEgg(item.material())) spawnEggNotice(player);
                     }
-                    case INSUFFICIENT_FUNDS -> fail(player, "§fDafür fehlen dir Schilling §8(benötigt: " + (trade.net() + trade.tax()) + ")§f.");
+                    case INSUFFICIENT_FUNDS -> fail(player, "§fDafür fehlen dir Schilling §7(benötigt: " + (trade.net() + trade.tax()) + ")§f.");
                     case PRICE_CHANGED -> fail(player, "§fDer Preis hat sich gerade geändert, bitte prüfe den neuen Preis.");
                     case LIMIT -> fail(player, limit);
                     case UNAVAILABLE -> fail(player, "§fDieses Item gibt es gerade nicht zu kaufen.");
@@ -814,13 +814,13 @@ public final class ShopView implements InventoryHolder {
                 if (trade.outcome() == MarketRepository.Outcome.OK) {
                     HondoView.deliver(player.getUniqueId(), item.material(), item.amount());
                     player.sendMessage(receipt("§5Zufall: §e" + item.amount() + "× ", item,
-                            " §ffür " + Main.getCurrencyName(trade.net() + trade.tax()) + " §8(davon " + trade.tax() + " Steuer)"));
+                            " §ffür " + Main.getCurrencyName(trade.net() + trade.tax()) + " §7(davon " + trade.tax() + " Steuer)"));
                     player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f, 2f);
                     if (isSpawnEgg(item.material())) spawnEggNotice(player);
                 } else if (limit != null) {
                     fail(player, limit);
                 } else {
-                    fail(player, "§fDafür fehlen dir Schilling §8(benötigt: " + (trade.net() + trade.tax()) + ")§f.");
+                    fail(player, "§fDafür fehlen dir Schilling §7(benötigt: " + (trade.net() + trade.tax()) + ")§f.");
                 }
                 render();
             };
@@ -846,9 +846,9 @@ public final class ShopView implements InventoryHolder {
             wait = 60;
         }
         if (left > 0) {
-            return "§fDiese Stunde kannst du davon nur noch §e" + left + " Stück §fkaufen §8(höchstens " + limit + " pro Stunde)§f.";
+            return "§fDiese Stunde kannst du davon nur noch §e" + left + " Stück §fkaufen §7(höchstens " + limit + " pro Stunde)§f.";
         }
-        return "§fMehr davon gibt es für dich diese Stunde nicht §8(höchstens " + limit
+        return "§fMehr davon gibt es für dich diese Stunde nicht §7(höchstens " + limit
                 + " Stück pro Stunde)§f. Wieder in etwa §e" + wait + " Min§f.";
     }
 

@@ -6,6 +6,7 @@ import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 import org.bukkit.Bukkit;
+import org.bukkit.Material;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
@@ -23,8 +24,11 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 public class ConfigManager {
     private ConfigManager() {}
@@ -55,6 +59,7 @@ public class ConfigManager {
     private static final List<TaxBracket> DEFAULT_NETHER_BRACKETS = List.of(
             new TaxBracket(0, 0.0), new TaxBracket(500, 0.5), new TaxBracket(5_000, 0.65), new TaxBracket(20_000, 0.7));
     private static volatile List<TaxBracket> netherTransferTaxBrackets = DEFAULT_NETHER_BRACKETS;
+    private static volatile DntLootRules dntLootRules = DntLootRules.DEFAULT;
 
     // singleton pattern
     private static final ConfigManager instance = new ConfigManager();
@@ -90,6 +95,7 @@ public class ConfigManager {
             openAiApiKey = optString(config, "openAiApiKey", "").trim();
             endUnlock = parseDateTime(optString(config, "endUnlock", ""));
             netherTransferTaxBrackets = parseBrackets(config.get("netherTransferTaxBrackets"));
+            dntLootRules = parseDntLoot(config.get("dntLoot"));
 
             Logger.console("loaded config successfully");
             return true;
@@ -144,6 +150,7 @@ public class ConfigManager {
     public String getOpenAiModel() { return openAiModel; }
     public String getOpenAiApiKey() { return openAiApiKey; }
     public LocalDateTime getEndUnlock() { return endUnlock; }
+    public DntLootRules getDntLootRules() { return dntLootRules; }
 
     // "2026-10-10T16:00" or "2026-10-10"; empty or invalid -> null
     private static LocalDateTime parseDateTime(String value) {
@@ -194,6 +201,45 @@ public class ConfigManager {
         if (brackets.isEmpty()) return DEFAULT_NETHER_BRACKETS;
         brackets.sort(Comparator.comparingInt(TaxBracket::from));
         return List.copyOf(brackets);
+    }
+
+    // {"enabled": true, "namespaces": ["nova_structures"], "maxPerChest": {"DIAMOND": 2, ...}, "enchantedKeepChance": 0.5};
+    // missing keys keep their default, a given "maxPerChest" replaces the default caps completely
+    private static DntLootRules parseDntLoot(JsonElement element) {
+        DntLootRules defaults = DntLootRules.DEFAULT;
+        if (element == null || !element.isJsonObject()) return defaults;
+        JsonObject object = element.getAsJsonObject();
+
+        boolean enabled = !"false".equalsIgnoreCase(optString(object, "enabled", "true"));
+        double keepChance = Math.min(1.0, Math.max(0.0, optDouble(object, "enchantedKeepChance", defaults.enchantedKeepChance())));
+
+        Set<String> namespaces = defaults.namespaces();
+        JsonElement namespaceElement = object.get("namespaces");
+        if (namespaceElement != null && namespaceElement.isJsonArray()) {
+            Set<String> parsed = new HashSet<>();
+            for (JsonElement entry : namespaceElement.getAsJsonArray()) {
+                if (entry.isJsonPrimitive()) parsed.add(entry.getAsString().trim().toLowerCase(Locale.ROOT));
+            }
+            namespaces = Set.copyOf(parsed);
+        }
+
+        Map<Material, Integer> caps = defaults.maxPerChest();
+        JsonElement capElement = object.get("maxPerChest");
+        if (capElement != null && capElement.isJsonObject()) {
+            JsonObject capObject = capElement.getAsJsonObject();
+            Map<Material, Integer> parsed = new EnumMap<>(Material.class);
+            for (String key : capObject.keySet()) {
+                Material material = Material.matchMaterial(key);
+                int cap = optInt(capObject, key, -1);
+                if (material == null || cap < 0) {
+                    Main.getInstance().getSLF4JLogger().warn("Skipping invalid dntLoot cap {}: {}", key, capObject.get(key));
+                    continue;
+                }
+                parsed.put(material, cap);
+            }
+            caps = Map.copyOf(parsed);
+        }
+        return new DntLootRules(enabled, namespaces, caps, keepChance);
     }
 
 

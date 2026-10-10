@@ -119,7 +119,7 @@ public class DeathListener implements Listener {
 
 
         Location deathLoc = player.getLocation();
-        player.sendMessage(Main.getChatPrefix() + "§fDein Todesort » §8x: §a" + Math.round(deathLoc.getX()) + " §8y: §a" + Math.round(deathLoc.getY()) + " §8z: §a" + Math.round(deathLoc.getZ()));
+        player.sendMessage(Main.getChatPrefix() + "§fDein Todesort » §7x: §a" + Math.round(deathLoc.getX()) + " §7y: §a" + Math.round(deathLoc.getY()) + " §7z: §a" + Math.round(deathLoc.getZ()));
 
         // the bounty is recognised by the prefix in the tab list name
         boolean listedAsWanted = killer != null && Text.legacy(player.playerListName()).startsWith(Main.getIsWantedPrefix());
@@ -156,7 +156,7 @@ public class DeathListener implements Listener {
             message = Main.getChatPrefix() + "Dir wurde §ckeine §fTodes-Steuer berechnet.";
         } else {
             message = String.format(
-                    "%sDir wurden §a%s §8(§2%.0f%%§8) §fals Todes-Steuer berechnet.",
+                    "%sDir wurden §a%s §7(§2%.0f%%§7) §fals Todes-Steuer berechnet.",
                     Main.getChatPrefix(),
                     Main.getCurrencyName(tax.tax()),
                     Taxes.deathRate() * 100
@@ -232,7 +232,7 @@ public class DeathListener implements Listener {
         Teams.Penalty penalty = Teams.deathPenalty(playerTeam, ownTeam ? null : killerTeamID);
         if (penalty == null) return;
         // a kill keeps a war between the two teams going
-        String war = !ownTeam && Relations.warKill(killerTeamID, playerTeamID) ? " §8(Krieg)" : "";
+        String war = !ownTeam && Relations.warKill(killerTeamID, playerTeamID) ? " §7(Krieg)" : "";
         sync(() -> {
             if (!ownTeam) {
                 forEachOnlineTeamMember(killerTeamID, online ->
@@ -242,7 +242,7 @@ public class DeathListener implements Listener {
                 online.sendMessage(Main.getChatPrefix() + "§c-" + penalty.taken() + " Team-Punkte §fwegen dem Tod durch " + killer.getDisplayName() + war);
                 if (penalty.levelsLost() > 0) {
                     online.sendMessage(Main.getChatPrefix() + "§cDie Punkte reichten nicht: euer Team ist jetzt Level " + penalty.newLevel()
-                            + "§c. §8(Die Stufe brachte " + penalty.refunded() + " Punkte zurück.)");
+                            + "§c. §7(Die Stufe brachte " + penalty.refunded() + " Punkte zurück.)");
                 }
             });
         });

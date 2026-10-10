@@ -46,7 +46,7 @@ public class RankingCommand implements CommandExecutor {
             if (teamCacheObject == null) {
                 return new Ranking(lines, false);
             }
-            lines.add(String.format("§a%d. §8- %s%s §8(§a%d§8) §8| §aLevel %d", position, teamCacheObject.getTeamColor(), teamCacheObject.getTeamName(), team.points(), teamCacheObject.getLevel()));
+            lines.add(String.format("§a%d. §8- %s%s §7(§a%d§7) §8| §aLevel %d", position, teamCacheObject.getTeamColor(), teamCacheObject.getTeamName(), team.points(), teamCacheObject.getLevel()));
             position++;
         }
         return new Ranking(lines, true);

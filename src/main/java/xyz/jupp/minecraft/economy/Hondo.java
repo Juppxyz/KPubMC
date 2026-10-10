@@ -63,7 +63,7 @@ public final class Hondo {
             Map.entry(Material.EMERALD, "§aSmaragd"),
             Map.entry(Material.GOLD_INGOT, "§eGoldbarren"),
             Map.entry(Material.DIAMOND, "§bDiamant"),
-            Map.entry(Material.NETHERITE_INGOT, "§8Netheritbarren"),
+            Map.entry(Material.NETHERITE_INGOT, "§7Netheritbarren"),
             Map.entry(Material.AMETHYST_SHARD, "§dAmethystsplitter"),
             Map.entry(Material.RESIN_CLUMP, "§6Harzklumpen"),
             Map.entry(Material.LAPIS_LAZULI, "§9Lapislazuli"),

@@ -30,7 +30,7 @@ public class TeamCommand implements CommandExecutor {
             } else if (args.length != 2) {
                 fail(player, "So geht's: §a/team neu <Name>");
             } else if (player.getLevel() < Teams.CREATION_LEVEL) {
-                fail(player, "Du brauchst §a" + Teams.CREATION_LEVEL + " §fLevel, um ein Team zu gründen §8(sie werden nicht abgezogen)§f.");
+                fail(player, "Du brauchst §a" + Teams.CREATION_LEVEL + " §fLevel, um ein Team zu gründen §7(sie werden nicht abgezogen)§f.");
             } else if (!TeamCreateView.NAME.matcher(args[1]).matches()) {
                 fail(player, "Der Name braucht §a" + Teams.NAME_MIN + " bis " + Teams.NAME_MAX + " §fZeichen: Buchstaben, Zahlen, _ oder -.");
             } else {
@@ -51,7 +51,7 @@ public class TeamCommand implements CommandExecutor {
 
         if (!inTeam) {
             player.sendMessage(Main.getChatPrefix() + "Du bist noch in keinem " + Main.getTeamName() + "§f.");
-            player.sendMessage(Main.getChatPrefix() + "Gründe eins mit §a/team neu <Name> §8(ab Level " + Teams.CREATION_LEVEL
+            player.sendMessage(Main.getChatPrefix() + "Gründe eins mit §a/team neu <Name> §7(ab Level " + Teams.CREATION_LEVEL
                     + ", " + Teams.CREATION_COST + " Schilling)§f, oder lass dich aufnehmen: §a/invites§f.");
             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 1f);
             return true;

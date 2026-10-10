@@ -84,7 +84,7 @@ public class MoneyInventory {
         inventory.setItem(49, createItemStack("§a+ 1", Material.LIME_DYE));
         inventory.setItem(50, createItemStack("§a+ 10", Material.LIME_WOOL));
         inventory.setItem(51, createItemStack("§a+ 100", Material.LIME_WOOL));
-        inventory.setItem(52, createItemStack("§aAbheben §8(§6-" + Math.round(Taxes.rate(TaxClass.STANDARD) * 100) + "%§8)", Material.NETHER_STAR));
+        inventory.setItem(52, createItemStack("§aAbheben §7(§6-" + Math.round(Taxes.rate(TaxClass.STANDARD) * 100) + "%§7)", Material.NETHER_STAR));
         inventory.setItem(53, createItemStack(closeInventoryName, Material.BARRIER));
         return inventory;
     }

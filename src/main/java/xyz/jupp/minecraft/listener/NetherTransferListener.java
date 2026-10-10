@@ -31,7 +31,7 @@ public class NetherTransferListener implements Listener {
             long daysLeft = ChronoUnit.DAYS.between(LocalDate.now(ZoneId.of("Europe/Berlin")), unlock.toLocalDate());
             player.sendMessage(Main.getChatPrefix() + "§cDas End ist noch gesperrt.§f Es öffnet am §e"
                     + unlock.format(DateTimeFormatter.ofPattern("dd.MM.yyyy")) + " §fum §e"
-                    + unlock.format(DateTimeFormatter.ofPattern("HH:mm")) + " Uhr §8(noch " + daysLeft + (daysLeft == 1 ? " Tag)" : " Tage)"));
+                    + unlock.format(DateTimeFormatter.ofPattern("HH:mm")) + " Uhr §7(noch " + daysLeft + (daysLeft == 1 ? " Tag)" : " Tage)"));
             return;
         }
         if (player.getWorld().getEnvironment() != World.Environment.NORMAL

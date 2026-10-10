@@ -168,7 +168,7 @@ public final class WarpView implements InventoryHolder {
         boolean hasWarp = WarpCache.getInstance().hasWarp(viewer.getUniqueId());
         set(SLOT_OWN_SET, Items.named(Material.NETHER_STAR, hasWarp ? "§bDeinen Warp hierher verschieben" : "§bDeinen Warp hier setzen", List.of(
                 "§7Kostet §f" + Items.format(hasWarp ? MOVE_COST : CREATE_COST) + " Schilling",
-                "§8Jeder Spieler kann deinen Warp nutzen.",
+                "§7Jeder Spieler kann deinen Warp nutzen.",
                 "",
                 "§e» Klicken")), () -> {
             Location here = viewer.getLocation();
@@ -216,7 +216,7 @@ public final class WarpView implements InventoryHolder {
         int cost = warp == null ? TeamWarps.SET_COST : TeamWarps.MOVE_COST;
         set(setSlot, Items.named(Material.RESPAWN_ANCHOR, colour + label + (warp == null ? " hier setzen" : " hierher verschieben"), List.of(
                 "§7Kostet §f" + Items.format(cost) + " Schilling §7aus der Team-Kasse",
-                "§8Euer Team und eure Partner (ab Level " + Teams.WARP_LEVEL + ") nutzen ihn.",
+                "§7Euer Team und eure Partner (ab Level " + Teams.WARP_LEVEL + ") nutzen ihn.",
                 "",
                 "§e» Klicken")), () -> {
             Location here = viewer.getLocation();
@@ -376,7 +376,7 @@ public final class WarpView implements InventoryHolder {
             PlayerRepository.addMoney(uuid, CREATE_COST);
             return "Du hast schon einen Warp.";
         }
-        return "§aDein Warp ist gesetzt. §c-" + Items.format(CREATE_COST) + " Schilling §8(jeder kann ihn nutzen)";
+        return "§aDein Warp ist gesetzt. §c-" + Items.format(CREATE_COST) + " Schilling §7(jeder kann ihn nutzen)";
     }
 
     private String moveOwn(Location here) {
@@ -411,7 +411,7 @@ public final class WarpView implements InventoryHolder {
                     + ". §7(" + Items.format(result.cost()) + " aus der Team-Kasse)";
             case LEVEL -> "Den " + label + " gibt es ab Team-Level " + TeamWarps.requiredLevel(number) + ".";
             case NOT_ALLOWED -> "Team-Warps setzen nur Boss und Vize.";
-            case INSUFFICIENT_FUNDS -> "In der Team-Kasse fehlt Geld §8(" + Items.format(result.cost()) + " Schilling)§f.";
+            case INSUFFICIENT_FUNDS -> "In der Team-Kasse fehlt Geld §7(" + Items.format(result.cost()) + " Schilling)§f.";
         };
     }
 
