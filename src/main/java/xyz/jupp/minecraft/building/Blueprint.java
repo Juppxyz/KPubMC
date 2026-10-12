@@ -68,10 +68,24 @@ public final class Blueprint {
      * rarest material first, so a wrong candidate fails after one or two reads.
      */
     public record Variant(@NotNull StructureRotation rotation, boolean mirrored, int sizeX, int sizeY, int sizeZ,
-                          @NotNull List<Cell> blocks, @NotNull List<Gap> gaps, @NotNull List<Prop> props) {
+                          @NotNull List<Cell> blocks, @NotNull List<Gap> gaps, @NotNull List<Prop> props, @NotNull BlockData @NotNull [] grid) {
         /** Everything a copy has to get right. */
         public int cells() {
             return blocks.size() + gaps.size() + props.size();
+        }
+
+        /** The block the template wants in the cell, null for a gap or outside the box. */
+        public @Nullable BlockData data(int dx, int dy, int dz) {
+            if (dx < 0 || dx >= sizeX || dy < 0 || dy >= sizeY || dz < 0 || dz >= sizeZ) return null;
+            return grid[(dx * sizeY + dy) * sizeZ + dz];
+        }
+
+        /** Whether the template wants a cushion in the cell. */
+        public boolean prop(int dx, int dy, int dz) {
+            for (Prop prop : props) {
+                if (prop.dx() == dx && prop.dy() == dy && prop.dz() == dz) return true;
+            }
+            return false;
         }
     }
 
@@ -309,7 +323,7 @@ public final class Blueprint {
                     maxZ = Math.max(maxZ, turned[1]);
                 }
                 int turnedX = maxX - minX + 1, turnedZ = maxZ - minZ + 1;
-                boolean[] filled = new boolean[turnedX * sizeY * turnedZ];
+                BlockData[] grid = new BlockData[turnedX * sizeY * turnedZ];
                 List<Cell> turnedBlocks = new ArrayList<>(blocks.size());
                 for (Cell cell : blocks) {
                     int[] turned = turn(cell.dx(), cell.dz(), mirrored, turns);
@@ -318,7 +332,7 @@ public final class Blueprint {
                     if (rotation != StructureRotation.NONE) data.rotate(rotation);
                     int x = turned[0] - minX, z = turned[1] - minZ;
                     turnedBlocks.add(new Cell(x, cell.dy(), z, data));
-                    filled[(x * sizeY + cell.dy()) * turnedZ + z] = true;
+                    grid[(x * sizeY + cell.dy()) * turnedZ + z] = data;
                 }
                 turnedBlocks.sort(Comparator.comparingInt(cell -> counts.get(cell.material())));
                 List<Prop> turnedProps = new ArrayList<>(props.size());
@@ -331,12 +345,12 @@ public final class Blueprint {
                 for (int x = 0; x < turnedX; x++) {
                     for (int y = 0; y < sizeY; y++) {
                         for (int z = 0; z < turnedZ; z++) {
-                            if (!filled[(x * sizeY + y) * turnedZ + z]) gaps.add(new Gap(x, y, z));
+                            if (grid[(x * sizeY + y) * turnedZ + z] == null) gaps.add(new Gap(x, y, z));
                         }
                     }
                 }
                 Variant variant = new Variant(rotation, mirrored, turnedX, sizeY, turnedZ,
-                        List.copyOf(turnedBlocks), List.copyOf(gaps), List.copyOf(turnedProps));
+                        List.copyOf(turnedBlocks), List.copyOf(gaps), List.copyOf(turnedProps), grid);
                 unique.putIfAbsent(signature(variant), variant);
             }
         }

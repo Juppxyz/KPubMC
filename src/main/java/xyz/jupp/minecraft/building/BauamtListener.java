@@ -6,13 +6,17 @@ import org.bukkit.block.Block;
 import org.bukkit.entity.Cushion;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityPlaceEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.util.BoundingBox;
 import xyz.jupp.minecraft.utils.Tasks;
@@ -20,7 +24,9 @@ import xyz.jupp.minecraft.utils.Tasks;
 /**
  * Notices a finished copy of a template: every placed block or cushion that occurs in a template is a candidate for
  * the last piece of a copy. The check runs a tick later, when the neighbours (stairs shapes, fences) have settled, and
- * reads only the few cells around the piece, nothing more. No block that is broken is ever looked at here.
+ * reads only the few cells around the piece, nothing more.
+ * Breaking a piece of a paid build (state property) is charged to the player; for every other block of the world the
+ * break check is a single map lookup.
  */
 public class BauamtListener implements Listener {
 
@@ -70,6 +76,33 @@ public class BauamtListener implements Listener {
                 Location at = entity.getLocation();
                 Bauamt.placed(player, clicked.getWorld(), at.getBlockX(), at.getBlockY(), at.getBlockZ(), material);
             }
+        });
+    }
+
+    // state property: the block is still there during the event, so it can be compared with the template
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
+    public void onBreak(BlockBreakEvent event) {
+        Bauamt.blockBroken(event.getPlayer(), event.getBlock());
+    }
+
+    // a cushion that vanishes after a player's hit
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
+    public void onCushionHit(EntityDamageByEntityEvent event) {
+        if (!(event.getEntity() instanceof Cushion cushion)) return;
+        Player player = event.getDamager() instanceof Player direct ? direct
+                : event.getDamager() instanceof Projectile projectile && projectile.getShooter() instanceof Player shooter ? shooter : null;
+        if (player == null) return;
+        Location at = cushion.getLocation();
+        Tasks.sync(() -> {
+            if (!cushion.isValid() && player.isOnline()) Bauamt.cushionBroken(player, at);
+        });
+    }
+
+    @EventHandler
+    public void onJoin(PlayerJoinEvent event) {
+        Player player = event.getPlayer();
+        Tasks.syncLater(60L, () -> {
+            if (player.isOnline()) Bauamt.remind(player);
         });
     }
 

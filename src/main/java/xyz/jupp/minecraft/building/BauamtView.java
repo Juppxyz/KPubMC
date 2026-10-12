@@ -19,19 +19,25 @@ import xyz.jupp.minecraft.inventory.Items;
 import xyz.jupp.minecraft.utils.Tasks;
 import xyz.jupp.minecraft.utils.Text;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
-/** The Bauamt villager's menu: the treasury, the templates with their material lists, the player's open reports, the news. */
+/**
+ * The Bauamt villager's menu: the treasury, the templates (take an order, see the material list), the player's open
+ * reports, their damage bill, the news.
+ */
 public final class BauamtView implements InventoryHolder {
 
     private static final int SIZE = 45;
     private static final int SLOT_INFO = 4;
     private static final int TEMPLATES_START = 9, TEMPLATES_END = 26;
     private static final int PENDING_START = 27, PENDING_END = 35;
-    private static final int SLOT_DAMAGE = 36, SLOT_RECENT = 40, SLOT_CLOSE = 44;
+    private static final int SLOT_DAMAGE = 36, SLOT_BILL = 38, SLOT_RECENT = 40, SLOT_CLOSE = 44;
     private static final int LIST_LINES = 8;
     private static final int BOOK_LINES = 14;
     private static final long CLICK_COOLDOWN_MILLIS = 300;
@@ -40,6 +46,7 @@ public final class BauamtView implements InventoryHolder {
     private final Inventory inventory;
     private final Map<Integer, Blueprint> templateSlots = new HashMap<>();
     private final Map<Integer, Build> pendingSlots = new HashMap<>();
+    private boolean hasBill;
     private boolean busy;
     private long ignoreClicksUntil;
 
@@ -69,13 +76,14 @@ public final class BauamtView implements InventoryHolder {
         pendingSlots.clear();
         ItemStack frame = Items.pane(Material.BLACK_STAINED_GLASS_PANE);
         for (int slot = 0; slot < SIZE; slot++) inventory.setItem(slot, frame);
+        UUID uuid = viewer.getUniqueId();
 
         Bauamt.Funding funding = Bauamt.funding();
         List<String> info = new ArrayList<>(List.of(
-                "§7Bau eine der Vorlagen irgendwo nach.",
-                "§7Beim letzten Block sagt dir das Bauamt",
-                "§7Bescheid. Dann komm her und hol dir",
-                "§7die Förderung aus der Staatskasse.",
+                "§71. Auftrag annehmen: Linksklick auf eine Vorlage.",
+                "§72. Irgendwo nachbauen. Beim letzten Block",
+                "§7   sagt dir das Bauamt Bescheid.",
+                "§73. Hierher zurück: Abnahme und Auszahlung.",
                 "",
                 "§fStaatskasse: §a" + Items.format(funding.balance()) + " Schilling"));
         if (funding.broke()) {
@@ -87,9 +95,10 @@ public final class BauamtView implements InventoryHolder {
         }
         info.addAll(List.of(
                 "",
-                "§7Fehlt der Hinweis? Setz einen Block des",
-                "§7Bauwerks neu. Luft im Rahmen muss frei",
-                "§7bleiben. Beschädigte Bauwerke meldet das Amt."));
+                "§7Ohne Auftrag gibt es kein Geld. Luft im Rahmen",
+                "§7muss frei bleiben. Fehlt der Hinweis, setz einen",
+                "§7Block neu. Bezahlte Bauwerke sind Staatseigentum:",
+                "§7wer sie beschädigt, zahlt " + Items.format(Bauamt.DAMAGE_FLAT) + " + " + Bauamt.DAMAGE_PER_BLOCK + " je Block."));
         inventory.setItem(SLOT_INFO, Items.named(Material.SCAFFOLDING, "§6§lBauamt", info));
 
         List<Blueprint> templates = Bauamt.enabledTemplates();
@@ -100,16 +109,19 @@ public final class BauamtView implements InventoryHolder {
             Blueprint template = templates.get(i);
             int slot = TEMPLATES_START + i;
             templateSlots.put(slot, template);
-            inventory.setItem(slot, Items.named(template.icon(), "§e" + template.name(), List.of(
+            int open = Bauamt.openOrders(uuid, template.id());
+            inventory.setItem(slot, Items.glow(Items.named(template.icon(), "§e" + template.name(), List.of(
                     payoutLine(template, funding),
                     "§7Größe: §f" + Bauamt.size(template) + " §7Blöcke",
                     "§7Muster: bei §f" + template.originX() + " / " + template.originY() + " / " + template.originZ(),
                     "§7Bisher gebaut: §f" + Bauamt.copies(template) + "×",
+                    "§7Deine Aufträge: §f" + open + " §7von " + Bauamt.ORDERS_PER_TEMPLATE,
                     "",
-                    "§e» Linksklick: Materialliste")));
+                    open < Bauamt.ORDERS_PER_TEMPLATE ? "§e» Linksklick: Auftrag annehmen" : "§7Mehr Aufträge gibt es erst nach der Abnahme.",
+                    "§e» Rechtsklick: Materialliste")), open > 0));
         }
 
-        List<Build> pending = Bauamt.pending(viewer.getUniqueId());
+        List<Build> pending = Bauamt.pending(uuid);
         if (pending.isEmpty()) {
             inventory.setItem(PENDING_START + 4, Items.named(Material.MAP, "§7Keine offenen Anträge", List.of(
                     "§7Hier erscheinen deine fertigen Bauwerke.")));
@@ -145,6 +157,28 @@ public final class BauamtView implements InventoryHolder {
         damage.add(1, "");
         inventory.setItem(SLOT_DAMAGE, Items.named(Material.CRACKED_STONE_BRICKS, "§c§lSchadensmeldungen", damage));
 
+        List<Damage> bills = Bauamt.damages(uuid);
+        hasBill = !bills.isEmpty();
+        if (hasBill) {
+            List<String> lore = new ArrayList<>();
+            lore.add("§7Du hast Staatseigentum beschädigt.");
+            lore.add("");
+            Instant now = Instant.now();
+            for (Damage bill : bills) {
+                if (lore.size() >= LIST_LINES + 2) break;
+                Build build = Bauamt.build(bill.buildId());
+                Blueprint template = build == null ? null : Bauamt.template(build.templateId());
+                long days = Duration.between(now, bill.dueAt()).toDays();
+                lore.add("§7• §e" + (template == null ? "Bauwerk" : template.name()) + "§7: §c" + Items.format(bill.amount()) + " §7(" + bill.blocks()
+                        + (bill.blocks() == 1 ? " Block, " : " Blöcke, ") + (bill.wanted() || days < 0 ? "überfällig" : days == 0 ? "heute fällig"
+                        : "fällig in " + days + (days == 1 ? " Tag" : " Tagen")) + ")");
+            }
+            lore.add("");
+            lore.add("§fGesamt: §c" + Items.format(Bauamt.owed(uuid)) + " Schilling");
+            lore.add("§e» Linksklick: bezahlen");
+            inventory.setItem(SLOT_BILL, Items.glow(Items.named(Material.REDSTONE, "§c§lSchadensrechnung", lore), true));
+        }
+
         List<String> recent = new ArrayList<>();
         for (Build build : Bauamt.recent(LIST_LINES)) {
             Blueprint template = Bauamt.template(build.templateId());
@@ -166,15 +200,46 @@ public final class BauamtView implements InventoryHolder {
         event.setCancelled(true);
         if (event.getClickedInventory() != inventory || busy) return;
         if (System.currentTimeMillis() < ignoreClicksUntil) return;
-        if (event.getClick() != ClickType.LEFT) return;
+        ClickType click = event.getClick();
+        if (click != ClickType.LEFT && click != ClickType.RIGHT) return;
         int slot = event.getRawSlot();
         if (slot == SLOT_CLOSE) {
             Tasks.sync(player::closeInventory);
         } else if (templateSlots.containsKey(slot)) {
-            player.openBook(materialBook(templateSlots.get(slot)));
-        } else if (pendingSlots.containsKey(slot)) {
+            if (click == ClickType.RIGHT) player.openBook(materialBook(templateSlots.get(slot)));
+            else takeOrder(player, templateSlots.get(slot));
+        } else if (pendingSlots.containsKey(slot) && click == ClickType.LEFT) {
             claim(player, pendingSlots.get(slot));
+        } else if (slot == SLOT_BILL && hasBill && click == ClickType.LEFT) {
+            payBill(player);
         }
+    }
+
+    private void takeOrder(Player player, Blueprint template) {
+        UUID uuid = player.getUniqueId();
+        busy = true;
+        Tasks.async(() -> {
+            Bauamt.OrderOutcome outcome;
+            try {
+                outcome = Bauamt.takeOrder(uuid, template);
+            } catch (RuntimeException e) {
+                Main.getInstance().getSLF4JLogger().error("Bauamt order for {} failed", player.getName(), e);
+                outcome = null;
+            }
+            Bauamt.OrderOutcome result = outcome;
+            Tasks.sync(() -> {
+                busy = false;
+                if (result == Bauamt.OrderOutcome.OK) {
+                    player.sendMessage(Main.getChatPrefix() + "§fAuftrag angenommen: §e" + template.name() + "§f. Bau ihn irgendwo nach, beim letzten Block meldet sich das Bauamt.");
+                    player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_YES, 1f, 1f);
+                } else if (result == Bauamt.OrderOutcome.LIMIT) {
+                    fail(player, "§fDu hast schon " + Bauamt.ORDERS_PER_TEMPLATE + " offene Aufträge dafür. Erst bauen und abnehmen lassen.");
+                } else {
+                    fail(player, "§fDas hat gerade nicht geklappt, versuch es gleich nochmal.");
+                }
+                if (player.getOpenInventory().getTopInventory() == inventory) render();
+            });
+        });
     }
 
     private void claim(Player player, Build build) {
@@ -199,6 +264,35 @@ public final class BauamtView implements InventoryHolder {
                 default -> fail(player, "§fDas hat gerade nicht geklappt, versuch es gleich nochmal.");
             }
             if (player.getOpenInventory().getTopInventory() == inventory) render();
+        });
+    }
+
+    private void payBill(Player player) {
+        UUID uuid = player.getUniqueId();
+        busy = true;
+        Tasks.async(() -> {
+            Bauamt.Settlement settlement;
+            try {
+                settlement = Bauamt.payDamages(uuid);
+            } catch (RuntimeException e) {
+                Main.getInstance().getSLF4JLogger().error("Bauamt damage payment by {} failed", player.getName(), e);
+                settlement = null;
+            }
+            Bauamt.Settlement result = settlement;
+            Tasks.sync(() -> {
+                busy = false;
+                if (result == null) {
+                    fail(player, "§fDas hat gerade nicht geklappt, versuch es gleich nochmal.");
+                } else if (result.paid() > 0) {
+                    player.sendMessage(Main.getChatPrefix() + "§fDu hast §c" + Items.format(result.paid()) + " Schilling §fSchadensersatz an die Staatskasse gezahlt. Die Sache ist erledigt.");
+                    player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1f, 1.5f);
+                } else if (result.missing() > 0) {
+                    fail(player, "§fDafür fehlen dir Schilling §7(benötigt: " + Items.format(result.missing()) + " mehr)§f.");
+                } else {
+                    player.sendMessage(Main.getChatPrefix() + "§fDu schuldest dem Staat nichts.");
+                }
+                if (player.getOpenInventory().getTopInventory() == inventory) render();
+            });
         });
     }
 

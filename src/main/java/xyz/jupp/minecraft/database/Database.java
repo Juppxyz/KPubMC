@@ -423,7 +423,31 @@ public final class Database {
                 checked_at  TIMESTAMPTZ
             )""",
             "CREATE INDEX IF NOT EXISTS bauamt_builds_player_idx ON bauamt_builds (player_uuid, paid_at)",
-            "CREATE INDEX IF NOT EXISTS bauamt_builds_state_idx ON bauamt_builds (state)"
+            "CREATE INDEX IF NOT EXISTS bauamt_builds_state_idx ON bauamt_builds (state)",
+            // the orders players take at the Bauamt (one per copy; build_id once the copy was reported) and the damage bills
+            """
+            CREATE TABLE IF NOT EXISTS bauamt_orders (
+                id          BIGINT  GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                player_uuid UUID    NOT NULL,
+                template_id INTEGER NOT NULL REFERENCES bauamt_templates (id) ON DELETE CASCADE,
+                taken_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+                build_id    BIGINT REFERENCES bauamt_builds (id) ON DELETE SET NULL
+            )""",
+            "CREATE INDEX IF NOT EXISTS bauamt_orders_open_idx ON bauamt_orders (player_uuid, template_id) WHERE build_id IS NULL",
+            """
+            CREATE TABLE IF NOT EXISTS bauamt_damage (
+                id          BIGINT  GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                build_id    BIGINT  NOT NULL REFERENCES bauamt_builds (id) ON DELETE CASCADE,
+                player_uuid UUID    NOT NULL,
+                player_name TEXT    NOT NULL,
+                blocks      INTEGER NOT NULL DEFAULT 0,
+                amount      INTEGER NOT NULL,
+                created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+                due_at      TIMESTAMPTZ NOT NULL,
+                paid_at     TIMESTAMPTZ,
+                wanted_at   TIMESTAMPTZ
+            )""",
+            "CREATE INDEX IF NOT EXISTS bauamt_damage_open_idx ON bauamt_damage (player_uuid) WHERE paid_at IS NULL"
     );
 
     private static volatile HikariDataSource dataSource;
