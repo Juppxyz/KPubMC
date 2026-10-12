@@ -30,6 +30,7 @@ public final class Build {
     private final Instant createdAt;
     private volatile @Nullable Instant paidAt;
     private volatile @Nullable Instant damagedAt;
+    private volatile long hintedAt;
 
     Build(long id, int templateId, @NotNull UUID player, @NotNull String playerName, @NotNull String world, int x, int y, int z,
           int sizeX, int sizeY, int sizeZ, @NotNull StructureRotation rotation, boolean mirrored, @NotNull State state, int reward,
@@ -137,6 +138,14 @@ public final class Build {
 
     public @Nullable Instant damagedAt() {
         return damagedAt;
+    }
+
+    /** Placing a cushion can be noticed twice in a tick; the hint comes once in a few seconds. */
+    boolean shouldHint() {
+        long now = System.currentTimeMillis();
+        if (now - hintedAt < 3_000) return false;
+        hintedAt = now;
+        return true;
     }
 
     void paid(int reward) {

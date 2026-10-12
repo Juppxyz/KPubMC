@@ -4,7 +4,6 @@ import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.World;
-import org.bukkit.block.Block;
 import org.bukkit.block.structure.StructureRotation;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
@@ -88,9 +87,10 @@ public final class Bauamt {
         Database.query("SELECT * FROM bauamt_templates ORDER BY id", row -> {
             String name = row.getString("name");
             try {
+                Blueprint.Contents contents = Blueprint.parse(row.getString("blocks"));
                 loaded.add(new Blueprint(row.getInt("id"), name, row.getInt("reward"), row.getBoolean("enabled"), row.getString("world"),
                         row.getInt("origin_x"), row.getInt("origin_y"), row.getInt("origin_z"),
-                        row.getInt("size_x"), row.getInt("size_y"), row.getInt("size_z"), Blueprint.parse(row.getString("blocks"))));
+                        row.getInt("size_x"), row.getInt("size_y"), row.getInt("size_z"), contents.blocks(), contents.props()));
             } catch (IllegalArgumentException e) {
                 Main.getInstance().getSLF4JLogger().warn("Bauamt template {} skipped: {}", name, e.getMessage());
             }
@@ -222,38 +222,43 @@ public final class Bauamt {
 
     /* noticing a finished copy (main thread, a tick after the block was placed) */
 
-    static void placed(@NotNull Player player, @NotNull Block block) {
-        Material material = block.getType();
+    /** A block or cushion of this material was placed at the cell: is it the last piece of a copy? */
+    static void placed(@NotNull Player player, @NotNull World world, int bx, int by, int bz, @NotNull Material material) {
         if (!triggers.contains(material)) return;
-        World world = block.getWorld();
-        String worldName = world.getName();
-        int bx = block.getX(), by = block.getY(), bz = block.getZ();
         for (Blueprint template : templates) {
             if (!template.enabled()) continue;
             for (Blueprint.Variant variant : template.variants()) {
                 for (Blueprint.Cell cell : variant.blocks()) {
-                    if (cell.material() != material) continue;
-                    int ox = bx - cell.dx(), oy = by - cell.dy(), oz = bz - cell.dz();
-                    if (oy < world.getMinHeight() || oy + variant.sizeY() > world.getMaxHeight()) continue;
-                    if (!Blueprint.chunksLoaded(world, ox, oz, variant.sizeX(), variant.sizeZ())) continue;
-                    if (Blueprint.mismatches(world, ox, oy, oz, variant, 0) != 0) continue;
-                    Build existing = overlapping(worldName, ox, oy, oz, variant.sizeX(), variant.sizeY(), variant.sizeZ());
-                    if (existing == null) {
-                        register(player, template, variant, worldName, ox, oy, oz);
-                        return;
-                    }
-                    if (existing.samePlace(template.id(), worldName, ox, oy, oz, variant.rotation(), variant.mirrored())) {
-                        if (existing.state() == Build.State.DAMAGED) {
-                            repaired(existing, template);
-                        } else if (existing.state() == Build.State.PENDING && existing.player().equals(player.getUniqueId())) {
-                            hint(player, template, existing);
-                        }
-                        return;
-                    }
-                    // a copy on top of another build is no new one; another offset may still be free
+                    if (cell.material() == material && candidate(player, world, template, variant, bx - cell.dx(), by - cell.dy(), bz - cell.dz())) return;
+                }
+                for (Blueprint.Prop prop : variant.props()) {
+                    if (prop.material() == material && candidate(player, world, template, variant, bx - prop.dx(), by - prop.dy(), bz - prop.dz())) return;
                 }
             }
         }
+    }
+
+    // true once the copy at this origin was handled; false when nothing is there or another build is in the way
+    private static boolean candidate(Player player, World world, Blueprint template, Blueprint.Variant variant, int ox, int oy, int oz) {
+        if (oy < world.getMinHeight() || oy + variant.sizeY() > world.getMaxHeight()) return false;
+        if (!Blueprint.chunksLoaded(world, ox, oz, variant.sizeX(), variant.sizeZ())) return false;
+        if (Blueprint.mismatches(world, ox, oy, oz, variant, 0) != 0) return false;
+        String worldName = world.getName();
+        Build existing = overlapping(worldName, ox, oy, oz, variant.sizeX(), variant.sizeY(), variant.sizeZ());
+        if (existing == null) {
+            register(player, template, variant, worldName, ox, oy, oz);
+            return true;
+        }
+        if (existing.samePlace(template.id(), worldName, ox, oy, oz, variant.rotation(), variant.mirrored())) {
+            if (existing.state() == Build.State.DAMAGED) {
+                repaired(existing, template);
+            } else if (existing.state() == Build.State.PENDING && existing.player().equals(player.getUniqueId())) {
+                hint(player, template, existing);
+            }
+            return true;
+        }
+        // a copy on top of another build is no new one; another offset may still be free
+        return false;
     }
 
     private static @Nullable Build overlapping(String world, int x, int y, int z, int sizeX, int sizeY, int sizeZ) {
@@ -286,6 +291,7 @@ public final class Bauamt {
     }
 
     private static void hint(Player player, Blueprint template, Build build) {
+        if (!build.shouldHint()) return;
         player.sendMessage(Main.getChatPrefix() + "§e§lDas sieht fertig aus! §fDein §e" + template.name() + " §fbei §e"
                 + build.centerX() + " / " + build.centerZ() + " §fist gemeldet. Hol dir die Förderung beim §e§lBauamt§f ab.");
         player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_YES, 1f, 1f);
@@ -312,25 +318,35 @@ public final class Bauamt {
                 onMain.accept(Outcome.UNLOADED);
                 return;
             }
-            boolean intact = Blueprint.mismatches(world, build.x(), build.y(), build.z(), variant, 0) == 0;
-            releaseChunks(world, build);
-            if (!intact) {
-                onMain.accept(Outcome.NOT_INTACT);
-                return;
+            verifyAndPay(player, build, template, variant, world, 0, onMain);
+        });
+    }
+
+    // the cushions arrive a little after the blocks of a chunk: wait a few ticks for them, then check and pay
+    private static void verifyAndPay(Player player, Build build, Blueprint template, Blueprint.Variant variant, World world, int attempt,
+                                     Consumer<Outcome> onMain) {
+        if (attempt < 20 && !Blueprint.chunksLoaded(world, build.x(), build.z(), build.sizeX(), build.sizeZ())) {
+            Tasks.syncLater(5L, () -> verifyAndPay(player, build, template, variant, world, attempt + 1, onMain));
+            return;
+        }
+        boolean intact = Blueprint.mismatches(world, build.x(), build.y(), build.z(), variant, 0) == 0;
+        releaseChunks(world, build);
+        if (!intact) {
+            onMain.accept(Outcome.NOT_INTACT);
+            return;
+        }
+        int reward = template.reward();
+        UUID uuid = player.getUniqueId();
+        Tasks.async(() -> {
+            Outcome outcome;
+            try {
+                outcome = pay(build, uuid, reward);
+            } catch (RuntimeException e) {
+                Main.getInstance().getSLF4JLogger().error("Bauamt payout to {} failed", player.getName(), e);
+                outcome = Outcome.ERROR;
             }
-            int reward = template.reward();
-            UUID uuid = player.getUniqueId();
-            Tasks.async(() -> {
-                Outcome outcome;
-                try {
-                    outcome = pay(build, uuid, reward);
-                } catch (RuntimeException e) {
-                    Main.getInstance().getSLF4JLogger().error("Bauamt payout to {} failed", player.getName(), e);
-                    outcome = Outcome.ERROR;
-                }
-                Outcome result = outcome;
-                MainThread.run(() -> onMain.accept(result));
-            });
+            Outcome result = outcome;
+            MainThread.run(() -> onMain.accept(result));
         });
     }
 
@@ -472,10 +488,10 @@ public final class Bauamt {
                 INSERT INTO bauamt_templates (name, reward, world, origin_x, origin_y, origin_z, size_x, size_y, size_z, blocks)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id""", row -> row.getInt(1),
                 name, reward, world.getName(), capture.minX(), capture.minY(), capture.minZ(),
-                capture.sizeX(), capture.sizeY(), capture.sizeZ(), Blueprint.serialize(capture.blocks()));
+                capture.sizeX(), capture.sizeY(), capture.sizeZ(), Blueprint.serialize(capture.blocks(), capture.props()));
         if (id == null) throw new IllegalStateException("no id returned");
         Blueprint template = new Blueprint(id, name, reward, true, world.getName(), capture.minX(), capture.minY(), capture.minZ(),
-                capture.sizeX(), capture.sizeY(), capture.sizeZ(), capture.blocks());
+                capture.sizeX(), capture.sizeY(), capture.sizeZ(), capture.blocks(), capture.props());
         Long buildId = Database.queryOne("""
                 INSERT INTO bauamt_builds (template_id, player_uuid, player_name, world, x, y, z, size_x, size_y, size_z, rotation, mirrored, state)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'NONE', FALSE, 'INTACT') RETURNING id""", row -> row.getLong(1),

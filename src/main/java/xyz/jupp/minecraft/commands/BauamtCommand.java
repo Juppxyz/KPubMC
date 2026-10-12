@@ -144,7 +144,8 @@ public class BauamtCommand implements TabExecutor {
             try {
                 Blueprint template = Bauamt.create(name, reward, world, capture, player);
                 result = "§fVorlage §e" + template.name() + " §fgespeichert: §7" + Bauamt.size(template) + " Blöcke, "
-                        + template.blockCount() + " davon gesetzt, " + template.variants().size() + " Drehungen, Belohnung "
+                        + template.blockCount() + " davon gesetzt" + (template.propCount() > 0 ? " plus " + template.propCount() + " Kissen" : "")
+                        + ", " + template.variants().size() + " Drehungen, Belohnung "
                         + Items.format(reward) + " Schilling. Das Muster hier ist als Bauwerk eingetragen.";
             } catch (DatabaseException e) {
                 result = "§cSpeichern fehlgeschlagen: §7" + e.getMessage();
