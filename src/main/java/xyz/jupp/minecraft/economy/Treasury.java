@@ -94,6 +94,16 @@ public final class Treasury {
         }
     }
 
+    /** What the state took in: every source except the money it owes or paid out (deposits, bonds, interest, grants). */
+    public static long income(Map<Source, Long> inflow) {
+        return inflow.entrySet().stream()
+                .filter(entry -> switch (entry.getKey()) {
+                    case INTEREST, FIXED_DEPOSIT, BOND_SALE, BOND_REPAY, BUILDING_GRANT -> false;
+                    default -> true;
+                })
+                .mapToLong(Map.Entry::getValue).sum();
+    }
+
     /** Blocking: sum of the inflows since the given time per source. */
     public static Map<Source, Long> inflowSince(Instant since) {
         Map<Source, Long> result = new EnumMap<>(Source.class);

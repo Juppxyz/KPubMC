@@ -4,7 +4,6 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.jetbrains.annotations.NotNull;
-import xyz.jupp.minecraft.building.Bauamt;
 import xyz.jupp.minecraft.economy.TaxClass;
 import xyz.jupp.minecraft.economy.Bank;
 import xyz.jupp.minecraft.economy.Bankruptcy;
@@ -28,16 +27,6 @@ public class TreasuryCommand implements CommandExecutor {
         return Math.round(rate * 100) + "%";
     }
 
-    // everything that came in; fixed deposits are owed to the players and the interest went out
-    private static long income(Map<Treasury.Source, Long> inflow) {
-        return inflow.entrySet().stream()
-                .filter(entry -> switch (entry.getKey()) {
-                    case INTEREST, FIXED_DEPOSIT, BOND_SALE, BOND_REPAY, BUILDING_GRANT -> false;
-                    default -> true;
-                })
-                .mapToLong(Map.Entry::getValue).sum();
-    }
-
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
         Instant now = Instant.now();
@@ -53,14 +42,13 @@ public class TreasuryCommand implements CommandExecutor {
             long owed = Bank.owedDeposits();
             lines.add("§fStand: " + Main.getCurrencyName((int) Math.min(Integer.MAX_VALUE, Treasury.balance()))
                     + (owed > 0 ? " §7(davon " + owed + " Festgeld der Spieler)" : ""));
-            long today = income(day);
-            long lastWeek = income(week);
+            long today = Treasury.income(day);
+            long lastWeek = Treasury.income(week);
             lines.add("§fEingenommen: §a" + today + " §7heute§8, §a" + lastWeek + " §7diese Woche");
             long interest = -week.getOrDefault(Treasury.Source.INTEREST, 0L);
             if (interest > 0) lines.add("§fZinsen an Sparer: §c" + interest + " §7diese Woche");
             long grants = -week.getOrDefault(Treasury.Source.BUILDING_GRANT, 0L);
-            lines.add("§fBauförderung: §a" + Bauamt.refreshPot() + " §7heute im Topf"
-                    + (grants > 0 ? "§8, §c" + grants + " §7diese Woche gezahlt" : ""));
+            if (grants > 0) lines.add("§fBauförderung: §c" + grants + " §7diese Woche");
             long bonds = Bonds.owed();
             if (bonds > 0) lines.add("§fStaatsanleihen offen: §c" + bonds + " Schilling");
             lines.add("§fSteuern gerade: " + Economy.levelWord());

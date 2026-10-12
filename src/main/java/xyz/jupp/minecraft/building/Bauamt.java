@@ -12,7 +12,6 @@ import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.database.Database;
 import xyz.jupp.minecraft.economy.Bankruptcy;
 import xyz.jupp.minecraft.economy.Bonds;
-import xyz.jupp.minecraft.economy.Market;
 import xyz.jupp.minecraft.economy.Treasury;
 import xyz.jupp.minecraft.inventory.MainThread;
 import xyz.jupp.minecraft.utils.Tasks;
@@ -21,7 +20,6 @@ import xyz.jupp.minecraft.utils.Text;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -34,17 +32,19 @@ import java.util.function.Consumer;
 /**
  * The Bauamt: the state pays players for copies of its building templates. A copy is noticed when its last block is
  * placed (the player gets a hint), the player then claims the grant at the Bauamt villager, where the copy is checked
- * again and paid out of the treasury. The daily pot is a share of the free treasury above the recovery line of
- * {@link Bankruptcy}, so the grants can never make the state broke. Paid copies are inspected now and then, only in
- * loaded chunks; a broken one is announced, nothing records who broke it.
+ * again and paid out of the treasury. The reward of a template is a guide value: the treasury pays it in full while
+ * it holds at least its average daily income of the last week, below that proportionally less, and it never lets a
+ * grant take it under half of that income (nothing at all while the state is broke). Paid copies are inspected now
+ * and then, only in loaded chunks; a broken one is announced, nothing records who broke it.
  */
 public final class Bauamt {
 
     private Bauamt() {}
 
-    /** Share of the free treasury above the recovery line that may be granted per day. */
-    static final double DAILY_SHARE = 0.10;
-    public static final int CLAIMS_PER_DAY = 3;
+    /** The treasury is compared with its average daily income over these days. */
+    static final int INCOME_DAYS = 7;
+    /** The treasury keeps at least this share of its average daily income, a grant never takes it below. */
+    static final double RESERVE_SHARE = 0.5;
     // intact share below which a copy counts as damaged, and from which a damaged one counts as repaired
     static final double DAMAGED_BELOW = 0.80;
     static final double REPAIRED_AT = 0.98;
@@ -56,7 +56,7 @@ public final class Bauamt {
     private static volatile List<Blueprint> templates = List.of();
     private static volatile Set<Material> triggers = Set.of();
     private static final List<Build> builds = new CopyOnWriteArrayList<>();
-    private static volatile long pot;
+    private static volatile Funding funding = new Funding(0, 0, 1.0, false, 0);
     private static final Object PAY_LOCK = new Object();
     private static int cursor;
 
@@ -74,7 +74,7 @@ public final class Bauamt {
                 StructureRotation.valueOf(row.getString("rotation")), row.getBoolean("mirrored"),
                 Build.State.valueOf(row.getString("state")), row.getInt("reward"),
                 row.getTimestamp("created_at").toInstant(), instant(row.getTimestamp("paid_at")), instant(row.getTimestamp("damaged_at")))));
-        refreshPot();
+        refreshFunding();
     }
 
     private static @Nullable Instant instant(@Nullable Timestamp timestamp) {
@@ -144,48 +144,61 @@ public final class Bauamt {
     }
 
 
-    /* the pot */
+    /* what the treasury pays */
 
-    /** What the state can still grant today (cached; refreshed with every inspection, payout and menu). */
-    public static long pot() {
-        return pot;
-    }
-
-    /** Blocking: recomputes the pot. */
-    public static long refreshPot() {
-        Bankruptcy.Level level = Bankruptcy.level();
-        long free = level.free() - Bonds.owed();
-        long value = remaining(free, level.recoveredAt(), paidToday(), Bankruptcy.isBroke());
-        pot = value;
-        return value;
-    }
-
-    /** The share of what was free above the reserve at the start of the day, minus what was granted since. */
-    static long remaining(long free, long reserve, long paidToday, boolean broke) {
-        if (broke) return 0;
-        long budget = (long) Math.floor((free + paidToday - reserve) * DAILY_SHARE);
-        return Math.max(0, budget - paidToday);
-    }
-
-    static @NotNull Instant dayStart() {
-        return LocalDate.now(Market.ZONE).atStartOfDay(Market.ZONE).toInstant();
-    }
-
-    private static long paidToday() {
-        Long paid = Database.queryOne("SELECT COALESCE(-SUM(amount), 0) FROM treasury_ledger WHERE source = ? AND created_at >= ?",
-                row -> row.getLong(1), Treasury.Source.BUILDING_GRANT.name(), Timestamp.from(dayStart()));
-        return paid == null ? 0 : paid;
-    }
-
-    /** How many grants the player got today. */
-    public static int claimsToday(@NotNull UUID player) {
-        Instant since = dayStart();
-        int count = 0;
-        for (Build build : builds) {
-            Instant paidAt = build.paidAt();
-            if (build.player().equals(player) && paidAt != null && !paidAt.isBefore(since)) count++;
+    /**
+     * The treasury's state for the grants: its balance, its average daily income, the share of a reward it pays right
+     * now, the reserve it keeps, and what is really free (not owed to savers and bond holders).
+     */
+    public record Funding(long balance, long averageIncome, double share, boolean broke, long free) {
+        public boolean reduced() {
+            return share < 1.0;
         }
-        return count;
+
+        public int percent() {
+            return (int) Math.round(share * 100);
+        }
+
+        /** What stays in the treasury whatever happens. */
+        public long reserve() {
+            return Math.round(averageIncome * RESERVE_SHARE);
+        }
+    }
+
+    /** Cached; refreshed with every inspection, payout and menu. */
+    public static @NotNull Funding funding() {
+        return funding;
+    }
+
+    /** Blocking: reads the treasury and the income of the last days. */
+    public static @NotNull Funding refreshFunding() {
+        long balance = Treasury.balance();
+        long income = Treasury.income(Treasury.inflowSince(Instant.now().minus(Duration.ofDays(INCOME_DAYS))));
+        long average = income / INCOME_DAYS;
+        long free = Bankruptcy.level().free() - Bonds.owed();
+        Funding current = new Funding(balance, average, share(balance, average), Bankruptcy.isBroke(), free);
+        funding = current;
+        return current;
+    }
+
+    /** The full reward while the treasury holds its average daily income, below that the same share less. */
+    static double share(long balance, long averageIncome) {
+        if (averageIncome <= 0) return 1.0;
+        return Math.max(0.0, Math.min(1.0, (double) balance / averageIncome));
+    }
+
+    /** What a copy of the template pays right now (0 while the state is broke). */
+    public static int payout(@NotNull Blueprint template) {
+        return payout(template, funding);
+    }
+
+    static int payout(@NotNull Blueprint template, @NotNull Funding funding) {
+        return funding.broke() ? 0 : (int) Math.round(template.reward() * funding.share());
+    }
+
+    /** Whether the treasury can pay this right now: it keeps its reserve and never spends what it owes. */
+    public static boolean affordable(int payout, @NotNull Funding funding) {
+        return !funding.broke() && payout > 0 && payout <= funding.free() && funding.balance() - payout >= funding.reserve();
     }
 
     /** The player's copies that wait for their grant. */
@@ -300,7 +313,7 @@ public final class Bauamt {
 
     /* the grant, claimed at the villager */
 
-    public enum Outcome { OK, POT_EMPTY, DAILY_LIMIT, NOT_INTACT, UNLOADED, NOT_PENDING, ERROR }
+    public enum Outcome { OK, BROKE, EMPTY, NOT_INTACT, UNLOADED, NOT_PENDING, ERROR }
 
     /** Main thread: loads the chunks of the copy, checks it again and pays; the outcome comes back on the main thread. */
     public static void claim(@NotNull Player player, @NotNull Build build, @NotNull Consumer<Outcome> onMain) {
@@ -335,12 +348,11 @@ public final class Bauamt {
             onMain.accept(Outcome.NOT_INTACT);
             return;
         }
-        int reward = template.reward();
         UUID uuid = player.getUniqueId();
         Tasks.async(() -> {
             Outcome outcome;
             try {
-                outcome = pay(build, uuid, reward);
+                outcome = pay(build, uuid, template);
             } catch (RuntimeException e) {
                 Main.getInstance().getSLF4JLogger().error("Bauamt payout to {} failed", player.getName(), e);
                 outcome = Outcome.ERROR;
@@ -350,26 +362,26 @@ public final class Bauamt {
         });
     }
 
-    // worker: one grant at a time, so two claims cannot both pass the pot check
-    private static Outcome pay(Build build, UUID player, int reward) {
+    // worker: one grant at a time, so two claims cannot both pass the treasury check
+    private static Outcome pay(Build build, UUID player, Blueprint template) {
         synchronized (PAY_LOCK) {
-            if (reward > refreshPot()) return Outcome.POT_EMPTY;
-            Timestamp since = Timestamp.from(dayStart());
+            Funding current = refreshFunding();
+            if (current.broke()) return Outcome.BROKE;
+            int payout = payout(template, current);
+            if (!affordable(payout, current)) return Outcome.EMPTY;
             Outcome outcome = Database.inTransaction(connection -> {
-                Integer claims = Database.queryOne(connection, "SELECT COUNT(*) FROM bauamt_builds WHERE player_uuid = ? AND paid_at >= ?",
-                        row -> row.getInt(1), player, since);
-                if (claims != null && claims >= CLAIMS_PER_DAY) return Outcome.DAILY_LIMIT;
                 if (Database.update(connection, "UPDATE bauamt_builds SET state = 'INTACT', paid_at = now(), reward = ?, checked_at = now()"
-                        + " WHERE id = ? AND state = 'PENDING'", reward, build.id()) == 0) return Outcome.NOT_PENDING;
-                Database.update(connection, "UPDATE players SET money = money + ? WHERE uuid = ?", reward, player);
-                Treasury.withdraw(connection, Treasury.Source.BUILDING_GRANT, reward, player);
+                        + " WHERE id = ? AND state = 'PENDING'", payout, build.id()) == 0) return Outcome.NOT_PENDING;
+                Database.update(connection, "UPDATE players SET money = money + ? WHERE uuid = ?", payout, player);
+                Treasury.withdraw(connection, Treasury.Source.BUILDING_GRANT, payout, player);
                 return Outcome.OK;
             });
             if (outcome == Outcome.OK) {
-                build.paid(reward);
-                Main.getInstance().getSLF4JLogger().info("Bauamt grant {} to {} for build {}", reward, player, build.id());
-                refreshPot();
-                Treasury.committed(-reward);
+                build.paid(payout);
+                Main.getInstance().getSLF4JLogger().info("Bauamt grant {} ({} % of {}) to {} for build {}", payout, current.percent(),
+                        template.reward(), player, build.id());
+                Treasury.committed(-payout);
+                refreshFunding();
             }
             return outcome;
         }
@@ -435,7 +447,7 @@ public final class Bauamt {
             for (int i = 0; i < checks; i++) check(active.get((cursor + i) % active.size()));
             cursor = (cursor + checks) % active.size();
         }
-        Tasks.async(Bauamt::refreshPot);
+        Tasks.async(Bauamt::refreshFunding);
     }
 
     private static void check(Build build) {
