@@ -21,7 +21,8 @@ public final class PlayerRepository {
 
     public enum TransferResult { SUCCESS, INSUFFICIENT_FUNDS, TARGET_NOT_FOUND }
 
-    public record PlayerData(UUID uuid, int money, @Nullable String teamID, boolean teamInvites,
+    // the column team_invites (the old /invites switch) is no longer read: invitations are answered in the chat now
+    public record PlayerData(UUID uuid, int money, @Nullable String teamID,
                              boolean jail, long jailEnd, boolean isWanted) {}
 
     private static PlayerData map(ResultSet row) throws SQLException {
@@ -29,7 +30,6 @@ public final class PlayerRepository {
                 row.getObject("uuid", UUID.class),
                 row.getInt("money"),
                 row.getString("team_id"),
-                row.getBoolean("team_invites"),
                 row.getBoolean("jail"),
                 row.getLong("jail_end"),
                 row.getBoolean("is_wanted"));
@@ -56,11 +56,6 @@ public final class PlayerRepository {
         return Database.queryOne("SELECT * FROM players WHERE uuid = ?", PlayerRepository::map, uuid);
     }
 
-
-    public static void setTeamInvites(@NotNull UUID uuid, boolean teamInvites) {
-        Database.update("UPDATE players SET team_invites = ? WHERE uuid = ?", teamInvites, uuid);
-        log().info("updated teamInvites from {} to {}", uuid, teamInvites);
-    }
 
     public static void changeTeamID(@NotNull UUID uuid, @Nullable String teamID) {
         Database.update("UPDATE players SET team_id = ? WHERE uuid = ?", teamID, uuid);

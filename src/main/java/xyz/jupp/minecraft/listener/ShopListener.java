@@ -60,9 +60,10 @@ public class ShopListener implements Listener {
         }
     }
 
+    // /kill stays possible, that is how an operator removes an NPC again
     @EventHandler
     public void onDamage(EntityDamageEvent event) {
-        if (Npcs.isNpc(event.getEntity())) event.setCancelled(true);
+        if (event.getCause() != EntityDamageEvent.DamageCause.KILL && Npcs.isNpc(event.getEntity())) event.setCancelled(true);
     }
 
 

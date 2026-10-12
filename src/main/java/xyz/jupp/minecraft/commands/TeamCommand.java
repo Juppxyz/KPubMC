@@ -10,11 +10,12 @@ import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.team.TeamCreateView;
+import xyz.jupp.minecraft.team.TeamInvites;
 import xyz.jupp.minecraft.team.TeamView;
 import xyz.jupp.minecraft.team.Teams;
 import xyz.jupp.minecraft.utils.Tasks;
 
-// /team opens the team menu, /team neu <Name> founds a team
+// /team opens the team menu, /team neu <Name> founds a team, /team annehmen|ablehnen <Team> answers an invitation (chat buttons)
 public class TeamCommand implements CommandExecutor {
 
     private record Check(int money, boolean taken) {}
@@ -23,6 +24,18 @@ public class TeamCommand implements CommandExecutor {
     public boolean onCommand(@NotNull CommandSender commandSender, @NotNull Command command, @NotNull String s, @NotNull String[] args) {
         if (!(commandSender instanceof Player player)) return true;
         boolean inTeam = CacheHandler.getInstance().getPlayerInCache(player).getTeamID() != null;
+
+        if (args.length >= 1 && (args[0].equalsIgnoreCase("annehmen") || args[0].equalsIgnoreCase("ablehnen"))) {
+            boolean accept = args[0].equalsIgnoreCase("annehmen");
+            if (args.length != 2) {
+                fail(player, "So geht's: §a/team " + (accept ? "annehmen" : "ablehnen") + " <Team> §7(offene Einladungen: §a/einladungen§7)");
+            } else if (accept) {
+                TeamInvites.accept(player, args[1]);
+            } else {
+                TeamInvites.decline(player, args[1]);
+            }
+            return true;
+        }
 
         if (args.length >= 1 && args[0].equalsIgnoreCase("neu")) {
             if (inTeam) {
@@ -52,7 +65,7 @@ public class TeamCommand implements CommandExecutor {
         if (!inTeam) {
             player.sendMessage(Main.getChatPrefix() + "Du bist noch in keinem " + Main.getTeamName() + "§f.");
             player.sendMessage(Main.getChatPrefix() + "Gründe eins mit §a/team neu <Name> §7(ab Level " + Teams.CREATION_LEVEL
-                    + ", " + Teams.CREATION_COST + " Schilling)§f, oder lass dich aufnehmen: §a/invites§f.");
+                    + ", " + Teams.CREATION_COST + " Schilling)§f, oder lass dich von einem Team einladen §7(offene Einladungen: §a/einladungen§7)§f.");
             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 1f);
             return true;
         }

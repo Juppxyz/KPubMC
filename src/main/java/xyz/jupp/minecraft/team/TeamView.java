@@ -298,7 +298,9 @@ public final class TeamView implements InventoryHolder {
         String label = team.getTeamColor() + team.getTeamName();
         inventory.setItem(SLOT_INFO, Items.named(dissolve ? Material.TNT : Material.DARK_OAK_DOOR,
                 (dissolve ? "§fWillst du " + label + " §fwirklich auflösen?" : "§fWillst du " + label + " §fwirklich verlassen?"), lore));
-        set(20, Items.named(Material.RED_CONCRETE, dissolve ? "§c§lJa, auflösen" : "§c§lJa, verlassen", List.of()), () -> act(this::leave));
+        // what this page promised: someone may have joined (accepted an invitation) or left since the last load
+        String shownSuccessor = state.successor();
+        set(20, Items.named(Material.RED_CONCRETE, dissolve ? "§c§lJa, auflösen" : "§c§lJa, verlassen", List.of()), () -> act(() -> leave(shownSuccessor)));
         set(24, Items.named(Material.LIME_CONCRETE, "§a§lNein, zurück", List.of()), () -> backTo(Tab.OVERVIEW));
     }
 
@@ -376,9 +378,9 @@ public final class TeamView implements InventoryHolder {
             inventory.setItem(36, Items.named(Material.PAPER, "§7… und " + (members.size() - MEMBER_SLOTS.length) + " weitere", List.of()));
         }
         if (role.canManage()) {
-            set(40, Items.named(Material.WRITABLE_BOOK, "§aMitglied aufnehmen", List.of(
-                    "§7Spieler ohne Team, die Einladungen",
-                    "§7annehmen (§a/invites§7).",
+            set(40, Items.named(Material.WRITABLE_BOOK, "§aSpieler einladen", List.of(
+                    "§7Lade Spieler ohne Team ein,",
+                    "§7sie nehmen im Chat an.",
                     "",
                     "§e» Klicken zum Auswählen")), () -> {
                 page = Page.INVITE;
@@ -416,29 +418,45 @@ public final class TeamView implements InventoryHolder {
 
     private void renderInvite(TeamCacheObject team) {
         set(SLOT_BACK, Items.named(Material.ARROW, "§f◀ Zurück", List.of("§7zu den Mitgliedern")), this::back);
-        inventory.setItem(SLOT_INFO, Items.named(Material.WRITABLE_BOOK, "§aMitglied aufnehmen", List.of(
-                "§7Hier stehen Spieler ohne Team,",
-                "§7die Einladungen annehmen (§a/invites§7).",
-                "§7Ein Klick nimmt sie direkt auf.")));
+        inventory.setItem(SLOT_INFO, Items.named(Material.WRITABLE_BOOK, "§aSpieler einladen", List.of(
+                "§7Hier stehen Spieler ohne Team.",
+                "§7Sie bekommen die Einladung im Chat",
+                "§7und nehmen sie dort an (" + TeamInvites.VALID.toMinutes() + " Minuten gültig).")));
         int slot = 18;
         for (Player candidate : Bukkit.getOnlinePlayers()) {
             if (slot > 44) break;
-            if (candidate.equals(viewer)) continue;
-            PlayerCacheObject pco = CacheHandler.getInstance().getPlayerInCache(candidate);
-            if (pco.getTeamID() != null || !pco.isTeamInvites()) continue;
+            // jailed players cannot run commands, so they could not answer in the chat
+            if (candidate.equals(viewer) || !viewer.canSee(candidate) || JailHandler.isPlayerInJail(candidate)) continue;
+            if (CacheHandler.getInstance().getPlayerInCache(candidate).getTeamID() != null) continue;
+            UUID target = candidate.getUniqueId();
+            String name = candidate.getName();
+            TeamInvites.Invite pending = TeamInvites.pending(teamID, target);
+            TeamInvites.Cooldown cooldown = pending == null ? TeamInvites.cooldown(teamID, target) : null;
+            List<String> lore;
+            Runnable action;
+            if (pending != null) {
+                lore = List.of("§aEingeladen §7(noch " + TeamInvites.minutesLeft(pending.expires()) + ")", "", "§e» Klicken zum Zurückziehen");
+                action = () -> act(() -> withdraw(target, name));
+            } else if (cooldown != null) {
+                lore = List.of(cooldown.declined() ? "§cHat eure Einladung abgelehnt" : "§7Einladung zurückgezogen",
+                        "§7Wieder einladen in " + TeamInvites.minutesLeft(cooldown.until()));
+                action = null;
+            } else {
+                lore = List.of("§e» Klicken zum Einladen");
+                action = () -> act(() -> invite(target));
+            }
             ItemStack head = new ItemStack(Material.PLAYER_HEAD);
             SkullMeta meta = (SkullMeta) head.getItemMeta();
             meta.setOwningPlayer(candidate);
-            meta.customName(Text.of("§a" + candidate.getName()));
-            meta.lore(Text.lore(List.of("§e» Klicken zum Aufnehmen")));
+            meta.customName(Text.of("§a" + name));
+            meta.lore(Text.lore(lore));
             head.setItemMeta(meta);
-            UUID target = candidate.getUniqueId();
-            set(slot++, head, () -> act(() -> invite(target)));
+            set(slot++, head, action);
         }
         if (slot == 18) {
             inventory.setItem(31, Items.named(Material.BARRIER, "§7Gerade niemand da", List.of(
-                    "§7Nur Spieler ohne Team, die mit",
-                    "§a/invites §7Einladungen annehmen.")));
+                    "§7Hier stehen alle Spieler,",
+                    "§7die online und in keinem Team sind.")));
         }
     }
 
@@ -1039,28 +1057,37 @@ public final class TeamView implements InventoryHolder {
         });
     }
 
+    // the player joins only by accepting in the chat (TeamInvites)
     private Feedback invite(UUID targetID) {
         TeamCacheObject team = team();
         Player target = Bukkit.getPlayer(targetID);
-        if (team == null || !Teams.role(team, viewer.getUniqueId()).canManage()) return Feedback.fail("Aufnehmen dürfen nur Boss und Vize.");
+        if (team == null || !Teams.role(team, viewer.getUniqueId()).canManage()) return Feedback.fail("Einladen dürfen nur Boss und Vize.");
         if (target == null) return Feedback.fail("Der Spieler ist nicht mehr online.");
-        PlayerCacheObject pco = CacheHandler.getInstance().getPlayerInCache(target);
-        if (pco.getTeamID() != null || !pco.isTeamInvites() || !CacheHandler.getInstance().addPlayerToTeam(target, team)) {
-            return Feedback.fail("Der Spieler nimmt gerade keine Einladungen an.");
-        }
-        return Feedback.ok(null, () -> {
-            back();
-            Teams.notifyTeam(teamID, teamInfo() + "§a" + target.getName() + " §fist jetzt in unserem Team!");
-            target.sendMessage(Main.getChatPrefix() + "Du bist jetzt im Team " + team.getTeamColor() + team.getTeamName() + "§f. §7Alles Weitere mit §a/team§7.");
-            target.playSound(target.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1f, 1f);
-            JailHandler.refreshPlayerName(target, pco);
+        if (CacheHandler.getInstance().getPlayerInCache(target).getTeamID() != null) return Feedback.fail("Der Spieler ist schon in einem Team.");
+        String name = target.getName();
+        if (JailHandler.isPlayerInJail(target)) return Feedback.fail(name + " sitzt gerade im Gefängnis.");
+        return switch (TeamInvites.send(teamID, targetID, viewer.getUniqueId(), viewer.getName())) {
+            case OK -> Feedback.ok("Einladung an §a" + name + " §fgesendet. §7Sie gilt " + TeamInvites.VALID.toMinutes() + " Minuten.",
+                    () -> TeamInvites.announce(target, team, viewer.getName()));
+            case PENDING -> Feedback.fail(name + " hat schon eine offene Einladung von euch.");
+            case COOLDOWN -> Feedback.fail("Ihr könnt " + name + " gerade nicht wieder einladen. §7Versucht es später nochmal.");
+        };
+    }
+
+    private Feedback withdraw(UUID targetID, String name) {
+        TeamCacheObject team = team();
+        if (team == null || !Teams.role(team, viewer.getUniqueId()).canManage()) return Feedback.fail("Das dürfen nur Boss und Vize.");
+        if (TeamInvites.withdraw(teamID, targetID) == null) return Feedback.fail("Die Einladung gibt es nicht mehr.");
+        return Feedback.ok("Einladung an §a" + name + " §fzurückgezogen.", () -> {
+            Player target = Bukkit.getPlayer(targetID);
+            if (target != null) target.sendMessage(Main.getChatPrefix() + "Das Team " + team.getTeamColor() + team.getTeamName() + " §fhat seine Einladung zurückgezogen.");
         });
     }
 
-    private Feedback leave() {
+    private Feedback leave(@Nullable String shownSuccessor) {
         TeamCacheObject team = team();
         if (team == null) return Feedback.fail("Dein Team gibt es nicht mehr.");
-        if (Teams.role(team, viewer.getUniqueId()) == Teams.Role.OWNER) return ownerLeaves(team);
+        if (Teams.role(team, viewer.getUniqueId()) == Teams.Role.OWNER) return ownerLeaves(team, shownSuccessor);
         CacheHandler.getInstance().removePlayerFromTeam(viewer, team);
         return Feedback.ok("Du hast das Team " + team.getTeamColor() + team.getTeamName() + " §fverlassen.", () -> {
             viewer.closeInventory();
@@ -1071,10 +1098,11 @@ public final class TeamView implements InventoryHolder {
 
 
     // worker thread: the boss leaves, the next vice takes over, or the team is dissolved
-    private Feedback ownerLeaves(TeamCacheObject team) {
+    private Feedback ownerLeaves(TeamCacheObject team, @Nullable String shownSuccessor) {
         String label = team.getTeamColor() + team.getTeamName();
-        Teams.Handover handover = Teams.ownerLeaves(team, viewer.getUniqueId());
+        Teams.Handover handover = Teams.ownerLeaves(team, viewer.getUniqueId(), shownSuccessor);
         if (handover == null) return Feedback.fail("Das ging gerade nicht, versuch es gleich nochmal.");
+        if (handover.outdated()) return Feedback.fail("Im Team hat sich gerade etwas geändert, schau es dir nochmal an.");
         if (handover.dissolved()) {
             return Feedback.ok("Das Team " + label + " §fist aufgelöst." + (handover.paid() > 0
                     ? " §7Aus der Kasse: §a+" + Items.format(handover.paid()) + " Schilling §7(Steuer " + Items.format(handover.tax()) + ")" : ""), () -> {

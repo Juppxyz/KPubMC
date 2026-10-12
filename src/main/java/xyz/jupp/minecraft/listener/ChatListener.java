@@ -17,11 +17,16 @@ import xyz.jupp.minecraft.cache.TeamCacheObject;
 import xyz.jupp.minecraft.utils.Tasks;
 import xyz.jupp.minecraft.utils.Text;
 
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+
 // Runs on the async chat thread: the caches are thread-safe, sounds are played on the main thread.
 public class ChatListener implements Listener {
 
     private static final LegacyComponentSerializer LEGACY_AMP = LegacyComponentSerializer.legacyAmpersand();
     private static final PlainTextComponentSerializer PLAIN = PlainTextComponentSerializer.plainText();
+    private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.of("Europe/Berlin"));
 
     @EventHandler
     public void onChat(AsyncChatEvent event) {
@@ -32,6 +37,8 @@ public class ChatListener implements Listener {
 
         // Rohtext der Nachricht (ohne Farben) ermitteln:
         final String plain = PLAIN.serialize(event.message());
+        // Uhrzeit (Berlin) vor jeder Nachricht:
+        final String time = "§f(" + TIME.format(Instant.now()) + ") ";
 
         if (plain.startsWith("@")) {
             if (team == null) {
@@ -49,7 +56,7 @@ public class ChatListener implements Listener {
 
             event.message(LEGACY_AMP.deserialize(plain.substring(1)));
 
-            Component prefix = Text.section(String.format(
+            Component prefix = Text.section(time + String.format(
                     "§8[%s%s-Chat§8] §f(%s)§8» §f",
                     team.getTeamColor(), team.getTeamName(), player.getName()
             ));
@@ -65,7 +72,7 @@ public class ChatListener implements Listener {
             prefixLegacy = String.format("§8[%s%s§8] %s%s§8» §f",
                     team.getTeamColor(), team.getTeamName(), team.getTeamColor(), player.getName());
         }
-        final Component prefix = Text.section(prefixLegacy);
+        final Component prefix = Text.section(time + prefixLegacy);
         event.message(LEGACY_AMP.deserialize(plain));
 
         event.renderer(ChatRenderer.viewerUnaware((src, srcName, msg) -> prefix.append(msg)));

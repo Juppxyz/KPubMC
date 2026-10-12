@@ -29,7 +29,7 @@ public class HelpCommand implements CommandExecutor {
         player.sendMessage("§8§l» §a/team §8- §fZeigt dir euer Team Menü an.");
         player.sendMessage("§8§l» §a/ec §8- §fÖffnet die Enderchest.");
         player.sendMessage("§8§l» §a@ <Nachricht> §8- §fPrivater TeamChat");
-        player.sendMessage("§8§l» §a/invites §8- §fÄndert, ob du offen für Team-Anfragen bist.");
+        player.sendMessage("§8§l» §a/einladungen §8- §fZeigt deine offenen Team-Einladungen.");
         player.sendMessage("§8§l» §a/slimechunk §8- §fÜberprüft ob du in einem SlimeChunk bist.");
         player.sendMessage("§8§l» §a/money §8- §fRuft dein Konto auf.");
         player.sendMessage("§8§l» §a/staatskasse §8- §fZeigt Stand und Einnahmen der Staatskasse.");

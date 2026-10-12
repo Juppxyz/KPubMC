@@ -17,7 +17,6 @@ public class PlayerCacheObject {
     private final UUID uuid;
     private volatile Player player;
     private volatile String teamID;
-    private volatile boolean teamInvites;
     private volatile TeamCacheObject teamCacheObject = null;
 
     private volatile boolean jail = false;
@@ -31,7 +30,6 @@ public class PlayerCacheObject {
         if (teamID != null) {
             this.teamCacheObject = TeamCache.getTeam(teamID);
         }
-        this.teamInvites = data.teamInvites();
         this.jail = data.jail();
         this.jailEnd = data.jailEnd();
         this.isWanted = data.isWanted();
@@ -66,15 +64,6 @@ public class PlayerCacheObject {
     }
 
 
-    // the write stays inside the lock, so the database receives the toggles in the same order as the cache
-    public synchronized boolean changeTeamInvite() {
-        boolean newValue = !teamInvites;
-        teamInvites = newValue;
-        PlayerRepository.setTeamInvites(uuid, newValue);
-        return newValue;
-    }
-
-
     public void changeTeamID(String id) {
         this.teamID = id;
         if (id != null) {
@@ -93,16 +82,15 @@ public class PlayerCacheObject {
     }
 
 
-    // re-reads teamID/teamInvites from the database and sets the names on the main thread
+    // re-reads teamID from the database and sets the names on the main thread
     public void updatePlayer() {
         Tasks.async(() -> {
-            // same lock as changeTeamInvite, a toggle during the read is not overwritten with the old value
+            // same lock as CacheHandler#addPlayerToTeam, a join during the read is not overwritten with the old value
             synchronized (this) {
                 PlayerData data = PlayerRepository.getPlayer(uuid);
                 if (data == null) return;
                 this.teamID = data.teamID();
                 this.teamCacheObject = teamID == null ? null : TeamCache.getTeam(teamID);
-                this.teamInvites = data.teamInvites();
             }
 
             Tasks.sync(() -> {
@@ -161,10 +149,6 @@ public class PlayerCacheObject {
 
 
     // Getter
-    public boolean isTeamInvites() {
-        return teamInvites;
-    }
-
     public UUID getUuid() {
         return uuid;
     }
