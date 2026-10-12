@@ -1,6 +1,8 @@
 package xyz.jupp.minecraft.building;
 
 import org.bukkit.Bukkit;
+import org.bukkit.DyeColor;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.data.Bisected;
@@ -15,21 +17,28 @@ import org.bukkit.block.data.type.Slab;
 import org.bukkit.block.data.type.Stairs;
 import org.bukkit.block.structure.Mirror;
 import org.bukkit.block.structure.StructureRotation;
+import org.bukkit.entity.Cushion;
+import org.bukkit.entity.Entity;
+import org.bukkit.util.BoundingBox;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
- * A building template of the Bauamt: the blocks inside the box the admin selected, trimmed to its blocks. A copy
+ * A building template of the Bauamt: the blocks inside the box the admin selected, trimmed to its contents. A copy
  * counts when every cell of the box matches, material and orientation, and every empty cell of the template is empty
  * in the copy too (nothing in the gaps). Blocks outside the box do not matter. The copy may be turned by any quarter
  * and mirrored, so one template serves the left and the right lane of a road.
+ * Cushions are entities, not blocks: the template remembers their cell and colour, a copy needs the same cushions
+ * in the same cells and no other cushion inside the box.
  */
 public final class Blueprint {
 
@@ -47,19 +56,50 @@ public final class Blueprint {
     /** An empty cell of the box. */
     public record Gap(int dx, int dy, int dz) {}
 
+    /** A cushion (an entity) in an empty cell of the box. */
+    public record Prop(int dx, int dy, int dz, @NotNull DyeColor color) {
+        public Material material() {
+            return cushionMaterial(color);
+        }
+    }
+
     /**
      * The template turned and mirrored. Offsets are relative to the min corner of the turned box; the blocks come
      * rarest material first, so a wrong candidate fails after one or two reads.
      */
     public record Variant(@NotNull StructureRotation rotation, boolean mirrored, int sizeX, int sizeY, int sizeZ,
-                          @NotNull List<Cell> blocks, @NotNull List<Gap> gaps) {
+                          @NotNull List<Cell> blocks, @NotNull List<Gap> gaps, @NotNull List<Prop> props, @NotNull BlockData @NotNull [] grid) {
+        /** Everything a copy has to get right. */
         public int cells() {
-            return blocks.size() + gaps.size();
+            return blocks.size() + gaps.size() + props.size();
+        }
+
+        /** The block the template wants in the cell, null for a gap or outside the box. */
+        public @Nullable BlockData data(int dx, int dy, int dz) {
+            if (dx < 0 || dx >= sizeX || dy < 0 || dy >= sizeY || dz < 0 || dz >= sizeZ) return null;
+            return grid[(dx * sizeY + dy) * sizeZ + dz];
+        }
+
+        /** Whether the template wants a cushion in the cell. */
+        public boolean prop(int dx, int dy, int dz) {
+            for (Prop prop : props) {
+                if (prop.dx() == dx && prop.dy() == dy && prop.dz() == dz) return true;
+            }
+            return false;
         }
     }
 
-    /** The blocks of a selection, trimmed to the box around them. */
-    public record Capture(int minX, int minY, int minZ, int sizeX, int sizeY, int sizeZ, @NotNull List<Cell> blocks) {}
+    /** The contents of a selection, trimmed to the box around them. */
+    public record Capture(int minX, int minY, int minZ, int sizeX, int sizeY, int sizeZ, @NotNull List<Cell> blocks, @NotNull List<Prop> props) {}
+
+    private static final Map<DyeColor, Material> CUSHIONS = new EnumMap<>(DyeColor.class);
+
+    static {
+        for (DyeColor color : DyeColor.values()) {
+            Material material = Material.matchMaterial(color.name() + "_CUSHION");
+            CUSHIONS.put(color, material == null ? Material.WHITE_WOOL : material);
+        }
+    }
 
     private final int id;
     private final String name;
@@ -69,12 +109,13 @@ public final class Blueprint {
     private final int originX, originY, originZ;
     private final int sizeX, sizeY, sizeZ;
     private final List<Cell> blocks;
+    private final List<Prop> props;
     private final List<Variant> variants;
     private final Map<Material, Integer> materials;
     private final Material icon;
 
     Blueprint(int id, @NotNull String name, int reward, boolean enabled, @NotNull String world, int originX, int originY, int originZ,
-              int sizeX, int sizeY, int sizeZ, @NotNull List<Cell> blocks) {
+              int sizeX, int sizeY, int sizeZ, @NotNull List<Cell> blocks, @NotNull List<Prop> props) {
         this.id = id;
         this.name = name;
         this.reward = reward;
@@ -87,9 +128,10 @@ public final class Blueprint {
         this.sizeY = sizeY;
         this.sizeZ = sizeZ;
         this.blocks = List.copyOf(blocks);
-        this.materials = count(blocks);
+        this.props = List.copyOf(props);
+        this.materials = count(blocks, props);
         this.icon = materials.keySet().stream().filter(Material::isItem).findFirst().orElse(Material.BRICKS);
-        this.variants = variants(sizeX, sizeY, sizeZ, blocks);
+        this.variants = variants(sizeX, sizeY, sizeZ, blocks, props);
     }
 
     public int id() {
@@ -140,6 +182,10 @@ public final class Blueprint {
         return blocks.size();
     }
 
+    public int propCount() {
+        return props.size();
+    }
+
     public @NotNull List<Variant> variants() {
         return variants;
     }
@@ -152,13 +198,47 @@ public final class Blueprint {
         return null;
     }
 
-    /** Material and count, most frequent first (for the material list). */
+    /** Material and count, most frequent first (for the material list); cushions by their item. */
     public @NotNull Map<Material, Integer> materials() {
         return materials;
     }
 
     public @NotNull Material icon() {
         return icon;
+    }
+
+
+    /* cushions */
+
+    /** The item of a cushion colour. */
+    public static @NotNull Material cushionMaterial(@Nullable DyeColor color) {
+        return CUSHIONS.get(Objects.requireNonNullElse(color, DyeColor.WHITE));
+    }
+
+    /** The colour of a cushion item, null for anything else. */
+    public static @Nullable DyeColor cushionColor(@NotNull Material material) {
+        for (Map.Entry<DyeColor, Material> entry : CUSHIONS.entrySet()) {
+            if (entry.getValue() == material) return entry.getKey();
+        }
+        return null;
+    }
+
+    /** Main thread: the cushions inside a box, by cell. */
+    public static @NotNull Map<Long, DyeColor> cushions(@NotNull World world, int ox, int oy, int oz, int sizeX, int sizeY, int sizeZ) {
+        Map<Long, DyeColor> found = new HashMap<>();
+        BoundingBox box = new BoundingBox(ox, oy, oz, ox + sizeX, oy + sizeY, oz + sizeZ);
+        for (Entity entity : world.getNearbyEntities(box, entity -> entity instanceof Cushion)) {
+            Location at = entity.getLocation();
+            int dx = at.getBlockX() - ox, dy = at.getBlockY() - oy, dz = at.getBlockZ() - oz;
+            // the search matches by the entity's body, a cushion just outside the box can touch it
+            if (dx < 0 || dx >= sizeX || dy < 0 || dy >= sizeY || dz < 0 || dz >= sizeZ) continue;
+            found.putIfAbsent(key(dx, dy, dz), Objects.requireNonNullElse(((Cushion) entity).getColor(), DyeColor.WHITE));
+        }
+        return found;
+    }
+
+    private static long key(int dx, int dy, int dz) {
+        return ((long) dx << 42) | ((long) dy << 21) | dz;
     }
 
 
@@ -177,6 +257,14 @@ public final class Blueprint {
                 if (++bad > stopAfter) return bad;
             }
         }
+        // last, once the blocks fit: every cushion of the template in its cell, no other cushion in the box
+        Map<Long, DyeColor> cushions = cushions(world, ox, oy, oz, variant.sizeX(), variant.sizeY(), variant.sizeZ());
+        for (Prop prop : variant.props()) {
+            if (cushions.remove(key(prop.dx(), prop.dy(), prop.dz())) != prop.color()) {
+                if (++bad > stopAfter) return bad;
+            }
+        }
+        bad += cushions.size();
         return bad;
     }
 
@@ -200,11 +288,11 @@ public final class Blueprint {
         return true;
     }
 
-    /** Whether every chunk of the box is loaded (never loads one). */
+    /** Whether every chunk of the box is loaded with its entities (never loads one). */
     public static boolean chunksLoaded(@NotNull World world, int x, int z, int sizeX, int sizeZ) {
         for (int cx = x >> 4; cx <= (x + sizeX - 1) >> 4; cx++) {
             for (int cz = z >> 4; cz <= (z + sizeZ - 1) >> 4; cz++) {
-                if (!world.isChunkLoaded(cx, cz)) return false;
+                if (!world.isChunkLoaded(cx, cz) || !world.getChunkAt(cx, cz).isEntitiesLoaded()) return false;
             }
         }
         return true;
@@ -213,7 +301,7 @@ public final class Blueprint {
 
     /* the turned copies */
 
-    private static List<Variant> variants(int sizeX, int sizeY, int sizeZ, List<Cell> blocks) {
+    private static List<Variant> variants(int sizeX, int sizeY, int sizeZ, List<Cell> blocks, List<Prop> props) {
         Map<Material, Integer> counts = new HashMap<>();
         for (Cell cell : blocks) counts.merge(cell.material(), 1, Integer::sum);
         // a symmetric template turns into the same thing twice, that copy is dropped
@@ -235,7 +323,7 @@ public final class Blueprint {
                     maxZ = Math.max(maxZ, turned[1]);
                 }
                 int turnedX = maxX - minX + 1, turnedZ = maxZ - minZ + 1;
-                boolean[] filled = new boolean[turnedX * sizeY * turnedZ];
+                BlockData[] grid = new BlockData[turnedX * sizeY * turnedZ];
                 List<Cell> turnedBlocks = new ArrayList<>(blocks.size());
                 for (Cell cell : blocks) {
                     int[] turned = turn(cell.dx(), cell.dz(), mirrored, turns);
@@ -244,18 +332,25 @@ public final class Blueprint {
                     if (rotation != StructureRotation.NONE) data.rotate(rotation);
                     int x = turned[0] - minX, z = turned[1] - minZ;
                     turnedBlocks.add(new Cell(x, cell.dy(), z, data));
-                    filled[(x * sizeY + cell.dy()) * turnedZ + z] = true;
+                    grid[(x * sizeY + cell.dy()) * turnedZ + z] = data;
                 }
                 turnedBlocks.sort(Comparator.comparingInt(cell -> counts.get(cell.material())));
+                List<Prop> turnedProps = new ArrayList<>(props.size());
+                for (Prop prop : props) {
+                    int[] turned = turn(prop.dx(), prop.dz(), mirrored, turns);
+                    turnedProps.add(new Prop(turned[0] - minX, prop.dy(), turned[1] - minZ, prop.color()));
+                }
+                // a cushion sits in an empty cell: the cell stays a gap, the cushion is checked on top
                 List<Gap> gaps = new ArrayList<>();
                 for (int x = 0; x < turnedX; x++) {
                     for (int y = 0; y < sizeY; y++) {
                         for (int z = 0; z < turnedZ; z++) {
-                            if (!filled[(x * sizeY + y) * turnedZ + z]) gaps.add(new Gap(x, y, z));
+                            if (grid[(x * sizeY + y) * turnedZ + z] == null) gaps.add(new Gap(x, y, z));
                         }
                     }
                 }
-                Variant variant = new Variant(rotation, mirrored, turnedX, sizeY, turnedZ, List.copyOf(turnedBlocks), List.copyOf(gaps));
+                Variant variant = new Variant(rotation, mirrored, turnedX, sizeY, turnedZ,
+                        List.copyOf(turnedBlocks), List.copyOf(gaps), List.copyOf(turnedProps), grid);
                 unique.putIfAbsent(signature(variant), variant);
             }
         }
@@ -274,15 +369,17 @@ public final class Blueprint {
     }
 
     private static String signature(Variant variant) {
-        List<String> lines = new ArrayList<>(variant.blocks().size());
+        List<String> lines = new ArrayList<>(variant.blocks().size() + variant.props().size());
         for (Cell cell : variant.blocks()) lines.add(cell.dx() + "," + cell.dy() + "," + cell.dz() + ":" + cell.data().getAsString());
+        for (Prop prop : variant.props()) lines.add(prop.dx() + "," + prop.dy() + "," + prop.dz() + ":@" + prop.color());
         lines.sort(Comparator.naturalOrder());
         return variant.sizeX() + "x" + variant.sizeY() + "x" + variant.sizeZ() + "|" + String.join("\n", lines);
     }
 
-    private static Map<Material, Integer> count(List<Cell> blocks) {
+    private static Map<Material, Integer> count(List<Cell> blocks, List<Prop> props) {
         Map<Material, Integer> counts = new HashMap<>();
         for (Cell cell : blocks) counts.merge(cell.material(), 1, Integer::sum);
+        for (Prop prop : props) counts.merge(prop.material(), 1, Integer::sum);
         Map<Material, Integer> sorted = new LinkedHashMap<>();
         counts.entrySet().stream()
                 .sorted(Map.Entry.<Material, Integer>comparingByValue().reversed().thenComparing(entry -> entry.getKey().name()))
@@ -293,7 +390,7 @@ public final class Blueprint {
 
     /* reading a selection, storing */
 
-    /** Main thread: the blocks of a box, trimmed to the box around them; null when the selection is empty. */
+    /** Main thread: the blocks and cushions of a box, trimmed to the box around them; null when the selection is empty. */
     public static @Nullable Capture capture(@NotNull World world, int x1, int y1, int z1, int x2, int y2, int z2) {
         int minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
         int minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
@@ -317,36 +414,63 @@ public final class Blueprint {
                 }
             }
         }
-        if (found.isEmpty()) return null;
+        List<int[]> cushionCells = new ArrayList<>();
+        List<DyeColor> colors = new ArrayList<>();
+        cushions(world, minX, minY, minZ, maxX - minX + 1, maxY - minY + 1, maxZ - minZ + 1).forEach((key, color) -> {
+            int x = minX + (int) (key >> 42), y = minY + (int) ((key >> 21) & 0x1FFFFF), z = minZ + (int) (key & 0x1FFFFF);
+            cushionCells.add(new int[]{x, y, z});
+            colors.add(color);
+        });
+        for (int[] position : cushionCells) {
+            tx1 = Math.min(tx1, position[0]);
+            ty1 = Math.min(ty1, position[1]);
+            tz1 = Math.min(tz1, position[2]);
+            tx2 = Math.max(tx2, position[0]);
+            ty2 = Math.max(ty2, position[1]);
+            tz2 = Math.max(tz2, position[2]);
+        }
+        if (found.isEmpty() && cushionCells.isEmpty()) return null;
         List<Cell> blocks = new ArrayList<>(found.size());
         for (int i = 0; i < found.size(); i++) {
             int[] position = found.get(i);
             blocks.add(new Cell(position[0] - tx1, position[1] - ty1, position[2] - tz1, data.get(i)));
         }
-        return new Capture(tx1, ty1, tz1, tx2 - tx1 + 1, ty2 - ty1 + 1, tz2 - tz1 + 1, blocks);
+        List<Prop> props = new ArrayList<>(cushionCells.size());
+        for (int i = 0; i < cushionCells.size(); i++) {
+            int[] position = cushionCells.get(i);
+            props.add(new Prop(position[0] - tx1, position[1] - ty1, position[2] - tz1, colors.get(i)));
+        }
+        return new Capture(tx1, ty1, tz1, tx2 - tx1 + 1, ty2 - ty1 + 1, tz2 - tz1 + 1, blocks, props);
     }
 
-    /** One line per block: "dx dy dz blockdata". */
-    static @NotNull String serialize(@NotNull List<Cell> blocks) {
+    /** One line per block "dx dy dz blockdata", per cushion "dx dy dz @COLOUR". */
+    static @NotNull String serialize(@NotNull List<Cell> blocks, @NotNull List<Prop> props) {
         StringBuilder text = new StringBuilder();
         for (Cell cell : blocks) {
             text.append(cell.dx()).append(' ').append(cell.dy()).append(' ').append(cell.dz()).append(' ')
                     .append(cell.data().getAsString()).append('\n');
         }
+        for (Prop prop : props) {
+            text.append(prop.dx()).append(' ').append(prop.dy()).append(' ').append(prop.dz()).append(" @").append(prop.color().name()).append('\n');
+        }
         return text.toString();
     }
 
-    /** @throws IllegalArgumentException for a block this server version does not know */
-    static @NotNull List<Cell> parse(@NotNull String text) {
+    /** The stored blocks and cushions; @throws IllegalArgumentException for a block this server version does not know. */
+    static @NotNull Contents parse(@NotNull String text) {
         List<Cell> blocks = new ArrayList<>();
+        List<Prop> props = new ArrayList<>();
         for (String line : text.split("\n")) {
             if (line.isBlank()) continue;
             String[] parts = line.split(" ", 4);
             if (parts.length < 4) throw new IllegalArgumentException("broken line: " + line);
-            blocks.add(new Cell(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]), Integer.parseInt(parts[2]),
-                    Bukkit.createBlockData(parts[3])));
+            int dx = Integer.parseInt(parts[0]), dy = Integer.parseInt(parts[1]), dz = Integer.parseInt(parts[2]);
+            if (parts[3].startsWith("@")) props.add(new Prop(dx, dy, dz, DyeColor.valueOf(parts[3].substring(1))));
+            else blocks.add(new Cell(dx, dy, dz, Bukkit.createBlockData(parts[3])));
         }
-        return blocks;
+        return new Contents(blocks, props);
     }
+
+    record Contents(@NotNull List<Cell> blocks, @NotNull List<Prop> props) {}
 
 }

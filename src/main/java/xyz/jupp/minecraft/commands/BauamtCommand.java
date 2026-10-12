@@ -30,7 +30,7 @@ import java.util.regex.Pattern;
  */
 public class BauamtCommand implements TabExecutor {
 
-    private static final List<String> SUBCOMMANDS = List.of("pos1", "pos2", "vorlage", "liste", "an", "aus", "belohnung", "löschen", "topf");
+    private static final List<String> SUBCOMMANDS = List.of("pos1", "pos2", "vorlage", "liste", "an", "aus", "belohnung", "löschen", "stand");
     private static final Pattern NAME = Pattern.compile("[\\p{L}\\p{N}_-]{2,24}");
     private static final int REACH = 64;
     private static final int MAX_EDGE = Blueprint.MAX_EDGE;
@@ -63,8 +63,10 @@ public class BauamtCommand implements TabExecutor {
             case "aus" -> enable(player, args, false);
             case "belohnung" -> reward(player, args);
             case "löschen", "loeschen" -> delete(player, args);
-            case "topf" -> Tasks.supplyAsync(Bauamt::refreshPot, pot ->
-                    player.sendMessage(Main.getChatPrefix() + "§fFördertopf heute: §a" + Items.format(pot) + " Schilling"));
+            case "stand" -> Tasks.supplyAsync(Bauamt::refreshFunding, funding ->
+                    player.sendMessage(Main.getChatPrefix() + "§fStaatskasse: §a" + Items.format(funding.balance()) + " §8| §fØ Einnahmen: §a"
+                            + Items.format(funding.averageIncome()) + " §7am Tag §8| §fFörderung: §a" + funding.percent() + " % §7des Richtwerts"
+                            + (funding.broke() ? " §c(Pleite: nichts)" : " §7(Reserve " + Items.format(funding.reserve()) + ")")));
             default -> help(player);
         }
         return true;
@@ -73,12 +75,13 @@ public class BauamtCommand implements TabExecutor {
     private static void help(Player player) {
         player.sendMessage(Main.getChatPrefix() + "§6§lBauamt §7(Admin)");
         player.sendMessage("§8» §a/bauamt pos1 §8| §apos2 §8- §fEcke: der Block, den du anschaust");
-        player.sendMessage("§8» §a/bauamt vorlage <Name> <Belohnung> §8- §fAuswahl als Vorlage speichern");
+        player.sendMessage("§8» §a/bauamt vorlage <Name> <Richtwert> §8- §fAuswahl als Vorlage speichern");
         player.sendMessage("§8» §a/bauamt liste §8- §fAlle Vorlagen");
         player.sendMessage("§8» §a/bauamt an|aus <Name> §8- §fVorlage freigeben oder sperren");
-        player.sendMessage("§8» §a/bauamt belohnung <Name> <Betrag> §8- §fBelohnung ändern");
+        player.sendMessage("§8» §a/bauamt belohnung <Name> <Betrag> §8- §fRichtwert ändern");
         player.sendMessage("§8» §a/bauamt löschen <Name> §8- §fVorlage samt Bauten entfernen");
-        player.sendMessage("§8» §a/bauamt topf §8- §fFördertopf von heute");
+        player.sendMessage("§8» §a/bauamt stand §8- §fStaatskasse, Ø Einnahmen und aktuelle Förderquote");
+        player.sendMessage("§7Der Richtwert wird voll gezahlt, solange die Staatskasse ihre Ø Tageseinnahmen hält, darunter anteilig weniger.");
         player.sendMessage("§7Luft im Rahmen muss beim Nachbau frei bleiben; der Rahmen wird beim Speichern eng um die Blöcke gezogen.");
     }
 
@@ -95,7 +98,7 @@ public class BauamtCommand implements TabExecutor {
 
     private static void create(Player player, String[] args) {
         if (args.length < 3) {
-            fail(player, "§fSo: §a/bauamt vorlage <Name> <Belohnung>");
+            fail(player, "§fSo: §a/bauamt vorlage <Name> <Richtwert>");
             return;
         }
         String name = args[1];
@@ -105,7 +108,7 @@ public class BauamtCommand implements TabExecutor {
             return;
         }
         if (reward == null) {
-            fail(player, "§fDie Belohnung muss eine Zahl über 0 sein.");
+            fail(player, "§fDer Richtwert muss eine Zahl über 0 sein.");
             return;
         }
         if (Bauamt.template(name) != null) {
@@ -144,7 +147,8 @@ public class BauamtCommand implements TabExecutor {
             try {
                 Blueprint template = Bauamt.create(name, reward, world, capture, player);
                 result = "§fVorlage §e" + template.name() + " §fgespeichert: §7" + Bauamt.size(template) + " Blöcke, "
-                        + template.blockCount() + " davon gesetzt, " + template.variants().size() + " Drehungen, Belohnung "
+                        + template.blockCount() + " davon gesetzt" + (template.propCount() > 0 ? " plus " + template.propCount() + " Kissen" : "")
+                        + ", " + template.variants().size() + " Drehungen, Richtwert "
                         + Items.format(reward) + " Schilling. Das Muster hier ist als Bauwerk eingetragen.";
             } catch (DatabaseException e) {
                 result = "§cSpeichern fehlgeschlagen: §7" + e.getMessage();
@@ -156,10 +160,11 @@ public class BauamtCommand implements TabExecutor {
 
     private static void list(Player player) {
         List<Blueprint> templates = Bauamt.templates();
-        player.sendMessage(Main.getChatPrefix() + "§fVorlagen: §7" + templates.size() + " §8| §fFördertopf heute: §a" + Items.format(Bauamt.pot()));
+        Bauamt.Funding funding = Bauamt.funding();
+        player.sendMessage(Main.getChatPrefix() + "§fVorlagen: §7" + templates.size() + " §8| §fFörderung gerade: §a" + funding.percent() + " % §7des Richtwerts");
         for (Blueprint template : templates) {
             player.sendMessage("§8» " + (template.enabled() ? "§e" : "§7") + template.name() + " §8- §a" + Items.format(template.reward())
-                    + " §7(" + Bauamt.size(template) + ", " + template.blockCount() + " Blöcke, " + Bauamt.copies(template) + "× gebaut"
+                    + " §7Richtwert (" + Bauamt.size(template) + ", " + template.blockCount() + " Blöcke, " + Bauamt.copies(template) + "× gebaut"
                     + (template.enabled() ? "" : ", gesperrt") + ") §7bei " + template.originX() + " / " + template.originY() + " / " + template.originZ());
         }
     }

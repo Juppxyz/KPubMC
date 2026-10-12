@@ -41,7 +41,9 @@ public final class Treasury {
         // paid out: interest on Basil's fixed deposits
         INTEREST("Zinsen"),
         // paid out: the Bauamt's grants for copies of its building templates
-        BUILDING_GRANT("Bauförderung");
+        BUILDING_GRANT("Bauförderung"),
+        // what players pay for damaging state property (paid builds)
+        DAMAGE_FINE("Schadensersatz");
 
         private final String label;
 
@@ -68,7 +70,7 @@ public final class Treasury {
     }
 
     /** Books the amount inside the caller's transaction; call {@link #committed(long)} after the commit. */
-    static void deposit(Connection connection, Source source, long amount, @Nullable UUID player) throws SQLException {
+    public static void deposit(Connection connection, Source source, long amount, @Nullable UUID player) throws SQLException {
         if (amount <= 0) return;
         Database.update(connection, "INSERT INTO treasury_ledger (source, amount, player_uuid) VALUES (?, ?, ?)",
                 source.name(), amount, player);
@@ -92,6 +94,16 @@ public final class Treasury {
                 TabListUtil.updateTabForAll();
             });
         }
+    }
+
+    /** What the state took in: every source except the money it owes or paid out (deposits, bonds, interest, grants). */
+    public static long income(Map<Source, Long> inflow) {
+        return inflow.entrySet().stream()
+                .filter(entry -> switch (entry.getKey()) {
+                    case INTEREST, FIXED_DEPOSIT, BOND_SALE, BOND_REPAY, BUILDING_GRANT -> false;
+                    default -> true;
+                })
+                .mapToLong(Map.Entry::getValue).sum();
     }
 
     /** Blocking: sum of the inflows since the given time per source. */

@@ -3,7 +3,6 @@ package xyz.jupp.minecraft.utils;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
-import xyz.jupp.minecraft.building.Bauamt;
 import xyz.jupp.minecraft.economy.Bankruptcy;
 import xyz.jupp.minecraft.economy.Economy;
 import xyz.jupp.minecraft.economy.Treasury;
@@ -13,7 +12,7 @@ public class TabListUtil {
 
     private static final String HEADER = "Auslastung: ";
     // kept short on purpose: the details are in the shop info tab and /staatskasse
-    private static final String FOOTER = "\n§6Staatskasse: §a%d Schilling §8| §6Fördertopf: §a%d\n§7Steuern: %s";
+    private static final String FOOTER = "\n§6Staatskasse: §a%d Schilling\n§7Steuern: %s";
 
 
     public static void updateTabForAll() {
@@ -37,7 +36,7 @@ public class TabListUtil {
             return Component.text("\n§4§lSTAATSPLEITE §8| §cKasse leer\n§7Steuern: " + Economy.levelWord()
                     + " §8| §7Notverkauf im Shop");
         }
-        return Component.text(FOOTER.formatted(Treasury.balance(), Bauamt.pot(), Economy.levelWord()));
+        return Component.text(FOOTER.formatted(Treasury.balance(), Economy.levelWord()));
     }
 
     private static String currentPerformance() {
