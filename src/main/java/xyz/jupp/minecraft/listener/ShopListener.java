@@ -8,6 +8,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.world.EntitiesLoadEvent;
+import xyz.jupp.minecraft.building.BauamtView;
 import xyz.jupp.minecraft.economy.BankView;
 import xyz.jupp.minecraft.economy.BlackMarketView;
 import xyz.jupp.minecraft.Main;
@@ -42,6 +43,12 @@ public class ShopListener implements Listener {
             if (Main.getJewelerVillagerName().equals(villagerName)) {
                 event.setCancelled(true);
                 HondoView.open(event.getPlayer());
+                return;
+            }
+
+            if (Main.getBauamtVillagerName().equals(villagerName)) {
+                event.setCancelled(true);
+                BauamtView.open(event.getPlayer());
                 return;
             }
         }
