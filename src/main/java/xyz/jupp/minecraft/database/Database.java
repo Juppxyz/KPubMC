@@ -382,7 +382,48 @@ public final class Database {
             // purchases per player and item within an hour, in bundles (null: the category's default)
             "ALTER TABLE market_items ADD COLUMN IF NOT EXISTS hourly_limit INTEGER CHECK (hourly_limit > 0)",
             // when a member joined: the vice longest in the team takes over when the boss leaves
-            "ALTER TABLE team_members ADD COLUMN IF NOT EXISTS joined_at TIMESTAMPTZ NOT NULL DEFAULT now()"
+            "ALTER TABLE team_members ADD COLUMN IF NOT EXISTS joined_at TIMESTAMPTZ NOT NULL DEFAULT now()",
+            // the Bauamt: building templates (blocks as text lines) and every copy that was reported, paid or found broken
+            """
+            CREATE TABLE IF NOT EXISTS bauamt_templates (
+                id         INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                name       TEXT    NOT NULL UNIQUE,
+                reward     INTEGER NOT NULL CHECK (reward > 0),
+                enabled    BOOLEAN NOT NULL DEFAULT TRUE,
+                world      TEXT    NOT NULL,
+                origin_x   INTEGER NOT NULL,
+                origin_y   INTEGER NOT NULL,
+                origin_z   INTEGER NOT NULL,
+                size_x     INTEGER NOT NULL,
+                size_y     INTEGER NOT NULL,
+                size_z     INTEGER NOT NULL,
+                blocks     TEXT    NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )""",
+            """
+            CREATE TABLE IF NOT EXISTS bauamt_builds (
+                id          BIGINT  GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                template_id INTEGER NOT NULL REFERENCES bauamt_templates (id) ON DELETE CASCADE,
+                player_uuid UUID    NOT NULL,
+                player_name TEXT    NOT NULL,
+                world       TEXT    NOT NULL,
+                x           INTEGER NOT NULL,
+                y           INTEGER NOT NULL,
+                z           INTEGER NOT NULL,
+                size_x      INTEGER NOT NULL,
+                size_y      INTEGER NOT NULL,
+                size_z      INTEGER NOT NULL,
+                rotation    TEXT    NOT NULL,
+                mirrored    BOOLEAN NOT NULL DEFAULT FALSE,
+                state       TEXT    NOT NULL CHECK (state IN ('PENDING', 'INTACT', 'DAMAGED', 'GONE')),
+                reward      INTEGER NOT NULL DEFAULT 0,
+                created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+                paid_at     TIMESTAMPTZ,
+                damaged_at  TIMESTAMPTZ,
+                checked_at  TIMESTAMPTZ
+            )""",
+            "CREATE INDEX IF NOT EXISTS bauamt_builds_player_idx ON bauamt_builds (player_uuid, paid_at)",
+            "CREATE INDEX IF NOT EXISTS bauamt_builds_state_idx ON bauamt_builds (state)"
     );
 
     private static volatile HikariDataSource dataSource;

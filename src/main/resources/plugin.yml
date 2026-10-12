@@ -53,3 +53,5 @@ commands:
   staatskasse:
     aliases: [kasse]
   shopadmin:
+  bauamt:
+  createbauamt:

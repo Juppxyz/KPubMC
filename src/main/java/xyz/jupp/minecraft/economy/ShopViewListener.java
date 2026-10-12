@@ -6,6 +6,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
+import xyz.jupp.minecraft.building.BauamtView;
 
 public class ShopViewListener implements Listener {
 
@@ -18,6 +19,7 @@ public class ShopViewListener implements Listener {
         if (event.getInventory().getHolder(false) instanceof HondoView view) view.handleClick(event, player);
         if (event.getInventory().getHolder(false) instanceof BankView view) view.handleClick(event, player);
         if (event.getInventory().getHolder(false) instanceof EmergencySaleView view) view.handleClick(event, player);
+        if (event.getInventory().getHolder(false) instanceof BauamtView view) view.handleClick(event, player);
     }
 
     // the vault is a real storage: clicks stay allowed, the contents are stored when it closes
@@ -30,7 +32,7 @@ public class ShopViewListener implements Listener {
     public void onDrag(InventoryDragEvent event) {
         Object holder = event.getInventory().getHolder(false);
         if (holder instanceof ShopView || holder instanceof NomadView || holder instanceof BlackMarketView || holder instanceof HondoView
-                || holder instanceof BankView || holder instanceof EmergencySaleView) {
+                || holder instanceof BankView || holder instanceof EmergencySaleView || holder instanceof BauamtView) {
             event.setCancelled(true);
         }
     }

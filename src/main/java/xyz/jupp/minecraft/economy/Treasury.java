@@ -39,7 +39,9 @@ public final class Treasury {
         BOND_SALE("Staatsanleihen"),
         BOND_REPAY("Anleihen zurückgezahlt"),
         // paid out: interest on Basil's fixed deposits
-        INTEREST("Zinsen");
+        INTEREST("Zinsen"),
+        // paid out: the Bauamt's grants for copies of its building templates
+        BUILDING_GRANT("Bauförderung");
 
         private final String label;
 
@@ -73,14 +75,14 @@ public final class Treasury {
     }
 
     /** Pays out of the treasury inside the caller's transaction (a negative entry); call {@link #committed(long)} with -amount. */
-    static void withdraw(Connection connection, Source source, long amount, @Nullable UUID player) throws SQLException {
+    public static void withdraw(Connection connection, Source source, long amount, @Nullable UUID player) throws SQLException {
         if (amount <= 0) return;
         Database.update(connection, "INSERT INTO treasury_ledger (source, amount, player_uuid) VALUES (?, ?, ?)",
                 source.name(), -amount, player);
     }
 
-    // after the commit of a booking; negative for refunds
-    static void committed(long amount) {
+    // after the commit of a booking; negative for refunds and grants
+    public static void committed(long amount) {
         if (amount == 0) return;
         balance.addAndGet(amount);
         // the tab list shows the balance: redraw it on the next tick, bookings in the same tick share one redraw

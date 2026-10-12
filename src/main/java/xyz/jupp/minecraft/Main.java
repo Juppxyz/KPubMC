@@ -7,6 +7,8 @@ import xyz.jupp.minecraft.team.TeamAreaEffects;
 import xyz.jupp.minecraft.team.Relations;
 import xyz.jupp.minecraft.team.TeamViewListener;
 import xyz.jupp.minecraft.team.TeamWarps;
+import xyz.jupp.minecraft.building.Bauamt;
+import xyz.jupp.minecraft.building.BauamtListener;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.ChunkCache;
 import xyz.jupp.minecraft.cache.WarpCache;
@@ -36,6 +38,7 @@ public final class Main extends JavaPlugin {
     private final static String jewelerVillagerName = "§b§lHondo";
     private final static String blackMarketDealerVillagerName = "§8§lMorpheus";
     private final static String teamPointsDealerVillagerName = "§6§lNomad";
+    private final static String bauamtVillagerName = "§e§lBauamt";
 
     private final static String currencyName = "Schilling";
     private final static String teamName = "§aTeam";
@@ -79,6 +82,8 @@ public final class Main extends JavaPlugin {
         this.getCommand("removechunk").setExecutor(new RemoveChunkCommand());
         this.getCommand("staatskasse").setExecutor(new TreasuryCommand());
         this.getCommand("shopadmin").setExecutor(new ShopAdminCommand());
+        this.getCommand("bauamt").setExecutor(new BauamtCommand());
+        this.getCommand("createbauamt").setExecutor(new CreateBauamtCommand());
     }
 
     private void registerListener() {
@@ -104,6 +109,7 @@ public final class Main extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new CashGuardListener(), this);
         Bukkit.getPluginManager().registerEvents(new CombatListener(), this);
         Bukkit.getPluginManager().registerEvents(new DntLootListener(), this);
+        Bukkit.getPluginManager().registerEvents(new BauamtListener(), this);
 
         // afk
         Bukkit.getPluginManager().registerEvents(new AfkListener(), this);
@@ -118,6 +124,7 @@ public final class Main extends JavaPlugin {
         TeamAreaEffects.startTask();
         PlayerTracker.startTask();
         CombatLock.tickTask().runTaskTimer(this, 20L, 20L);
+        Bauamt.startTask();
     }
 
 
@@ -155,7 +162,9 @@ public final class Main extends JavaPlugin {
         Nomad.load();
         Hondo.load();
         Bankruptcy.load();
-        Logger.console("loaded " + Market.all().size() + " market items, " + Market.dailyOffers().size() + " daily offers");
+        Bauamt.load();
+        Logger.console("loaded " + Market.all().size() + " market items, " + Market.dailyOffers().size() + " daily offers, "
+                + Bauamt.templates().size() + " building templates, " + Bauamt.builds().size() + " builds");
         registerCommands();
         registerListener();
         registerTasks();
@@ -210,6 +219,7 @@ public final class Main extends JavaPlugin {
     public static String getFinanceVillagerFredName() {return financeVillagerFredName;}
     public static String getTeamPointsDealerVillagerName() {return teamPointsDealerVillagerName;}
     public static String getBlackMarketDealerVillagerName() {return blackMarketDealerVillagerName;}
+    public static String getBauamtVillagerName() {return bauamtVillagerName;}
     public static String getCurrencyName(int amount)  {return String.format("§a%d %s", amount, currencyName);}
 
     // Getter for jail

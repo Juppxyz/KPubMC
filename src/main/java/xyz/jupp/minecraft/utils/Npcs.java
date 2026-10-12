@@ -24,7 +24,8 @@ public final class Npcs {
             String name = visibleName(entity);
             return Main.getShopVillagerName().equals(name)
                     || Main.getFinanceVillagerFredName().equals(name)
-                    || Main.getJewelerVillagerName().equals(name);
+                    || Main.getJewelerVillagerName().equals(name)
+                    || Main.getBauamtVillagerName().equals(name);
         }
         // Morpheus has a hidden name
         if (type == EntityType.VINDICATOR) {
