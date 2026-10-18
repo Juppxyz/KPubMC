@@ -12,6 +12,7 @@ import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.building.Bauamt;
 import xyz.jupp.minecraft.building.Blueprint;
+import xyz.jupp.minecraft.building.Build;
 import xyz.jupp.minecraft.database.DatabaseException;
 import xyz.jupp.minecraft.inventory.Items;
 import xyz.jupp.minecraft.utils.PermissionsUtil;
@@ -30,7 +31,7 @@ import java.util.regex.Pattern;
  */
 public class BauamtCommand implements TabExecutor {
 
-    private static final List<String> SUBCOMMANDS = List.of("pos1", "pos2", "vorlage", "liste", "an", "aus", "belohnung", "löschen", "stand");
+    private static final List<String> SUBCOMMANDS = List.of("pos1", "pos2", "vorlage", "liste", "info", "prüfen", "an", "aus", "belohnung", "löschen", "stand");
     private static final Pattern NAME = Pattern.compile("[\\p{L}\\p{N}_-]{2,24}");
     private static final int REACH = 64;
     private static final int MAX_EDGE = Blueprint.MAX_EDGE;
@@ -59,6 +60,8 @@ public class BauamtCommand implements TabExecutor {
             case "pos2" -> corner(player, 1);
             case "vorlage" -> create(player, args);
             case "liste" -> list(player);
+            case "info" -> info(player, args);
+            case "prüfen", "pruefen" -> diagnose(player, args);
             case "an" -> enable(player, args, true);
             case "aus" -> enable(player, args, false);
             case "belohnung" -> reward(player, args);
@@ -77,6 +80,8 @@ public class BauamtCommand implements TabExecutor {
         player.sendMessage("§8» §a/bauamt pos1 §8| §apos2 §8- §fEcke: der Block, den du anschaust");
         player.sendMessage("§8» §a/bauamt vorlage <Name> <Richtwert> §8- §fAuswahl als Vorlage speichern");
         player.sendMessage("§8» §a/bauamt liste §8- §fAlle Vorlagen");
+        player.sendMessage("§8» §a/bauamt info <Name> §8- §fMaterialliste einer Vorlage");
+        player.sendMessage("§8» §a/bauamt prüfen [Name] §8- §fWarum der angeschaute Nachbau nicht passt");
         player.sendMessage("§8» §a/bauamt an|aus <Name> §8- §fVorlage freigeben oder sperren");
         player.sendMessage("§8» §a/bauamt belohnung <Name> <Betrag> §8- §fRichtwert ändern");
         player.sendMessage("§8» §a/bauamt löschen <Name> §8- §fVorlage samt Bauten entfernen");
@@ -201,6 +206,50 @@ public class BauamtCommand implements TabExecutor {
         });
     }
 
+    private static void info(Player player, String[] args) {
+        Blueprint template = named(player, args);
+        if (template == null) return;
+        player.sendMessage(Main.getChatPrefix() + "§e" + template.name() + " §7(" + Bauamt.size(template) + ", Rahmen ab "
+                + template.originX() + " / " + template.originY() + " / " + template.originZ() + ", " + template.variants().size() + " Drehungen)");
+        template.materials().forEach((material, count) ->
+                player.sendMessage("§8» §f" + count + "× §7" + material.name().toLowerCase(Locale.ROOT)));
+        player.sendMessage("§7Alles andere im Rahmen muss beim Nachbau leer sein.");
+    }
+
+    // the best fitting placement around the block the admin looks at, and what is wrong with it
+    private static void diagnose(Player player, String[] args) {
+        Blueprint only = null;
+        if (args.length > 1) {
+            only = Bauamt.template(args[1]);
+            if (only == null) {
+                fail(player, "§fDie Vorlage §e" + args[1] + " §fgibt es nicht.");
+                return;
+            }
+        }
+        Block target = player.getTargetBlockExact(REACH);
+        if (target == null) {
+            fail(player, "§fSchau einen Block des Nachbaus an.");
+            return;
+        }
+        Bauamt.Diagnosis diagnosis = Bauamt.diagnose(target.getWorld(), target.getX(), target.getY(), target.getZ(), only);
+        if (diagnosis == null) {
+            fail(player, "§fDer Block §7" + target.getType().name().toLowerCase(Locale.ROOT) + " §fkommt in keiner Vorlage vor. Schau einen Block des Bauwerks an, nicht den Boden.");
+            return;
+        }
+        Blueprint.Variant variant = diagnosis.variant();
+        player.sendMessage(Main.getChatPrefix() + "§fBeste Übereinstimmung: §e" + diagnosis.template().name() + " §7(" + variant.rotation().name().toLowerCase(Locale.ROOT)
+                + (variant.mirrored() ? ", gespiegelt" : "") + ") §fRahmen ab §e" + diagnosis.ox() + " / " + diagnosis.oy() + " / " + diagnosis.oz()
+                + " §8| §fFalsch: " + (diagnosis.bad() == 0 ? "§a0" : "§c" + diagnosis.bad()) + " §7von " + variant.cells() + " Zellen");
+        for (String line : diagnosis.lines()) player.sendMessage("§8» §7" + line);
+        if (diagnosis.overlapping() != null) {
+            Build other = diagnosis.overlapping();
+            player.sendMessage("§8» §7Überschneidet sich mit Bauwerk " + other.id() + " von " + other.playerName() + " (" + other.state().name().toLowerCase(Locale.ROOT) + ").");
+        }
+        int orders = Bauamt.openOrders(player.getUniqueId(), diagnosis.template().id());
+        player.sendMessage("§8» §7Deine offenen Aufträge dafür: " + orders + ". "
+                + (diagnosis.bad() == 0 ? "Ein Block neu gesetzt meldet das Bauwerk." : "Erst die Abweichungen beheben."));
+    }
+
     private static @Nullable Blueprint named(Player player, String[] args) {
         if (args.length < 2) {
             fail(player, "§fWelche Vorlage? Namen siehst du mit §a/bauamt liste§f.");
@@ -229,7 +278,7 @@ public class BauamtCommand implements TabExecutor {
         if (args.length == 1) {
             return SUBCOMMANDS.stream().filter(sub -> sub.startsWith(args[0].toLowerCase(Locale.ROOT))).toList();
         }
-        if (args.length == 2 && List.of("an", "aus", "belohnung", "löschen", "loeschen").contains(args[0].toLowerCase(Locale.ROOT))) {
+        if (args.length == 2 && List.of("an", "aus", "belohnung", "löschen", "loeschen", "info", "prüfen", "pruefen").contains(args[0].toLowerCase(Locale.ROOT))) {
             return Bauamt.templates().stream().map(Blueprint::name)
                     .filter(name -> name.toLowerCase(Locale.ROOT).startsWith(args[1].toLowerCase(Locale.ROOT))).toList();
         }

@@ -268,6 +268,39 @@ public final class Blueprint {
         return bad;
     }
 
+    /** Diagnostic, main thread: the first cells at this origin that do not match, as readable lines (world coordinates). */
+    public static @NotNull List<String> explain(@NotNull World world, int ox, int oy, int oz, @NotNull Variant variant, int limit) {
+        List<String> lines = new ArrayList<>();
+        for (Cell cell : variant.blocks()) {
+            int x = ox + cell.dx(), y = oy + cell.dy(), z = oz + cell.dz();
+            BlockData actual = world.getBlockData(x, y, z);
+            if (same(cell.data(), actual)) continue;
+            lines.add(x + " / " + y + " / " + z + ": erwartet " + cell.data().getAsString(true) + ", gefunden " + actual.getAsString(true));
+            if (lines.size() >= limit) return lines;
+        }
+        for (Gap gap : variant.gaps()) {
+            int x = ox + gap.dx(), y = oy + gap.dy(), z = oz + gap.dz();
+            Material actual = world.getType(x, y, z);
+            if (empty(actual)) continue;
+            lines.add(x + " / " + y + " / " + z + ": sollte leer sein, gefunden " + actual.name().toLowerCase(java.util.Locale.ROOT));
+            if (lines.size() >= limit) return lines;
+        }
+        Map<Long, DyeColor> cushions = cushions(world, ox, oy, oz, variant.sizeX(), variant.sizeY(), variant.sizeZ());
+        for (Prop prop : variant.props()) {
+            DyeColor found = cushions.remove(key(prop.dx(), prop.dy(), prop.dz()));
+            if (found == prop.color()) continue;
+            lines.add((ox + prop.dx()) + " / " + (oy + prop.dy()) + " / " + (oz + prop.dz()) + ": Kissen " + prop.color() + " erwartet, "
+                    + (found == null ? "keins" : found) + " gefunden");
+            if (lines.size() >= limit) return lines;
+        }
+        cushions.forEach((key, color) -> {
+            if (lines.size() >= limit) return;
+            int dx = (int) (key >> 42), dy = (int) ((key >> 21) & 0x1FFFFF), dz = (int) (key & 0x1FFFFF);
+            lines.add((ox + dx) + " / " + (oy + dy) + " / " + (oz + dz) + ": Kissen " + color + " zu viel");
+        });
+        return lines;
+    }
+
     /** Empty for a template: air, or the snow that falls on a build in winter. */
     static boolean empty(@NotNull Material material) {
         return material.isAir() || material == Material.SNOW;

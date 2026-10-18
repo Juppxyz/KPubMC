@@ -414,6 +414,47 @@ public final class Bauamt {
     }
 
 
+    /* diagnosis for admins */
+
+    /** The best fitting placement of a template around a block: where, how turned, how many cells are wrong and the first of them. */
+    public record Diagnosis(@NotNull Blueprint template, @NotNull Blueprint.Variant variant, int ox, int oy, int oz, int bad,
+                            @NotNull List<String> lines, @Nullable Build overlapping) {}
+
+    /** Main thread: tries every placement in which the block is a piece of a template, null if it is part of none. */
+    public static @Nullable Diagnosis diagnose(@NotNull World world, int bx, int by, int bz, @Nullable Blueprint only) {
+        Material material = world.getType(bx, by, bz);
+        Diagnosis best = null;
+        for (Blueprint template : templates) {
+            if (only != null && template.id() != only.id()) continue;
+            for (Blueprint.Variant variant : template.variants()) {
+                for (Blueprint.Cell cell : variant.blocks()) {
+                    if (cell.material() == material) best = better(best, world, template, variant, bx - cell.dx(), by - cell.dy(), bz - cell.dz());
+                }
+                if (!material.isAir()) continue;
+                // an empty block: maybe the admin looks at a cushion, try its cells with any colour
+                for (Blueprint.Prop prop : variant.props()) {
+                    best = better(best, world, template, variant, bx - prop.dx(), by - prop.dy(), bz - prop.dz());
+                }
+            }
+        }
+        if (best == null) return null;
+        Blueprint.Variant variant = best.variant();
+        return new Diagnosis(best.template(), variant, best.ox(), best.oy(), best.oz(), best.bad(),
+                Blueprint.explain(world, best.ox(), best.oy(), best.oz(), variant, 8),
+                overlapping(world.getName(), best.ox(), best.oy(), best.oz(), variant.sizeX(), variant.sizeY(), variant.sizeZ()));
+    }
+
+    private static @Nullable Diagnosis better(@Nullable Diagnosis best, World world, Blueprint template, Blueprint.Variant variant, int ox, int oy, int oz) {
+        if (oy < world.getMinHeight() || oy + variant.sizeY() > world.getMaxHeight()) return best;
+        if (!Blueprint.chunksLoaded(world, ox, oz, variant.sizeX(), variant.sizeZ())) return best;
+        int stop = best == null ? Integer.MAX_VALUE : best.bad() - 1;
+        if (stop < 0) return best;
+        int bad = Blueprint.mismatches(world, ox, oy, oz, variant, stop);
+        if (best != null && bad >= best.bad()) return best;
+        return new Diagnosis(template, variant, ox, oy, oz, bad, List.of(), null);
+    }
+
+
     /* the grant, claimed at the villager */
 
     public enum Outcome { OK, BROKE, EMPTY, NOT_INTACT, UNLOADED, NOT_PENDING, ERROR }
