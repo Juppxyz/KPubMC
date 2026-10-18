@@ -5,6 +5,7 @@ import org.bukkit.DyeColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
+import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.Bisected;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.Directional;
@@ -275,7 +276,8 @@ public final class Blueprint {
             int x = ox + cell.dx(), y = oy + cell.dy(), z = oz + cell.dz();
             BlockData actual = world.getBlockData(x, y, z);
             if (same(cell.data(), actual)) continue;
-            lines.add(x + " / " + y + " / " + z + ": erwartet " + cell.data().getAsString(true) + ", gefunden " + actual.getAsString(true));
+            // the full string: the short one would print what was parsed, not the state after the turn or mirror
+            lines.add(x + " / " + y + " / " + z + ": erwartet " + cell.data().getAsString() + ", gefunden " + actual.getAsString());
             if (lines.size() >= limit) return lines;
         }
         for (Gap gap : variant.gaps()) {
@@ -309,7 +311,7 @@ public final class Blueprint {
     // material and the orientation a builder chooses; states like lit, open, powered or waterlogged do not matter
     static boolean same(@NotNull BlockData expected, @NotNull BlockData actual) {
         if (expected.getMaterial() != actual.getMaterial()) return false;
-        if (expected instanceof Directional e && actual instanceof Directional a && e.getFacing() != a.getFacing()) return false;
+        if (expected instanceof Directional e && actual instanceof Directional a && !sameFacing(expected, e.getFacing(), a.getFacing())) return false;
         if (expected instanceof Orientable e && actual instanceof Orientable a && e.getAxis() != a.getAxis()) return false;
         if (expected instanceof Bisected e && actual instanceof Bisected a && e.getHalf() != a.getHalf()) return false;
         if (expected instanceof Stairs e && actual instanceof Stairs a && e.getShape() != a.getShape()) return false;
@@ -319,6 +321,13 @@ public final class Blueprint {
         if (expected instanceof FaceAttachable e && actual instanceof FaceAttachable a && e.getAttachedFace() != a.getAttachedFace()) return false;
         if (expected instanceof Hangable e && actual instanceof Hangable a && e.isHanging() != a.isHanging()) return false;
         return true;
+    }
+
+    // a lever or button on the floor or ceiling only shows the axis of its facing, and the mirror image of a south one faces north
+    private static boolean sameFacing(@NotNull BlockData data, @NotNull BlockFace expected, @NotNull BlockFace actual) {
+        if (expected == actual) return true;
+        return data instanceof FaceAttachable attachable && attachable.getAttachedFace() != FaceAttachable.AttachedFace.WALL
+                && expected.getOppositeFace() == actual;
     }
 
     /** Whether every chunk of the box is loaded with its entities (never loads one). */
