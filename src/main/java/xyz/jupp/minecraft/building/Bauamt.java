@@ -276,11 +276,17 @@ public final class Bauamt {
         return null;
     }
 
-    public enum OrderOutcome { OK, LIMIT, DISABLED }
+    public enum OrderOutcome { OK, LIMIT, DISABLED, UNAFFORDABLE }
+
+    /** Whether the Bauamt hands out orders for the template right now: only while the treasury could pay the copy. */
+    public static boolean orderable(@NotNull Blueprint template, @NotNull Funding funding) {
+        return template.enabled() && affordable(payout(template, funding), funding);
+    }
 
     /** Worker: the player takes an order for one copy of the template. */
     public static @NotNull OrderOutcome takeOrder(@NotNull UUID player, @NotNull Blueprint template) {
         if (!template.enabled()) return OrderOutcome.DISABLED;
+        if (!orderable(template, refreshFunding())) return OrderOutcome.UNAFFORDABLE;
         if (openOrders(player, template.id()) >= ORDERS_PER_TEMPLATE) return OrderOutcome.LIMIT;
         Long id = Database.queryOne("INSERT INTO bauamt_orders (player_uuid, template_id) VALUES (?, ?) RETURNING id", row -> row.getLong(1),
                 player, template.id());

@@ -110,6 +110,11 @@ public final class BauamtView implements InventoryHolder {
             int slot = TEMPLATES_START + i;
             templateSlots.put(slot, template);
             int open = Bauamt.openOrders(uuid, template.id());
+            String action;
+            if (funding.broke()) action = "§cDer Staat ist pleite, keine Aufträge.";
+            else if (!Bauamt.orderable(template, funding)) action = "§7Gerade keine Aufträge: die Kasse ist zu knapp.";
+            else if (open >= Bauamt.ORDERS_PER_TEMPLATE) action = "§7Mehr Aufträge gibt es erst nach der Abnahme.";
+            else action = "§e» Linksklick: Auftrag annehmen";
             inventory.setItem(slot, Items.glow(Items.named(template.icon(), "§e" + template.name(), List.of(
                     payoutLine(template, funding),
                     "§7Größe: §f" + Bauamt.size(template) + " §7Blöcke",
@@ -117,7 +122,7 @@ public final class BauamtView implements InventoryHolder {
                     "§7Bisher gebaut: §f" + Bauamt.copies(template) + "×",
                     "§7Deine Aufträge: §f" + open + " §7von " + Bauamt.ORDERS_PER_TEMPLATE,
                     "",
-                    open < Bauamt.ORDERS_PER_TEMPLATE ? "§e» Linksklick: Auftrag annehmen" : "§7Mehr Aufträge gibt es erst nach der Abnahme.",
+                    action,
                     "§e» Rechtsklick: Materialliste")), open > 0));
         }
 
@@ -234,6 +239,8 @@ public final class BauamtView implements InventoryHolder {
                     player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_YES, 1f, 1f);
                 } else if (result == Bauamt.OrderOutcome.LIMIT) {
                     fail(player, "§fDu hast schon " + Bauamt.ORDERS_PER_TEMPLATE + " offene Aufträge dafür. Erst bauen und abnehmen lassen.");
+                } else if (result == Bauamt.OrderOutcome.UNAFFORDABLE) {
+                    fail(player, "§fDie Staatskasse könnte das gerade nicht bezahlen, darum vergibt das Bauamt dafür keine Aufträge.");
                 } else {
                     fail(player, "§fDas hat gerade nicht geklappt, versuch es gleich nochmal.");
                 }
