@@ -88,6 +88,8 @@ public final class Main extends JavaPlugin {
         this.getCommand("bauamt").setExecutor(new BauamtCommand());
         this.getCommand("createbauamt").setExecutor(new CreateBauamtCommand());
         this.getCommand("createsheriff").setExecutor(new CreateSheriffCommand());
+        this.getCommand("ort").setExecutor(new PlacesCommand());
+        this.getCommand("mvtp").setExecutor(new WorldTeleportCommand());
     }
 
     private void registerListener() {
@@ -168,6 +170,8 @@ public final class Main extends JavaPlugin {
         Hondo.load();
         Bankruptcy.load();
         Bauamt.load();
+        int mapAreas = Locations.load();
+        Logger.console("loaded " + mapAreas + " ready spawn areas and arenas");
         int jailCells = JailCells.load();
         Logger.console("loaded " + jailCells + " ready jail cells");
         Logger.console("loaded " + Market.all().size() + " market items, " + Market.dailyOffers().size() + " daily offers, "

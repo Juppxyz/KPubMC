@@ -483,6 +483,32 @@ public final class Database {
                 created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
                 claimed_by  UUID,
                 claimed_at  TIMESTAMPTZ
+            )""",
+            // places of the map, set by admins with /ort: the spawn point (one row) and the spawn areas and arenas, each
+            // between two block corners (null while an admin is still setting it up)
+            """
+            CREATE TABLE IF NOT EXISTS map_spawn (
+                id    BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (id),
+                world TEXT             NOT NULL,
+                x     DOUBLE PRECISION NOT NULL,
+                y     DOUBLE PRECISION NOT NULL,
+                z     DOUBLE PRECISION NOT NULL,
+                yaw   REAL             NOT NULL,
+                pitch REAL             NOT NULL
+            )""",
+            """
+            CREATE TABLE IF NOT EXISTS map_areas (
+                id    INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                kind  TEXT    NOT NULL CHECK (kind IN ('spawn', 'arena')),
+                name  TEXT    NOT NULL,
+                world TEXT    NOT NULL,
+                x1    INTEGER,
+                y1    INTEGER,
+                z1    INTEGER,
+                x2    INTEGER,
+                y2    INTEGER,
+                z2    INTEGER,
+                UNIQUE (kind, name)
             )"""
     );
 

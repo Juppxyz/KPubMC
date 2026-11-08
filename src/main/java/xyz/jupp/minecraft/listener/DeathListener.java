@@ -35,26 +35,11 @@ import java.util.function.Consumer;
 // The database work after a death runs on a worker thread, everything that touches players runs on the main thread.
 public class DeathListener implements Listener {
 
-    private static final String ARENA_WORLD = "world_MCWinter";
-    private static final double ARENA_MIN_X = 150106.0D;
-    private static final double ARENA_MAX_X = 150144.0D;
-    private static final double ARENA_MIN_Y = 220.0D;
-    private static final double ARENA_MAX_Y = 290.0D;
-    private static final double ARENA_MIN_Z = 150218.0D;
-    private static final double ARENA_MAX_Z = 150257.0D;
-
     // the listener is created in onEnable, so the plugin instance exists here
     private static final KeepInventoryItem KEEP_INVENTORY_ITEM = new KeepInventoryItem();
 
     static boolean isPlayerInArena(Player player) {
-        Location location = player.getLocation();
-        if (!location.getWorld().getName().equals(ARENA_WORLD)) {
-            return false;
-        }
-        double x = location.getX();
-        double y = location.getY();
-        double z = location.getZ();
-        return (x >= ARENA_MIN_X && x <= ARENA_MAX_X) && (y >= ARENA_MIN_Y && y <= ARENA_MAX_Y) && (z >= ARENA_MIN_Z && z <= ARENA_MAX_Z);
+        return Locations.isInArena(player.getLocation());
     }
 
     private static void keepInventory(PlayerDeathEvent event) {

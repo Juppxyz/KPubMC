@@ -54,6 +54,7 @@ public class HelpCommand implements CommandExecutor {
             player.sendMessage("§8§l» §a/createsheriff §8- §fErstellt den Sheriff (nimmt Köpfe von Gesuchten an).");
             player.sendMessage("§8§l» §a/bauamt §8- §fVerwaltet die Bauvorlagen der Bauförderung.");
             player.sendMessage("§8§l» §a/bestrafung §8- §fGefängnis, Fahndung und Zellen §7(/bestrafung zelle, /bestrafung zellen)");
+            player.sendMessage("§8§l» §a/ort §8- §fSpawnpunkt, Spawnbereiche und Arena der Karte §7(/ort liste)");
         }
     }
 }
