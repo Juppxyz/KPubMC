@@ -90,6 +90,7 @@ public final class Main extends JavaPlugin {
         this.getCommand("createsheriff").setExecutor(new CreateSheriffCommand());
         this.getCommand("ort").setExecutor(new PlacesCommand());
         this.getCommand("mvtp").setExecutor(new WorldTeleportCommand());
+        this.getCommand("mvload").setExecutor(new WorldLoadCommand());
     }
 
     private void registerListener() {
