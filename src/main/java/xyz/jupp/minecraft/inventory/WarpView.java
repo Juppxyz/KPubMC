@@ -25,6 +25,7 @@ import xyz.jupp.minecraft.team.Relations;
 import xyz.jupp.minecraft.team.TeamCreateView;
 import xyz.jupp.minecraft.team.TeamWarps;
 import xyz.jupp.minecraft.team.Teams;
+import xyz.jupp.minecraft.utils.ClaimedAreaHelper;
 import xyz.jupp.minecraft.utils.CombatLock;
 import xyz.jupp.minecraft.utils.PlayerTeleport;
 import xyz.jupp.minecraft.utils.Tasks;
@@ -130,27 +131,21 @@ public final class WarpView implements InventoryHolder {
         renderOwnWarp();
     }
 
-    // one field of the warp list with its click
-    private record Tile(ItemStack item, Runnable action) {}
+    // one field of the warp list with its click; the item is only built for the page that is shown
+    private record Tile(Supplier<ItemStack> item, Runnable action) {}
 
     private void renderWarps() {
         List<Tile> tiles = new ArrayList<>(partnerWarps());
         for (Entry entry : entries) {
             boolean own = entry.owner().equals(viewer.getUniqueId());
-            ItemStack head = new ItemStack(Material.PLAYER_HEAD);
-            SkullMeta meta = (SkullMeta) head.getItemMeta();
-            meta.setOwningPlayer(Bukkit.getOfflinePlayer(entry.owner()));
-            meta.customName(Text.of(own ? "§aDein Warp" : "§fWarp von §a" + entry.name()));
-            meta.lore(Text.lore(List.of("§7Teleport: §f" + TELEPORT_COST + " Schilling", "", "§e» Klicken zum Teleportieren")));
-            head.setItemMeta(meta);
-            tiles.add(new Tile(head, () -> teleport(() -> warpLocation(entry.owner()), own ? "zu deinem Warp" : "zum Warp von " + entry.name())));
+            tiles.add(new Tile(() -> warpHead(entry, own), () -> teleport(() -> warpLocation(entry.owner()), own ? "zu deinem Warp" : "zum Warp von " + entry.name())));
         }
         int pages = Math.max(1, (tiles.size() + WARP_SLOTS.length - 1) / WARP_SLOTS.length);
         page = Math.clamp(page, 0, pages - 1);
         int start = page * WARP_SLOTS.length;
         for (int i = 0; i < WARP_SLOTS.length && start + i < tiles.size(); i++) {
             Tile tile = tiles.get(start + i);
-            set(WARP_SLOTS[i], tile.item(), tile.action());
+            set(WARP_SLOTS[i], tile.item().get(), tile.action());
         }
         if (tiles.isEmpty()) inventory.setItem(22, Items.named(Material.PAPER, "§7Noch keine Warps", List.of()));
         inventory.setItem(SLOT_PAGE, Items.named(Material.PAPER, "§fSeite " + (page + 1) + " von " + pages, List.of()));
@@ -172,6 +167,7 @@ public final class WarpView implements InventoryHolder {
                 "",
                 "§e» Klicken")), () -> {
             Location here = viewer.getLocation();
+            if (inForeignArea(here)) return;
             act(() -> hasWarp ? moveOwn(here) : createOwn(here));
         });
         if (hasWarp) {
@@ -220,6 +216,7 @@ public final class WarpView implements InventoryHolder {
                 "",
                 "§e» Klicken")), () -> {
             Location here = viewer.getLocation();
+            if (inForeignArea(here)) return;
             act(() -> setTeamWarp(here, number));
         });
         if (warp != null) {
@@ -319,6 +316,13 @@ public final class WarpView implements InventoryHolder {
                 if (location == null) {
                     refund(uuid);
                     if (viewer.isOnline()) fail("§cDiesen Warp gibt es nicht mehr.");
+                    return;
+                }
+                // a warp from before the area was claimed (or locked) is no way into a locked base
+                TeamCacheObject foreign = ClaimedAreaHelper.foreignTeam(location, viewer);
+                if (foreign != null && ClaimedAreaHelper.isLocked(foreign)) {
+                    refund(uuid);
+                    fail("§cDer Warp liegt in einem gesperrten Team-Gebiet.");
                     return;
                 }
                 viewer.closeInventory();
@@ -425,6 +429,24 @@ public final class WarpView implements InventoryHolder {
 
     /* helpers */
 
+    // the owner's head from the name resolved on the worker (Entry): no player file read on the main thread
+    private static ItemStack warpHead(Entry entry, boolean own) {
+        ItemStack head = new ItemStack(Material.PLAYER_HEAD);
+        SkullMeta meta = (SkullMeta) head.getItemMeta();
+        meta.setPlayerProfile(Bukkit.createProfile(entry.owner(), "?".equals(entry.name()) ? null : entry.name()));
+        meta.customName(Text.of(own ? "§aDein Warp" : "§fWarp von §a" + entry.name()));
+        meta.lore(Text.lore(List.of("§7Teleport: §f" + TELEPORT_COST + " Schilling", "", "§e» Klicken zum Teleportieren")));
+        head.setItemMeta(meta);
+        return head;
+    }
+
+    // a warp in someone else's area would be a teleport into their base for everyone who may use it
+    private boolean inForeignArea(Location here) {
+        if (ClaimedAreaHelper.foreignTeam(here, viewer) == null) return false;
+        fail("§cIn fremden Team-Gebieten kann man keinen Warp setzen.");
+        return true;
+    }
+
     private static @Nullable Location warpLocation(UUID owner) {
         WarpCacheObject warp = WarpCache.getInstance().getWarp(owner);
         if (warp == null) return null;
@@ -447,7 +469,7 @@ public final class WarpView implements InventoryHolder {
                 String name = partner.getTeamColor() + partner.getTeamName();
                 String label = TeamWarps.label(number);
                 int warpNumber = number;
-                tiles.add(new Tile(Items.named(TeamCreateView.colourBanner(partner.getTeamColor()), name + " §7" + label, List.of(
+                tiles.add(new Tile(() -> Items.named(TeamCreateView.colourBanner(partner.getTeamColor()), name + " §7" + label, List.of(
                         "§a✦ Partner §8· §7" + worldLabel(warp.world()),
                         "§7Teleport: §f" + TELEPORT_COST + " Schilling",
                         "",

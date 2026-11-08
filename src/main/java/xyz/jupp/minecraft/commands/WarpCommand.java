@@ -22,9 +22,10 @@ public class WarpCommand implements CommandExecutor {
                 player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f,2f);
                 return false;
             }
-            if (CombatLock.denies(player)) return false;
+            if (CombatLock.denies(player)) return true;
             WarpView.open(player);
         }
-        return false;
+        // true: false makes Bukkit print the usage line after every opened menu
+        return true;
     }
 }

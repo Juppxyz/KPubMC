@@ -16,7 +16,7 @@ public final class Menu implements InventoryHolder {
     public enum Type { MONEY }
 
     private final Type type;
-    private final int page;
+    private int page;
     private Inventory inventory;
 
     private Menu(@NotNull Type type, int page) {
@@ -58,6 +58,11 @@ public final class Menu implements InventoryHolder {
 
     public int getPage() {
         return page;
+    }
+
+    // main thread: a menu that turns its pages in place
+    public void setPage(int page) {
+        this.page = page;
     }
 
     @Override

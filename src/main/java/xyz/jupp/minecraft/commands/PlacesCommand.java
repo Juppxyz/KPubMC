@@ -173,6 +173,8 @@ public class PlacesCommand implements CommandExecutor, TabCompleter {
                                                 @NotNull Command command,
                                                 @NotNull String alias,
                                                 @NotNull String[] args) {
+        // admins only: spawn areas and arenas are set up by them
+        if (sender instanceof Player player && !xyz.jupp.minecraft.utils.PermissionsUtil.isPlayerAdmin(player)) return List.of();
 
         if (args.length == 1) {
             return startingWith(SUBCOMMANDS, args[0]);

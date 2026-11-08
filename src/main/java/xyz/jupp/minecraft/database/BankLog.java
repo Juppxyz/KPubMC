@@ -35,8 +35,9 @@ public final class BankLog {
     public static final String BOUNTY = "BOUNTY";
 
     /**
-     * SQL for the part of the account an open loan locks (borrowed amount plus its full interest): it may be spent, but
-     * not transferred, withdrawn or put into a fixed deposit. One parameter: the player.
+     * SQL for the part of the account an open loan locks (borrowed amount plus its full interest): it may be spent,
+     * transferred and withdrawn (owner's decision, 2026-09-29), only not put into a fixed deposit or bonds.
+     * One parameter: the player.
      */
     public static final String LOAN_LOCK = "(SELECT COALESCE(SUM(locked), 0) FROM bank_loans WHERE player_uuid = ? AND state = 'OPEN')";
 

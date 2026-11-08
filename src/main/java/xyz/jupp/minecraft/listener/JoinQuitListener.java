@@ -6,6 +6,7 @@ import org.bukkit.Location;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
@@ -16,8 +17,10 @@ import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.TeamCacheObject;
 import xyz.jupp.minecraft.economy.HondoView;
+import xyz.jupp.minecraft.economy.Vault;
 import xyz.jupp.minecraft.commands.SpecCommand;
 import xyz.jupp.minecraft.database.PlayerRepository;
+import xyz.jupp.minecraft.inventory.Loading;
 import xyz.jupp.minecraft.utils.JailHandler;
 import xyz.jupp.minecraft.utils.LastSeen;
 import xyz.jupp.minecraft.utils.Locations;
@@ -30,8 +33,9 @@ import java.util.UUID;
 
 public class JoinQuitListener implements Listener {
 
-    // without the player loaded, every step on the main thread would wait for the database: no login then
-    @EventHandler
+    // without the player loaded, every step on the main thread would wait for the database: no login then.
+    // HIGHEST: after other plugins refused the login, so nothing is loaded or created for a login that never happens
+    @EventHandler(priority = EventPriority.HIGHEST)
     public void onPreLogin(AsyncPlayerPreLoginEvent event) {
         if (event.getLoginResult() != AsyncPlayerPreLoginEvent.Result.ALLOWED) return;
         UUID uuid = event.getUniqueId();
@@ -101,6 +105,8 @@ public class JoinQuitListener implements Listener {
         Player player = event.getPlayer();
 
         CacheHandler.getInstance().removePlayerFromCache(player);
+        Loading.forget(player.getUniqueId());
+        Vault.forgetLater(player.getUniqueId());
 
         if (SpecCommand.getSpecMode(player.getUniqueId())) {
             SpecCommand.changeSpecMode(player.getUniqueId());
@@ -121,7 +127,7 @@ public class JoinQuitListener implements Listener {
             Main.getInstance().getSLF4JLogger().warn("The spawn world is not loaded, {} stays where the server placed them", player.getName());
             return;
         }
-        player.teleport(spawn);
+        player.teleportAsync(spawn);
     }
 
     private void applyTeamDisplayNames(Player player) {

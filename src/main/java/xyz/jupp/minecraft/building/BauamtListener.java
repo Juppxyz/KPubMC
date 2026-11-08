@@ -1,5 +1,6 @@
 package xyz.jupp.minecraft.building;
 
+import org.bukkit.ExplosionResult;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -7,13 +8,17 @@ import org.bukkit.entity.Cushion;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
+import org.bukkit.entity.TNTPrimed;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockPistonExtendEvent;
+import org.bukkit.event.block.BlockPistonRetractEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.entity.EntityPlaceEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
@@ -35,12 +40,7 @@ public class BauamtListener implements Listener {
         Block block = event.getBlockPlaced();
         Material material = block.getType();
         if (!Bauamt.isTrigger(material)) return;
-        Player player = event.getPlayer();
-        Tasks.sync(() -> {
-            if (player.isOnline() && block.getType() == material) {
-                Bauamt.placed(player, block.getWorld(), block.getX(), block.getY(), block.getZ(), material);
-            }
-        });
+        Bauamt.queuePlaced(event.getPlayer(), block.getWorld(), block.getX(), block.getY(), block.getZ(), material, null);
     }
 
     // cushions are entities
@@ -51,11 +51,8 @@ public class BauamtListener implements Listener {
         if (player == null) return;
         Material material = Blueprint.cushionMaterial(cushion.getColor());
         if (!Bauamt.isTrigger(material)) return;
-        Tasks.sync(() -> {
-            if (!player.isOnline() || !cushion.isValid()) return;
-            Location at = cushion.getLocation();
-            Bauamt.placed(player, at.getWorld(), at.getBlockX(), at.getBlockY(), at.getBlockZ(), material);
-        });
+        Location at = cushion.getLocation();
+        Bauamt.queuePlaced(player, at.getWorld(), at.getBlockX(), at.getBlockY(), at.getBlockZ(), material, cushion);
     }
 
     // in case placing a cushion fires no entity place event: a right click with one in hand, the cushions around the
@@ -74,7 +71,7 @@ public class BauamtListener implements Listener {
             for (Entity entity : clicked.getWorld().getNearbyEntities(around, entity -> entity instanceof Cushion)) {
                 if (Blueprint.cushionMaterial(((Cushion) entity).getColor()) != material) continue;
                 Location at = entity.getLocation();
-                Bauamt.placed(player, clicked.getWorld(), at.getBlockX(), at.getBlockY(), at.getBlockZ(), material);
+                Bauamt.queuePlaced(player, clicked.getWorld(), at.getBlockX(), at.getBlockY(), at.getBlockZ(), material, entity);
             }
         });
     }
@@ -83,6 +80,29 @@ public class BauamtListener implements Listener {
     @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
     public void onBreak(BlockBreakEvent event) {
         Bauamt.blockBroken(event.getPlayer(), event.getBlock());
+    }
+
+    // TNT a player lit, or a fireball a player shot: the pieces it breaks are charged like broken by hand
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
+    public void onExplode(EntityExplodeEvent event) {
+        // only explosions that remove blocks (a wind charge lists blocks it merely triggers)
+        ExplosionResult result = event.getExplosionResult();
+        if (result != ExplosionResult.DESTROY && result != ExplosionResult.DESTROY_WITH_DECAY) return;
+        Entity source = event.getEntity();
+        Player player = source instanceof TNTPrimed tnt && tnt.getSource() instanceof Player igniter ? igniter
+                : source instanceof Projectile projectile && projectile.getShooter() instanceof Player shooter ? shooter : null;
+        if (player != null) Bauamt.exploded(player, event.getEntity().getWorld(), event.blockList());
+    }
+
+    // pistons from outside would strip a paid build without a single broken block
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGH)
+    public void onPistonExtend(BlockPistonExtendEvent event) {
+        if (Bauamt.pistonTouchesBuild(event.getBlock(), event.getBlocks(), event.getDirection(), true)) event.setCancelled(true);
+    }
+
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGH)
+    public void onPistonRetract(BlockPistonRetractEvent event) {
+        if (Bauamt.pistonTouchesBuild(event.getBlock(), event.getBlocks(), event.getDirection(), false)) event.setCancelled(true);
     }
 
     // a cushion that vanishes after a player's hit

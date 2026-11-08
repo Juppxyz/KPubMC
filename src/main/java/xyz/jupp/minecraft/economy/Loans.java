@@ -2,6 +2,7 @@ package xyz.jupp.minecraft.economy;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import xyz.jupp.minecraft.building.Bauamt;
 import xyz.jupp.minecraft.database.BankLog;
 import xyz.jupp.minecraft.database.Database;
 import xyz.jupp.minecraft.database.DatabaseException;
@@ -80,13 +81,18 @@ public final class Loans {
     public static final int BOUNTY = 10_000;
 
     /**
-     * The bounty for catching this player: normally 10.000, for an unpaid loan at most the loan money that is still
-     * missing (the bounty is new money, a default on purpose must not pay off for a friend).
+     * The bounty for catching this player: normally 10.000; for an unpaid loan or an overdue Bauamt fine at most what
+     * is still missing of them (the bounty is new money, a default or an unpaid fine on purpose must not pay off for
+     * a friend). wantedEnd: the end of the current warrant, 0 = until caught; the fines only cap such a warrant (an
+     * old fine must not cap the bounty of a later escape). Blocking.
      */
-    public static int bounty(@NotNull UUID player) {
+    public static int bounty(@NotNull UUID player, long wantedEnd) {
         Loan loan = current(player);
-        if (loan == null || loan.state() != State.DEFAULTED) return BOUNTY;
-        return (int) Math.max(0, Math.min(BOUNTY, loan.principal() - loan.paid()));
+        boolean defaulted = loan != null && loan.state() == State.DEFAULTED;
+        int fines = wantedEnd == 0 ? Bauamt.wantedBill(player) : 0;
+        if (!defaulted && fines <= 0) return BOUNTY;
+        long missing = (defaulted ? Math.max(0, loan.principal() - loan.paid()) : 0) + fines;
+        return (int) Math.min(BOUNTY, missing);
     }
 
     public static long apology(int principal) {

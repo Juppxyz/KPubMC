@@ -191,6 +191,7 @@ public final class TeamCreateView implements InventoryHolder {
                         case OK -> null;
                         case IN_TEAM -> "Du bist schon in einem Team.";
                         case NO_MONEY -> (chosenTitle == null ? "Das Gründen" : "Allein loszuziehen") + " kostet " + Main.getCurrencyName(cost) + "§f.";
+                        case NAME_TAKEN -> "Den Namen §e" + chosenName + " §fgibt es schon.";
                     };
                 }
             } catch (RuntimeException e) {

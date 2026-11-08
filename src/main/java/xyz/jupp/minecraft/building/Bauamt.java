@@ -6,7 +6,10 @@ import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
+import org.bukkit.block.data.BlockData;
 import org.bukkit.block.structure.StructureRotation;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -26,6 +29,7 @@ import xyz.jupp.minecraft.utils.Text;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -329,14 +333,60 @@ public final class Bauamt {
 
     /* noticing a finished copy (main thread, a tick after the piece was placed) */
 
+    // placed pieces waiting for their check; drained on the next ticks within a time budget, so building with a
+    // material of a big template never costs a tick more than the budget, however many blocks are placed at once
+    private record Placement(Player player, World world, int x, int y, int z, Material material, @Nullable Entity cushion) {}
+    private static final ArrayDeque<Placement> placements = new ArrayDeque<>();
+    private static final int PLACEMENT_QUEUE_LIMIT = 2000;
+    private static final long PLACEMENT_BUDGET_NANOS = 2_000_000L;
+    private static boolean draining;
+
+    /**
+     * Main thread, from the place events: the piece is checked a tick later at the earliest (neighbours have settled).
+     * cushion: the placed cushion entity, null for a block.
+     */
+    static void queuePlaced(@NotNull Player player, @NotNull World world, int x, int y, int z, @NotNull Material material, @Nullable Entity cushion) {
+        if (!triggers.contains(material)) return;
+        // a full queue drops the oldest piece: the newest is the one most likely to finish a copy
+        if (placements.size() >= PLACEMENT_QUEUE_LIMIT) placements.poll();
+        placements.add(new Placement(player, world, x, y, z, material, cushion));
+        if (!draining) {
+            draining = true;
+            Tasks.sync(Bauamt::drainPlacements);
+        }
+    }
+
+    private static void drainPlacements() {
+        long deadline = System.nanoTime() + PLACEMENT_BUDGET_NANOS;
+        try {
+            Placement next;
+            while ((next = placements.poll()) != null) {
+                World world = next.world();
+                // the piece must still be there; a block read needs its chunk loaded (it would load it otherwise)
+                boolean present = next.cushion() != null ? next.cushion().isValid()
+                        : world.isChunkLoaded(next.x() >> 4, next.z() >> 4) && world.getType(next.x(), next.y(), next.z()) == next.material();
+                try {
+                    if (next.player().isOnline() && present) placed(next.player(), world, next.x(), next.y(), next.z(), next.material());
+                } catch (RuntimeException e) {
+                    Main.getInstance().getSLF4JLogger().warn("Bauamt check of a placed piece failed", e);
+                }
+                if (System.nanoTime() > deadline) break;
+            }
+        } finally {
+            // the next tick goes on with the rest; an empty queue lets the next placement start a new drain
+            if (placements.isEmpty()) draining = false;
+            else Tasks.syncLater(1L, Bauamt::drainPlacements);
+        }
+    }
+
     /** A block or cushion of this material was placed at the cell: is it the last piece of a copy? */
     static void placed(@NotNull Player player, @NotNull World world, int bx, int by, int bz, @NotNull Material material) {
         if (!triggers.contains(material)) return;
         for (Blueprint template : templates) {
-            if (!template.enabled()) continue;
+            if (!template.enabled() || !template.materials().containsKey(material)) continue;
             for (Blueprint.Variant variant : template.variants()) {
-                for (Blueprint.Cell cell : variant.blocks()) {
-                    if (cell.material() == material && candidate(player, world, template, variant, bx - cell.dx(), by - cell.dy(), bz - cell.dz())) return;
+                for (Blueprint.Cell cell : variant.cellsOf(material)) {
+                    if (candidate(player, world, template, variant, bx - cell.dx(), by - cell.dy(), bz - cell.dz())) return;
                 }
                 for (Blueprint.Prop prop : variant.props()) {
                     if (prop.material() == material && candidate(player, world, template, variant, bx - prop.dx(), by - prop.dy(), bz - prop.dz())) return;
@@ -348,6 +398,8 @@ public final class Bauamt {
     // true once the copy at this origin was handled; false when nothing is there or another build is in the way
     private static boolean candidate(Player player, World world, Blueprint template, Blueprint.Variant variant, int ox, int oy, int oz) {
         if (oy < world.getMinHeight() || oy + variant.sizeY() > world.getMaxHeight()) return false;
+        // one or two reads reject almost every wrong origin, before the chunks of the whole box are looked at
+        if (!Blueprint.rarestMatch(world, ox, oy, oz, variant)) return false;
         if (!Blueprint.chunksLoaded(world, ox, oz, variant.sizeX(), variant.sizeZ())) return false;
         if (Blueprint.mismatches(world, ox, oy, oz, variant, 0) != 0) return false;
         String worldName = world.getName();
@@ -422,24 +474,43 @@ public final class Bauamt {
 
     /* diagnosis for admins */
 
-    /** The best fitting placement of a template around a block: where, how turned, how many cells are wrong and the first of them. */
+    /**
+     * The best fitting placement of a template around a block: where, how turned, how many cells are wrong and the
+     * first of them. cutShort: the search hit its time budget, a better placement may exist (name the template).
+     */
     public record Diagnosis(@NotNull Blueprint template, @NotNull Blueprint.Variant variant, int ox, int oy, int oz, int bad,
-                            @NotNull List<String> lines, @Nullable Build overlapping) {}
+                            @NotNull List<String> lines, @Nullable Build overlapping, boolean cutShort) {}
+
+    // the search runs on the main thread: it stops after this long and reports the best placement so far
+    private static final long DIAGNOSE_BUDGET_NANOS = 25_000_000L;
 
     /** Main thread: tries every placement in which the block is a piece of a template, null if it is part of none. */
     public static @Nullable Diagnosis diagnose(@NotNull World world, int bx, int by, int bz, @Nullable Blueprint only) {
         Material material = world.getType(bx, by, bz);
+        long deadline = System.nanoTime() + DIAGNOSE_BUDGET_NANOS;
+        boolean cutShort = false;
         Diagnosis best = null;
+        search:
         for (Blueprint template : templates) {
             if (only != null && template.id() != only.id()) continue;
             for (Blueprint.Variant variant : template.variants()) {
-                for (Blueprint.Cell cell : variant.blocks()) {
-                    if (cell.material() == material) best = better(best, world, template, variant, bx - cell.dx(), by - cell.dy(), bz - cell.dz());
+                for (Blueprint.Cell cell : variant.cellsOf(material)) {
+                    best = better(best, world, template, variant, bx - cell.dx(), by - cell.dy(), bz - cell.dz());
+                    if (best != null && best.bad() == 0) break search;
+                    if (System.nanoTime() > deadline) {
+                        cutShort = true;
+                        break search;
+                    }
                 }
                 if (!material.isAir()) continue;
                 // an empty block: maybe the admin looks at a cushion, try its cells with any colour
                 for (Blueprint.Prop prop : variant.props()) {
                     best = better(best, world, template, variant, bx - prop.dx(), by - prop.dy(), bz - prop.dz());
+                    if (best != null && best.bad() == 0) break search;
+                    if (System.nanoTime() > deadline) {
+                        cutShort = true;
+                        break search;
+                    }
                 }
             }
         }
@@ -447,17 +518,17 @@ public final class Bauamt {
         Blueprint.Variant variant = best.variant();
         return new Diagnosis(best.template(), variant, best.ox(), best.oy(), best.oz(), best.bad(),
                 Blueprint.explain(world, best.ox(), best.oy(), best.oz(), variant, 8),
-                overlapping(world.getName(), best.ox(), best.oy(), best.oz(), variant.sizeX(), variant.sizeY(), variant.sizeZ()));
+                overlapping(world.getName(), best.ox(), best.oy(), best.oz(), variant.sizeX(), variant.sizeY(), variant.sizeZ()), cutShort);
     }
 
     private static @Nullable Diagnosis better(@Nullable Diagnosis best, World world, Blueprint template, Blueprint.Variant variant, int ox, int oy, int oz) {
         if (oy < world.getMinHeight() || oy + variant.sizeY() > world.getMaxHeight()) return best;
-        if (!Blueprint.chunksLoaded(world, ox, oz, variant.sizeX(), variant.sizeZ())) return best;
         int stop = best == null ? Integer.MAX_VALUE : best.bad() - 1;
         if (stop < 0) return best;
+        if (!Blueprint.chunksLoaded(world, ox, oz, variant.sizeX(), variant.sizeZ())) return best;
         int bad = Blueprint.mismatches(world, ox, oy, oz, variant, stop);
         if (best != null && bad >= best.bad()) return best;
-        return new Diagnosis(template, variant, ox, oy, oz, bad, List.of(), null);
+        return new Diagnosis(template, variant, ox, oy, oz, bad, List.of(), null, false);
     }
 
 
@@ -571,8 +642,9 @@ public final class Bauamt {
 
     /* state property: who breaks a piece of a paid build pays for it */
 
-    // every build that belongs to the state (paid, or the admin's model), by world and chunk
-    private static void rebuildIndex() {
+    // every build that belongs to the state (paid, or the admin's model), by world and chunk; runs on workers (payout,
+    // admin) and on the main thread (written off): one at a time, so a stale map can never replace a newer one
+    private static synchronized void rebuildIndex() {
         Map<String, Map<Long, List<Build>>> fresh = new HashMap<>();
         for (Build build : builds) {
             if (build.state() != Build.State.INTACT && build.state() != Build.State.DAMAGED) continue;
@@ -607,12 +679,8 @@ public final class Bauamt {
         Build build = buildAt(block.getWorld().getName(), block.getX(), block.getY(), block.getZ());
         if (build == null) return;
         Blueprint template = template(build.templateId());
-        Blueprint.Variant variant = template == null ? null : template.variant(build.rotation(), build.mirrored());
-        if (variant == null) return;
-        // only the block the template wants there, not something that was placed into a gap
-        var expected = variant.data(block.getX() - build.x(), block.getY() - build.y(), block.getZ() - build.z());
-        if (expected == null || !Blueprint.same(expected, block.getBlockData())) return;
-        charge(player, build, template);
+        if (template == null || !isPiece(build, block)) return;
+        charge(player, build, template, 1);
     }
 
     /** Main thread, a tick after a cushion was hit and vanished. */
@@ -624,10 +692,63 @@ public final class Bauamt {
         Blueprint template = template(build.templateId());
         Blueprint.Variant variant = template == null ? null : template.variant(build.rotation(), build.mirrored());
         if (variant == null || !variant.prop(at.getBlockX() - build.x(), at.getBlockY() - build.y(), at.getBlockZ() - build.z())) return;
-        charge(player, build, template);
+        charge(player, build, template, 1);
     }
 
-    private static void charge(Player player, Build build, Blueprint template) {
+    /**
+     * Main thread, from the explode events (the blocks are still there): a player's TNT or fireball that breaks pieces
+     * of state builds is charged like breaking them by hand. Explosions nobody caused are left to the inspection.
+     */
+    static void exploded(@Nullable Player player, @NotNull World world, @NotNull List<Block> blocks) {
+        if (player == null || blocks.isEmpty()) return;
+        String worldName = world.getName();
+        if (!index.containsKey(worldName)) return;
+        Map<Build, Integer> hits = null;
+        for (Block block : blocks) {
+            Build build = buildAt(worldName, block.getX(), block.getY(), block.getZ());
+            if (build == null || !isPiece(build, block)) continue;
+            if (hits == null) hits = new HashMap<>();
+            hits.merge(build, 1, Integer::sum);
+        }
+        if (hits == null) return;
+        hits.forEach((build, count) -> {
+            Blueprint template = template(build.templateId());
+            if (template != null) charge(player, build, template, count);
+        });
+    }
+
+    /**
+     * Main thread, from the piston events: a piston must not move pieces of a state build, nor push into one, unless it
+     * is a part of that build itself (a door in the template). direction: where the blocks move.
+     */
+    static boolean pistonTouchesBuild(@NotNull Block piston, @NotNull List<Block> moved, @NotNull BlockFace direction, boolean extending) {
+        String world = piston.getWorld().getName();
+        if (!index.containsKey(world)) return false;
+        // a part of the build only if the template has this piston there; one placed into a gap is an outsider
+        Build inBox = buildAt(world, piston.getX(), piston.getY(), piston.getZ());
+        Build own = inBox != null && isPiece(inBox, piston) ? inBox : null;
+        if (extending && foreign(world, piston.getRelative(direction), own)) return true;
+        for (Block block : moved) {
+            if (foreign(world, block, own) || foreign(world, block.getRelative(direction), own)) return true;
+        }
+        return false;
+    }
+
+    private static boolean foreign(String world, Block block, @Nullable Build own) {
+        Build build = buildAt(world, block.getX(), block.getY(), block.getZ());
+        return build != null && build != own;
+    }
+
+    // only the block the template wants there, not something that was placed into a gap
+    private static boolean isPiece(Build build, Block block) {
+        Blueprint template = template(build.templateId());
+        Blueprint.Variant variant = template == null ? null : template.variant(build.rotation(), build.mirrored());
+        if (variant == null) return false;
+        BlockData expected = variant.data(block.getX() - build.x(), block.getY() - build.y(), block.getZ() - build.z());
+        return expected != null && Blueprint.same(expected, block.getBlockData());
+    }
+
+    private static void charge(Player player, Build build, Blueprint template, int blocks) {
         if (PermissionsUtil.isPlayerAdmin(player)) return;
         UUID uuid = player.getUniqueId();
         Damage open = null;
@@ -638,9 +759,10 @@ public final class Bauamt {
             }
         }
         if (open != null) {
-            open.addBlock();
+            open.addBlocks(blocks);
             Damage damage = open;
-            if (damage.id() > 0) Tasks.async(() -> Database.update("UPDATE bauamt_damage SET blocks = ?, amount = ? WHERE id = ?",
+            // a bill paid meanwhile is not raised afterwards (the payment covered the amount it summed)
+            if (damage.id() > 0) Tasks.async(() -> Database.update("UPDATE bauamt_damage SET blocks = ?, amount = ? WHERE id = ? AND paid_at IS NULL",
                     damage.blocks(), damage.amount(), damage.id()));
             if (damage.shouldNotice(NOTICE_COOLDOWN_MILLIS)) {
                 player.sendMessage(Main.getChatPrefix() + "§fSchaden am §e" + template.name() + "§f: jetzt §c" + Items.format(damage.amount())
@@ -649,7 +771,7 @@ public final class Bauamt {
             return;
         }
         Instant now = Instant.now();
-        Damage created = new Damage(0, build.id(), uuid, player.getName(), 1, DAMAGE_FLAT + DAMAGE_PER_BLOCK, now,
+        Damage created = new Damage(0, build.id(), uuid, player.getName(), blocks, DAMAGE_FLAT + DAMAGE_PER_BLOCK * blocks, now,
                 now.plus(Duration.ofDays(DAMAGE_DUE_DAYS)), false);
         created.shouldNotice(NOTICE_COOLDOWN_MILLIS);
         damages.add(created);
@@ -712,21 +834,29 @@ public final class Bauamt {
     /** Worker: takes every open damage bill of the player (into the treasury), or tells how much is missing. */
     public static @NotNull Settlement payDamages(@NotNull UUID player) {
         synchronized (PAY_LOCK) {
+            Set<Long> paidIds = new HashSet<>();
             Settlement result = Database.inTransaction(connection -> {
-                List<Long> amounts = Database.query(connection, "SELECT amount FROM bauamt_damage WHERE player_uuid = ? AND paid_at IS NULL",
-                        row -> row.getLong(1), player);
-                long total = amounts.stream().mapToLong(Long::longValue).sum();
+                // the rows are locked: a block broken meanwhile waits and then lands on a new bill
+                List<long[]> rows = Database.query(connection,
+                        "SELECT id, amount FROM bauamt_damage WHERE player_uuid = ? AND paid_at IS NULL FOR UPDATE",
+                        row -> new long[]{row.getLong(1), row.getLong(2)}, player);
+                long total = 0;
+                for (long[] row : rows) total += row[1];
                 if (total <= 0) return new Settlement(0, 0);
                 Long money = Database.queryOne(connection, "SELECT money FROM players WHERE uuid = ? FOR UPDATE", row -> row.getLong(1), player);
                 long have = money == null ? 0 : money;
                 if (have < total) return new Settlement(0, (int) (total - have));
                 Database.update(connection, "UPDATE players SET money = money - ? WHERE uuid = ?", total, player);
-                Database.update(connection, "UPDATE bauamt_damage SET paid_at = now() WHERE player_uuid = ? AND paid_at IS NULL", player);
+                // exactly the rows that were summed
+                for (long[] row : rows) Database.update(connection, "UPDATE bauamt_damage SET paid_at = now() WHERE id = ?", row[0]);
                 Treasury.deposit(connection, Treasury.Source.DAMAGE_FINE, total, player);
+                paidIds.clear();
+                for (long[] row : rows) paidIds.add(row[0]);
                 return new Settlement((int) total, 0);
             });
             if (result.paid() > 0) {
-                damages.removeIf(damage -> damage.player().equals(player));
+                // only the bills that were paid; one still being written (no id yet) stays open
+                damages.removeIf(damage -> damage.player().equals(player) && paidIds.contains(damage.id()));
                 Main.getInstance().getSLF4JLogger().info("Bauamt damage paid {} by {}", result.paid(), player);
                 Treasury.committed(result.paid());
                 refreshFunding();
@@ -735,24 +865,55 @@ public final class Bauamt {
         }
     }
 
-    // main thread: bills past their due date make the player wanted, once
+    // main thread: bills past their due date make the player wanted, once; a prisoner only after the release (the
+    // bill stays due and is tried again at the next inspection)
     private static void checkDamages(Instant now) {
-        Set<UUID> handled = new HashSet<>();
+        Map<UUID, List<Damage>> due = new HashMap<>();
         for (Damage damage : damages) {
             if (damage.wanted() || damage.dueAt().isAfter(now)) continue;
-            damage.markWanted();
-            if (damage.id() > 0) Tasks.async(() -> Database.update("UPDATE bauamt_damage SET wanted_at = now() WHERE id = ?", damage.id()));
-            if (!handled.add(damage.player())) continue;
-            Player player = Bukkit.getPlayer(damage.player());
-            if (player != null) {
-                JailHandler.markWantedUntilCaught(player, DAMAGE_REASON);
-                player.sendMessage(Main.getChatPrefix() + "§cDu hast den Schaden am Staatseigentum nicht bezahlt, jetzt wirst du gesucht. §7Die Rechnung bleibt offen.");
-            } else {
-                UUID uuid = damage.player();
-                Tasks.async(() -> PlayerRepository.setWantedUntil(uuid, 0));
-                JailHandler.broadcastWanted(damage.playerName(), DAMAGE_REASON);
-            }
+            due.computeIfAbsent(damage.player(), uuid -> new ArrayList<>()).add(damage);
         }
+        due.forEach((uuid, bills) -> {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player != null) {
+                if (!JailHandler.markWantedUntilCaught(player, DAMAGE_REASON)) return;
+                markWanted(bills);
+                player.sendMessage(Main.getChatPrefix() + "§cDu hast den Schaden am Staatseigentum nicht bezahlt, jetzt wirst du gesucht. §7Die Rechnung bleibt offen.");
+                return;
+            }
+            // marked first so the next run does not start a second write; taken back if the player sits in jail
+            bills.forEach(Damage::markWanted);
+            String name = bills.getFirst().playerName();
+            Tasks.async(() -> {
+                if (!PlayerRepository.setWantedUntilCaughtIfFree(uuid)) {
+                    bills.forEach(Damage::unmarkWanted);
+                    return;
+                }
+                storeWanted(bills);
+                JailHandler.broadcastWanted(name, DAMAGE_REASON);
+            });
+        });
+    }
+
+    private static void markWanted(List<Damage> bills) {
+        bills.forEach(Damage::markWanted);
+        Tasks.async(() -> storeWanted(bills));
+    }
+
+    // worker; a bill still being written (no id yet) is marked again after the next restart at the latest
+    private static void storeWanted(List<Damage> bills) {
+        for (Damage damage : bills) {
+            if (damage.id() > 0) Database.update("UPDATE bauamt_damage SET wanted_at = now() WHERE id = ?", damage.id());
+        }
+    }
+
+    /** What the player's overdue bills (those that made them wanted) still come to; caps the bounty. */
+    public static int wantedBill(@NotNull UUID player) {
+        int total = 0;
+        for (Damage damage : damages) {
+            if (damage.player().equals(player) && damage.wanted()) total += damage.amount();
+        }
+        return total;
     }
 
 
@@ -782,8 +943,10 @@ public final class Bauamt {
         }
         if (!active.isEmpty()) {
             int checks = Math.min(INSPECT_PER_RUN, active.size());
-            for (int i = 0; i < checks; i++) check(active.get((cursor + i) % active.size()));
+            List<Build> due = new ArrayList<>(checks);
+            for (int i = 0; i < checks; i++) due.add(active.get((cursor + i) % active.size()));
             cursor = (cursor + checks) % active.size();
+            checkNext(due, 0);
         }
         for (Order order : orders) {
             if (order.takenAt().isBefore(now.minus(Duration.ofDays(ORDER_EXPIRES_DAYS)))) {
@@ -795,17 +958,50 @@ public final class Bauamt {
         Tasks.async(Bauamt::refreshFunding);
     }
 
-    private static void check(Build build) {
+    // one build per tick that really gets read (those in unloaded chunks are skipped in the same tick), not all at once
+    private static void checkNext(List<Build> due, int from) {
+        int i = from;
+        while (i < due.size()) {
+            if (check(due.get(i++))) break;
+        }
+        if (i < due.size()) {
+            int next = i;
+            Tasks.syncLater(1L, () -> checkNext(due, next));
+        }
+    }
+
+    // true if the build was read; counting stops at the threshold that decides the state
+    private static boolean check(Build build) {
+        if (build.state() != Build.State.INTACT && build.state() != Build.State.DAMAGED) return false;
         World world = Bukkit.getWorld(build.world());
-        if (world == null || !Blueprint.chunksLoaded(world, build.x(), build.z(), build.sizeX(), build.sizeZ())) return;
+        if (world == null || !Blueprint.chunksLoaded(world, build.x(), build.z(), build.sizeX(), build.sizeZ())) return false;
         Blueprint template = template(build.templateId());
         Blueprint.Variant variant = template == null ? null : template.variant(build.rotation(), build.mirrored());
-        if (variant == null) return;
+        if (variant == null) return false;
         int total = variant.cells();
-        int bad = Blueprint.mismatches(world, build.x(), build.y(), build.z(), variant, total);
+        // counting stops where the decision cannot change any more (the cut-offs use the very comparison below)
+        boolean intactNow = build.state() == Build.State.INTACT;
+        int stopAfter = intactNow ? damageCutoff(total) : repairCutoff(total);
+        int bad = Blueprint.mismatches(world, build.x(), build.y(), build.z(), variant, stopAfter);
         double intact = 1.0 - (double) bad / total;
-        if (build.state() == Build.State.INTACT && intact < DAMAGED_BELOW) damaged(build, template);
-        else if (build.state() == Build.State.DAMAGED && intact >= REPAIRED_AT) repaired(build, template);
+        if (intactNow && intact < DAMAGED_BELOW) damaged(build, template);
+        else if (!intactNow && intact >= REPAIRED_AT) repaired(build, template);
+        return true;
+    }
+
+    // the most wrong cells an intact build may have and stay intact: one more makes `intact < DAMAGED_BELOW` true
+    // (searched with that double comparison itself, a plain floor is off by one for totals like 10, 15, 20)
+    static int damageCutoff(int total) {
+        int k = Math.max(0, (int) (total * (1.0 - DAMAGED_BELOW)) - 1);
+        while (!(1.0 - (double) (k + 1) / total < DAMAGED_BELOW)) k++;
+        return k;
+    }
+
+    // the most wrong cells a damaged build may have and count as repaired (`intact >= REPAIRED_AT`)
+    static int repairCutoff(int total) {
+        int m = (int) (total * (1.0 - REPAIRED_AT)) + 1;
+        while (m > 0 && !(1.0 - (double) m / total >= REPAIRED_AT)) m--;
+        return m;
     }
 
     private static void damaged(Build build, Blueprint template) {

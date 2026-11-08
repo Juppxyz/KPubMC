@@ -549,7 +549,7 @@ public final class TeamView implements InventoryHolder {
         ChunkCacheObject claim = ChunkCache.getInstance().getClaim(world, chunkX, chunkZ);
         boolean own = claim != null && teamID.equals(claim.getTeamID());
         String blocked = world.getEnvironment() == World.Environment.THE_END ? "§cIm End kann man nichts beanspruchen."
-                : Locations.isLocationASpawn(here) ? "§cDer Spawn kann nicht beansprucht werden." : null;
+                : Locations.touchesSpawnOrArena(world.getName(), chunkX, chunkZ) ? "§cSpawn und Arena können nicht beansprucht werden." : null;
         String status;
         if (blocked != null) {
             status = blocked;
@@ -1027,6 +1027,7 @@ public final class TeamView implements InventoryHolder {
             case LIMIT -> Feedback.fail("§cEuer Chunk-Limit ist erreicht, mehr gibt es mit dem nächsten Level.");
             case NO_POINTS -> Feedback.fail("§cDafür fehlen eurem Team Punkte §7(" + Teams.CHUNK_COST + ")§c.");
             case NOT_ALLOWED -> Feedback.fail("Chunks beanspruchen dürfen nur Boss und Vize.");
+            case PROTECTED -> Feedback.fail("§cSpawn und Arena können nicht beansprucht werden.");
         };
     }
 

@@ -2,12 +2,14 @@ package xyz.jupp.minecraft.listener;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
-import org.bukkit.OfflinePlayer;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemStack;
@@ -17,6 +19,7 @@ import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.economy.Bank;
 import xyz.jupp.minecraft.economy.TaxClass;
 import xyz.jupp.minecraft.economy.Taxes;
+import xyz.jupp.minecraft.economy.Treasury;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.PlayerCacheObject;
@@ -28,7 +31,13 @@ import xyz.jupp.minecraft.utils.Logger;
 import xyz.jupp.minecraft.utils.Tasks;
 import xyz.jupp.minecraft.utils.Text;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static xyz.jupp.minecraft.utils.ItemStackUtil.createItemStack;
 
@@ -38,11 +47,32 @@ public class MoneyInventoryListener implements Listener {
     private static final int AMOUNT_SLOT = 48;
     private static final int ACTION_SLOT = 52;
 
+    // a transfer or withdrawal of the player runs, or ended a moment ago: a double click (two click events, often
+    // after the booking is done) must not book twice. Player -> no new booking before this time.
+    private static final Map<UUID, Long> BOOKED_UNTIL = new ConcurrentHashMap<>();
+    private static final long BOOKING_COOLDOWN_MILLIS = 500;
+    // amount clicks while the balance is being read join that read (main thread only)
+    private static final Map<UUID, List<Integer>> PENDING_AMOUNTS = new HashMap<>();
+
+    @EventHandler
+    public void onDrag(InventoryDragEvent event) {
+        if (Menu.is(event.getInventory(), Menu.Type.MONEY)) event.setCancelled(true);
+    }
+
+    @EventHandler
+    public void onQuit(PlayerQuitEvent event) {
+        PENDING_AMOUNTS.remove(event.getPlayer().getUniqueId());
+        BOOKED_UNTIL.remove(event.getPlayer().getUniqueId());
+    }
+
     @EventHandler
     public void onClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
         if (!Menu.is(event.getInventory(), Menu.Type.MONEY)) return;
         event.setCancelled(true);
+        // the buttons only, with a plain click (a double click also sends a collect-to-cursor click)
+        if (event.getClickedInventory() != event.getView().getTopInventory()) return;
+        if (event.getClick() != ClickType.LEFT && event.getClick() != ClickType.RIGHT) return;
 
         ItemStack clickedItem = event.getCurrentItem();
         if (clickedItem == null) return;
@@ -64,9 +94,22 @@ public class MoneyInventoryListener implements Listener {
             return;
         }
 
-        // Select user
+        // more receivers than fit: the next page, in place
+        if (displayName.equals(MoneyInventory.nextPageName) && event.getSlot() == MoneyInventory.PAGE_SLOT) {
+            Menu menu = Menu.of(view.getTopInventory());
+            MoneyInventory.showReceivers(player, view.getTopInventory(), menu == null ? 0 : menu.getPage() + 1);
+            player.playSound(player.getLocation(), Sound.ITEM_BOOK_PAGE_TURN, 2f, 2f);
+            return;
+        }
+
+        // Select user, by the exact name (an online player; no name lookup)
         if (displayName.startsWith("§2§o") && clickedItem.getType() == Material.PLAYER_HEAD) {
-            OfflinePlayer target = Bukkit.getOfflinePlayer(displayName.replace("§2§o", ""));
+            Player target = Bukkit.getPlayerExact(displayName.replace("§2§o", ""));
+            if (target == null) {
+                player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
+                player.sendMessage(Main.getChatPrefix() + "§fDer Spieler ist nicht mehr online.");
+                return;
+            }
             ItemStack playerHead = new ItemStack(Material.PLAYER_HEAD);
             SkullMeta playerHeadMeta = (SkullMeta) playerHead.getItemMeta();
 
@@ -81,13 +124,30 @@ public class MoneyInventoryListener implements Listener {
             return;
         }
 
-        // Change amount, capped by the balance (read async)
+        // Change amount, capped by the balance (read async); clicks during a read are applied with its result, one by one
         int addedAmount = amountButton(displayName);
         if (addedAmount != 0) {
+            UUID uuid = player.getUniqueId();
+            List<Integer> pending = PENDING_AMOUNTS.get(uuid);
+            if (pending != null) {
+                pending.add(addedAmount);
+                return;
+            }
+            List<Integer> clicks = new ArrayList<>(List.of(addedAmount));
+            PENDING_AMOUNTS.put(uuid, clicks);
             Inventory top = view.getTopInventory();
             Tasks.async(() -> {
-                int money = PlayerRepository.getMoney(player);
-                MainThread.run(() -> changeAmount(player, top, addedAmount, money));
+                int money;
+                try {
+                    money = PlayerRepository.getMoney(player);
+                } catch (RuntimeException e) {
+                    MainThread.run(() -> PENDING_AMOUNTS.remove(uuid, clicks));
+                    throw e;
+                }
+                MainThread.run(() -> {
+                    PENDING_AMOUNTS.remove(uuid, clicks);
+                    for (int delta : clicks) changeAmount(player, top, delta, money);
+                });
             });
             return;
         }
@@ -124,13 +184,42 @@ public class MoneyInventoryListener implements Listener {
             List<String> lore = Text.legacyLore(clickedMeta.lore());
             Integer selectedAmount = selectedAmount(view.getTopInventory());
             if (lore == null || lore.isEmpty() || selectedAmount == null) return;
-            Player targetPlayer = Bukkit.getPlayer(lore.get(0).replace("§2§o", ""));
+            // the exact name: getPlayer(String) matches name prefixes, the money could go to someone else
+            Player targetPlayer = Bukkit.getPlayerExact(lore.get(0).replace("§2§o", ""));
             if (selectedAmount < 1) return;
 
             if (targetPlayer != null) {
                 transfer(player, targetPlayer, selectedAmount, view);
+            } else {
+                player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
+                player.sendMessage(Main.getChatPrefix() + "§fDer Spieler ist nicht mehr online.");
             }
         }
+    }
+
+    // main thread: one booking per player at a time and a short pause after it; false if refused
+    private static boolean startBooking(UUID player, Runnable work) {
+        Long until = BOOKED_UNTIL.get(player);
+        if (until != null && System.currentTimeMillis() < until) return false;
+        BOOKED_UNTIL.put(player, Long.MAX_VALUE);
+        try {
+            Tasks.async(() -> {
+                try {
+                    work.run();
+                } finally {
+                    BOOKED_UNTIL.put(player, System.currentTimeMillis() + BOOKING_COOLDOWN_MILLIS);
+                }
+            });
+        } catch (RuntimeException e) {
+            BOOKED_UNTIL.remove(player);
+            throw e;
+        }
+        return true;
+    }
+
+    // the team colour without a database read for someone who left meanwhile
+    private static String colour(Player player) {
+        return player.isOnline() ? CacheHandler.getInstance().getPlayerInCache(player).getTeamColor() : "§a";
     }
 
 
@@ -172,7 +261,7 @@ public class MoneyInventoryListener implements Listener {
 
     // withdrawn async, the cash is handed out on the main thread
     private static void withdrawCash(Player player, int selectedAmount) {
-        Tasks.async(() -> {
+        startBooking(player.getUniqueId(), () -> {
             // cash minus trade tax; the tax goes to the state treasury, a rest below 10 stays on the account
             Taxes.CashWithdrawal withdrawal = Taxes.withdrawCash(player.getUniqueId(), selectedAmount);
             if (!withdrawal.success()) {
@@ -182,17 +271,19 @@ public class MoneyInventoryListener implements Listener {
             int netAmount = withdrawal.cash();
             Logger.console("withdraw from " + player.getUniqueId() + " (" + netAmount + " cash, " + withdrawal.tax() + " tax)");
 
-            MainThread.deliverOrRefund(player.getUniqueId(), netAmount + withdrawal.tax(), () -> {
+            boolean scheduled = MainThread.run(() -> {
                 Bank.handOut(player.getUniqueId(), netAmount);
                 player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f, 2f);
                 player.sendMessage(Main.getChatPrefix() + "§fDu hast §2" + netAmount + " " + Main.getCurrencyName() + " §fabgehoben §7(Steuer: " + withdrawal.tax() + ")");
             });
+            // server stop before the hand-out: everything back, the tax leaves the treasury again
+            if (!scheduled) Taxes.refund(player.getUniqueId(), netAmount, withdrawal.tax(), Treasury.Source.WITHDRAW_TAX);
         });
     }
 
     // withdraw from the sender first, the receiver is only credited on success
     private static void transfer(Player player, Player targetPlayer, int selectedAmount, InventoryView view) {
-        Tasks.async(() -> {
+        startBooking(player.getUniqueId(), () -> {
             PlayerRepository.TransferResult result = PlayerRepository.transferMoney(player.getUniqueId(), targetPlayer.getUniqueId(), selectedAmount);
 
             if (result == PlayerRepository.TransferResult.INSUFFICIENT_FUNDS) {
@@ -205,13 +296,13 @@ public class MoneyInventoryListener implements Listener {
                 // the balances are logged by PlayerRepository
                 Bukkit.getConsoleSender().sendMessage("Transfer from §a" + player.getName() + " §fto §a" + targetPlayer.getName() + " §c" + selectedAmount);
 
-                PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
-                PlayerCacheObject targetCacheObject = CacheHandler.getInstance().getPlayerInCache(targetPlayer);
-
-                targetPlayer.playSound(targetPlayer.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f, 2f);
-                targetPlayer.sendMessage(Main.getChatPrefix() + playerCacheObject.getTeamColor() + player.getName() + " §fhat dir " + Main.getCurrencyName(selectedAmount) + " §füberwiesen.");
+                if (targetPlayer.isOnline()) {
+                    targetPlayer.playSound(targetPlayer.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f, 2f);
+                    targetPlayer.sendMessage(Main.getChatPrefix() + colour(player) + player.getName() + " §fhat dir " + Main.getCurrencyName(selectedAmount) + " §füberwiesen.");
+                }
+                if (!player.isOnline()) return;
                 player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f, 2f);
-                player.sendMessage(Main.getChatPrefix() + "Du hast " + Main.getCurrencyName(selectedAmount) + " §fan " + targetCacheObject.getTeamColor() + targetPlayer.getName() + " §füberwiesen.");
+                player.sendMessage(Main.getChatPrefix() + "Du hast " + Main.getCurrencyName(selectedAmount) + " §fan " + colour(targetPlayer) + targetPlayer.getName() + " §füberwiesen.");
                 view.setItem(ACTION_SLOT, createItemStack("§aÜberweisen", Material.NETHER_STAR));
             });
         });

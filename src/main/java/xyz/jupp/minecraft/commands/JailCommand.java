@@ -142,16 +142,16 @@ public class JailCommand implements CommandExecutor, TabCompleter {
         }
 
         Tasks.async(() -> {
-            JailHandler.setPlayerWanted(target, newState);
-
             if (newState) {
+                JailHandler.setPlayerWanted(target, true);
                 Tasks.sync(() -> {
                     JailHandler.playerWantedBroadcast(target, "Manuelle Fahndung");
                     sender.sendMessage(PREFIX + "§a" + target.getName() + " §fist nun §4§lGESUCHT§f.");
                 });
             } else {
+                // a prisoner keeps the sentence, only the wanted mark goes
+                JailHandler.clearWanted(target);
                 Tasks.sync(() -> sender.sendMessage(PREFIX + "§a" + target.getName() + " §fist nicht länger §4§lGESUCHT§f."));
-                CacheHandler.getInstance().getPlayerInCache(target).unsetJail(false);
             }
         });
     }
@@ -292,6 +292,8 @@ public class JailCommand implements CommandExecutor, TabCompleter {
                                                 @NotNull Command command,
                                                 @NotNull String alias,
                                                 @NotNull String[] args) {
+        // admins only: the cells and the commands are nobody else's business
+        if (sender instanceof Player player && !xyz.jupp.minecraft.utils.PermissionsUtil.isPlayerAdmin(player)) return List.of();
 
         if (args.length == 1) {
             return startingWith(SUBCOMMANDS, args[0]);

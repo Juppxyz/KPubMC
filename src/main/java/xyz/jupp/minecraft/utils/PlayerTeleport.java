@@ -54,11 +54,11 @@ public class PlayerTeleport {
 
             if (currentLocation.distanceSquared(initialLocation) == 0) {
                 player.playSound(initialLocation, Sound.ENTITY_ENDERMAN_TELEPORT, 1f,1f);
-                if (!player.teleport(targetLocation)) {
-                    abort(onAbort);
-                } else if (onDone != null) {
-                    onDone.run();
-                }
+                // the target chunk loads off the main thread; Paper completes the future on the main thread
+                player.teleportAsync(targetLocation).whenComplete((done, error) -> {
+                    if (error != null || !Boolean.TRUE.equals(done)) abort(onAbort);
+                    else if (onDone != null) onDone.run();
+                });
             } else {
                 player.sendMessage(Main.getChatPrefix() + "§fBleib bitte stehen, um teleportiert zu werden.");
                 player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f,1f);

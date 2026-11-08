@@ -161,10 +161,11 @@ public final class Bank {
         }
     }
 
+    // the treasury balance is the cached sum of the ledger (kept up to date by every booking), not a scan of the whole
+    // ever-growing ledger per menu open; last week's income uses the index on created_at
     private static Budget budget(java.sql.Connection connection, UUID player) throws java.sql.SQLException {
         return Database.queryOne(connection, """
-                SELECT (SELECT COALESCE(SUM(amount), 0) FROM treasury_ledger)
-                           - (SELECT COALESCE(SUM(amount), 0) FROM bank_deposits WHERE NOT paid_out AND in_treasury),
+                SELECT ? - (SELECT COALESCE(SUM(amount), 0) FROM bank_deposits WHERE NOT paid_out AND in_treasury),
                        (SELECT COALESCE(SUM(amount), 0) FROM treasury_ledger
                             WHERE amount > 0 AND source NOT IN ('INTEREST', 'FIXED_DEPOSIT', 'BOND_SALE') AND created_at >= now() - make_interval(days => ?)),
                        (SELECT COALESCE(SUM(amount * rate), 0) FROM bank_deposits WHERE NOT paid_out),
@@ -173,7 +174,7 @@ public final class Bank {
                     double balance = Math.max(0, row.getLong(1));
                     double income = Math.max(0, row.getLong(2));
                     return new Budget(Math.min(income * BUDGET_INCOME_SHARE, balance * BUDGET_BALANCE_SHARE), row.getDouble(3), row.getDouble(4));
-                }, TERM_DAYS, player);
+                }, Treasury.balance(), TERM_DAYS, player);
     }
 
     // the rate a fixed deposit would get right now (a loan adds the treasury's share)

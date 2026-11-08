@@ -47,7 +47,14 @@ public class PlayerHeadsCommand implements CommandExecutor {
 
                 try {
                     Tasks.sync(() -> {
-                        player.getInventory().addItem(playerHead);
+                        // left meanwhile: the money back instead of a head in an inventory that is no longer saved
+                        if (!player.isOnline()) {
+                            Tasks.async(() -> PlayerRepository.addMoney(player, HEAD_PRICE));
+                            return;
+                        }
+                        // a full inventory: the head lands at the feet
+                        player.getInventory().addItem(playerHead).values()
+                                .forEach(rest -> player.getWorld().dropItemNaturally(player.getLocation(), rest));
 
                         player.sendMessage(Main.getChatPrefix() + "Du hast den Kopf von §a" + targetName + " §fgekauft.");
                         player.sendMessage(Main.getChatPrefix() + "§c-" + HEAD_PRICE + " " + Main.getCurrencyName());
@@ -59,7 +66,7 @@ public class PlayerHeadsCommand implements CommandExecutor {
                 }
             });
         }
-        return false;
+        return true;
     }
 
     private static ItemStack createHead(@NotNull String targetName) {

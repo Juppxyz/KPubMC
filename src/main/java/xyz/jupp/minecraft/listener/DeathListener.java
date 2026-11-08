@@ -97,7 +97,8 @@ public class DeathListener implements Listener {
 
             if (isKeepInventoryItem(meta)) {
                 keepInventory(event);
-                item.setAmount(0);
+                // one box per death, the rest of a stack stays
+                item.setAmount(item.getAmount() - 1);
                 break;
             }
         }
@@ -109,6 +110,8 @@ public class DeathListener implements Listener {
         // a wanted player killed by someone outside their team drops the head, the Sheriff pays the bounty for it
         PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
         boolean wanted = playerCacheObject.isWanted();
+        // read before the jail sentence replaces it: 0 = wanted until caught
+        long wantedEnd = playerCacheObject.getJailEnd();
         String playerTeamID = playerCacheObject.getTeamID();
         String killerTeamID = killer == null ? null : CacheHandler.getInstance().getPlayerInCache(killer).getTeamID();
         boolean bounty = wanted && killer != null && killer != player && (playerTeamID == null || !playerTeamID.equals(killerTeamID));
@@ -119,7 +122,7 @@ public class DeathListener implements Listener {
             chargeDeathTax(player);
 
             if (wanted) {
-                jailWanted(player, killer, bountyID, playerTeamID, killerTeamID);
+                jailWanted(player, killer, bountyID, playerTeamID, killerTeamID, wantedEnd);
                 return;
             }
             if (killer == null) return;
@@ -146,7 +149,7 @@ public class DeathListener implements Listener {
     }
 
     // worker thread: the wanted player goes to jail; with a bounty (bountyID) the head dropped and a hunter caught them
-    private static void jailWanted(Player player, Player killer, UUID bountyID, String playerTeamID, String killerTeamID) {
+    private static void jailWanted(Player player, Player killer, UUID bountyID, String playerTeamID, String killerTeamID, long wantedEnd) {
         JailHandler.jailAfterDeath(player, bountyID != null);
         String sentence = Main.getChatPrefix() + "§6Deine Haft wurde auf §c" + JailHandler.DEATH_SENTENCE_HOURS + "h §6festgesetzt.";
         if (killer == null) {
@@ -166,7 +169,7 @@ public class DeathListener implements Listener {
         }
         // catching a wanted enemy is a kill in a war as well
         if (killerTeamID != null && playerTeamID != null) Relations.warKill(killerTeamID, playerTeamID);
-        Bounties.record(bountyID, player.getUniqueId(), player.getName(), playerTeamID, killer.getUniqueId(), Loans.bounty(player.getUniqueId()));
+        Bounties.record(bountyID, player.getUniqueId(), player.getName(), playerTeamID, killer.getUniqueId(), Loans.bounty(player.getUniqueId(), wantedEnd));
         sync(() -> {
             killer.sendMessage(Main.getChatPrefix() + "§aDu hast den gesuchten Spieler §6" + player.getName() + " §agefasst!");
             killer.sendMessage(Main.getChatPrefix() + "§fBring den Kopf zum §9Sheriff§f, dort gibt es das Kopfgeld.");
@@ -218,12 +221,14 @@ public class DeathListener implements Listener {
         TeamCacheObject team = cache.getTeamID() == null ? null : cache.getTeamCacheObject();
         String name = JoinQuitListener.teamPlayerName(player, team, true);
 
-        // a wanted player who died is on the way to jail (JailHandler.jailAfterDeath), prisoners stay in their cell
-        if (cache.isWanted() || cache.isJail()) {
-            name = (cache.isJail() ? Main.getInJailPrefix() : Main.getIsWantedPrefix()) + name;
+        // a wanted player who died is on the way to jail (JailHandler.jailAfterDeath), prisoners stay in their cell;
+        // a death in the arena jails nobody (atDying), so a wanted player respawns at the spawn from there
+        boolean arena = isPlayerInArena(player);
+        if (cache.isJail() || cache.isWanted()) name = (cache.isJail() ? Main.getInJailPrefix() : Main.getIsWantedPrefix()) + name;
+        if (cache.isJail() || (cache.isWanted() && !arena)) {
             Location cell = JailHandler.cellSpawn(cache);
             if (cell != null) event.setRespawnLocation(cell);
-        } else if (isPlayerInArena(player)) {
+        } else if (arena) {
             event.setRespawnLocation(Locations.getCurrentSpawn());
         }
 

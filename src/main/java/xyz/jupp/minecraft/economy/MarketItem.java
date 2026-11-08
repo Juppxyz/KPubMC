@@ -71,6 +71,13 @@ public record MarketItem(
         int price = (int) Math.round(total * (1.0 - discount));
         // a discount (daily offers, more of it while the state is broke) never goes below what the shop pays back
         if (discount > 0 && sellable) price = (int) Math.max(price, bundles * (Math.round(basePrice * sellRatio) + 1));
+        // nor any price below what selling the same bundles right back would pay (a steep elasticity would let
+        // sell-and-buy-back circles print money); with normal values this never binds
+        if (sellable) {
+            long back = 0;
+            for (int i = 1; i <= bundles; i++) back += sellPriceAt(demand + i);
+            price = (int) Math.min(Integer.MAX_VALUE, Math.max(price, back + bundles));
+        }
         return price;
     }
 

@@ -3,6 +3,7 @@ package xyz.jupp.minecraft.utils;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
+import org.bukkit.block.Block;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
@@ -63,6 +64,20 @@ public final class Locations {
 
         private static boolean within(double value, int a, int b, int below, int above) {
             return value >= Math.min(a, b) - below && value < Math.max(a, b) + above;
+        }
+
+        /** Block column (x, z) inside the area, for a spawn area whatever the height; no Location needed. */
+        public boolean containsColumn(@NotNull String worldName, int x, int z) {
+            if (corner1 == null || corner2 == null || !worldName.equals(world)) return false;
+            return within(x, corner1[0], corner2[0], 0, 1) && within(z, corner1[2], corner2[2], 0, 1);
+        }
+
+        /** Whether any block column of the chunk lies inside the area. */
+        public boolean intersectsChunk(@NotNull String worldName, int chunkX, int chunkZ) {
+            if (corner1 == null || corner2 == null || !worldName.equals(world)) return false;
+            int minX = chunkX << 4, minZ = chunkZ << 4;
+            return minX <= Math.max(corner1[0], corner2[0]) && minX + 15 >= Math.min(corner1[0], corner2[0])
+                    && minZ <= Math.max(corner1[2], corner2[2]) && minZ + 15 >= Math.min(corner1[2], corner2[2]);
         }
     }
 
@@ -133,6 +148,26 @@ public final class Locations {
 
     public static boolean isInArena(@NotNull Location location) {
         return isIn(Kind.ARENA, location);
+    }
+
+    /** The block lies in a spawn area (any height); block coordinates only, explosions check every block. */
+    public static boolean isSpawnBlock(@NotNull Block block) {
+        List<Area> current = areas;
+        if (current.isEmpty()) return false;
+        String worldName = block.getWorld().getName();
+        int x = block.getX(), z = block.getZ();
+        for (Area area : current) {
+            if (area.kind() == Kind.SPAWN && area.containsColumn(worldName, x, z)) return true;
+        }
+        return false;
+    }
+
+    /** Whether the chunk reaches into a spawn area or an arena (no team may claim it). */
+    public static boolean touchesSpawnOrArena(@NotNull String worldName, int chunkX, int chunkZ) {
+        for (Area area : areas) {
+            if (area.intersectsChunk(worldName, chunkX, chunkZ)) return true;
+        }
+        return false;
     }
 
     /** A new instance, so callers cannot move the shared position; without a spawn point (or its world) the spawn of the main world. */

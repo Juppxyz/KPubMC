@@ -113,6 +113,7 @@ public final class Main extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new EnderDragonListener(), this);
         Bukkit.getPluginManager().registerEvents(new SpawnListener(), this);
         Bukkit.getPluginManager().registerEvents(new TeamAreaListener(), this);
+        Bukkit.getPluginManager().registerEvents(new ClaimGuardListener(), this);
         Bukkit.getPluginManager().registerEvents(new AntiBugListener(), this);
         Bukkit.getPluginManager().registerEvents(new CashGuardListener(), this);
         Bukkit.getPluginManager().registerEvents(new CombatListener(), this);

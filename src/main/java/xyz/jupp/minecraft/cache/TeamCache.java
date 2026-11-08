@@ -70,9 +70,10 @@ final class TeamCache {
         unknownTeamIDs.add(teamID);
     }
 
-    // called when a team was created
-    static void forgetUnknownTeams() {
-        unknownTeamIDs.clear();
+    // called when a team was created: only its id may have been looked up as unknown before; the ids of dissolved
+    // teams stay known as gone (clearing them all made the next look-up of each one a database query, on the main thread)
+    static void forgetUnknownTeam(@Nullable String teamID) {
+        if (teamID != null) unknownTeamIDs.remove(teamID);
     }
 
 }

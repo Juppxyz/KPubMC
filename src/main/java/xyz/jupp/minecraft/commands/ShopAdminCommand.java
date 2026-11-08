@@ -272,15 +272,19 @@ public class ShopAdminCommand implements TabExecutor {
     private static @Nullable Object parse(String column, String raw) {
         boolean none = raw.equals("-") || raw.equalsIgnoreCase("auto");
         return switch (column) {
-            case "min_price", "max_price" -> none ? null : Integer.parseInt(raw);
+            case "min_price", "max_price" -> none ? null : within(Integer.parseInt(raw), 1, 10_000_000, "1 bis 10.000.000");
             case "hourly_limit" -> {
                 if (none) yield null;
                 int bundles = Integer.parseInt(raw);
                 if (bundles < 1) throw new IllegalArgumentException("mindestens 1 Bündel pro Stunde, oder auto");
                 yield bundles;
             }
-            case "base_price", "amount", "rotation_weight" -> Integer.parseInt(raw);
-            case "sell_ratio", "elasticity" -> Double.parseDouble(raw.replace(',', '.'));
+            // a typo must not break the shop or its sums (they are ints)
+            case "base_price" -> within(Integer.parseInt(raw), 1, 1_000_000, "1 bis 1.000.000");
+            case "amount" -> within(Integer.parseInt(raw), 1, 64, "1 bis 64");
+            case "rotation_weight" -> within(Integer.parseInt(raw), 0, 1000, "0 bis 1000");
+            case "sell_ratio" -> within(Double.parseDouble(raw.replace(',', '.')), 0.0, 0.9, "0 bis 0,9");
+            case "elasticity" -> within(Double.parseDouble(raw.replace(',', '.')), 0.0, 0.5, "0 bis 0,5");
             case "core", "enabled", "buyable", "sellable", "emergency_sale" -> switch (raw.toLowerCase(Locale.ROOT)) {
                 case "ja", "true", "an" -> true;
                 case "nein", "false", "aus" -> false;
@@ -300,6 +304,16 @@ public class ShopAdminCommand implements TabExecutor {
             }
             default -> throw new IllegalArgumentException(column);
         };
+    }
+
+    private static int within(int value, int min, int max, String range) {
+        if (value < min || value > max) throw new IllegalArgumentException("erlaubt: " + range);
+        return value;
+    }
+
+    private static double within(double value, double min, double max, String range) {
+        if (!(value >= min && value <= max)) throw new IllegalArgumentException("erlaubt: " + range);
+        return value;
     }
 
     private static void add(CommandSender sender, String[] args) {

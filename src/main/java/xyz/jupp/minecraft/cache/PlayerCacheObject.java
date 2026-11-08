@@ -15,6 +15,8 @@ public class PlayerCacheObject {
 
     // knowledge variables (written by async tasks and the main thread, therefore volatile)
     private final UUID uuid;
+    private final long loadedAt = System.currentTimeMillis();
+    private volatile boolean preloaded;
     private volatile Player player;
     private volatile String teamID;
     private volatile TeamCacheObject teamCacheObject = null;
@@ -52,6 +54,24 @@ public class PlayerCacheObject {
 
     void attach(@NotNull Player player) {
         if (this.player != player) this.player = player;
+    }
+
+    // the session this entry belongs to, null for a preload whose join has not happened yet
+    @Nullable Player attached() {
+        return player;
+    }
+
+    long loadedAt() {
+        return loadedAt;
+    }
+
+    // loaded at the pre-login (not by a cache miss during a session)
+    void markPreloaded() {
+        preloaded = true;
+    }
+
+    boolean preloaded() {
+        return preloaded;
     }
 
 

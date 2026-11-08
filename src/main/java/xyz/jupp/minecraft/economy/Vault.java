@@ -9,6 +9,7 @@ import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.inventory.MainThread;
+import xyz.jupp.minecraft.utils.Tasks;
 import xyz.jupp.minecraft.utils.Text;
 
 import java.util.Map;
@@ -37,6 +38,8 @@ public final class Vault implements InventoryHolder {
         return thread;
     });
     private static volatile boolean shuttingDown;
+    // vaults whose last save failed: their contents stay cached as the truth (a reload would give items back)
+    private static final java.util.Set<UUID> unsaved = ConcurrentHashMap.newKeySet();
 
     private final UUID owner;
     private final Inventory inventory;
@@ -102,9 +105,23 @@ public final class Vault implements InventoryHolder {
     private static void save(UUID owner, byte[] bytes) {
         try {
             Bank.saveVault(owner, bytes);
+            unsaved.remove(owner);
         } catch (RuntimeException e) {
+            unsaved.add(owner);
             Main.getInstance().getSLF4JLogger().error("Vault of {} could not be saved", owner, e);
         }
+    }
+
+    /**
+     * On quit: the cached contents go a tick later, after the vault closed and queued its save (a later open loads
+     * again, on the same thread as the save, so it reads what was stored).
+     */
+    public static void forgetLater(@NotNull UUID player) {
+        if (!Main.getInstance().isEnabled() || !contents.containsKey(player)) return;
+        // after the pending saves on the IO thread (in order), then back on the main thread
+        Tasks.syncLater(1L, () -> io.execute(() -> MainThread.run(() -> {
+            if (Bukkit.getPlayer(player) == null && !unsaved.contains(player)) contents.remove(player);
+        })));
     }
 
     /** onDisable, before the database closes: stores the open vaults and waits for the pending saves. */

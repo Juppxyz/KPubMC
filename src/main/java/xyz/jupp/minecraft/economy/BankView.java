@@ -21,6 +21,7 @@ import xyz.jupp.minecraft.cache.PlayerCacheObject;
 import xyz.jupp.minecraft.database.BankLog;
 import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.inventory.MainThread;
+import xyz.jupp.minecraft.utils.CombatLock;
 import xyz.jupp.minecraft.utils.Logger;
 import xyz.jupp.minecraft.utils.Tasks;
 import xyz.jupp.minecraft.utils.Text;
@@ -722,6 +723,8 @@ public final class BankView implements InventoryHolder {
     }
 
     private void openVault(Player player) {
+        // no stashing the gear mid-fight (the fee is not taken then)
+        if (CombatLock.denies(player)) return;
         UUID uuid = player.getUniqueId();
         busy = true;
         Tasks.async(() -> {
@@ -738,7 +741,11 @@ public final class BankView implements InventoryHolder {
                     fail(player, "§fDas Schließfach kostet " + Bank.VAULT_FEE + " Schilling pro Öffnen.");
                     return;
                 }
-                if (!player.isOnline()) return;
+                // left while the fee was booked: it goes back, the vault was never opened
+                if (!player.isOnline()) {
+                    Tasks.asyncOrNow(() -> Taxes.refund(uuid, 0, Bank.VAULT_FEE, Treasury.Source.VAULT_FEE));
+                    return;
+                }
                 // the counter closes first, so no second click can pay a second time while the vault loads
                 player.closeInventory();
                 Vault.open(player);

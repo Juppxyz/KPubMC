@@ -11,6 +11,7 @@ import xyz.jupp.minecraft.cache.ChunkCache;
 import xyz.jupp.minecraft.cache.TeamCacheObject;
 import xyz.jupp.minecraft.database.Database;
 import xyz.jupp.minecraft.database.TeamRepository;
+import xyz.jupp.minecraft.utils.Locations;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -46,6 +47,8 @@ public final class Teams {
     public static final int SECOND_WARP_LEVEL = 6;
     public static final int STRONG_HASTE_LEVEL = 7;
     public static final int PHANTOM_LEVEL = 8;
+    // a locked area (INTERACTION_LEVEL) also keeps strangers away from its animals and villagers
+    public static final int ANIMAL_LEVEL = 9;
     // a member killed by a player costs the team this many points (the killer's team gets them)
     public static final int DEATH_COST = 500;
 
@@ -167,6 +170,7 @@ public final class Teams {
         if (level == SECOND_WARP_LEVEL) lines.add("§7Neu: §fzweiter Team-Warp");
         if (level == STRONG_HASTE_LEVEL) lines.add("§7Neu: §fEile II im eigenen Gebiet");
         if (level == PHANTOM_LEVEL) lines.add("§7Neu: §fkeine Phantome im eigenen Gebiet");
+        if (level == ANIMAL_LEVEL) lines.add("§7Neu: §fTiere & Villager im gesperrten Gebiet geschützt");
         return lines;
     }
 
@@ -178,11 +182,13 @@ public final class Teams {
 
     /* changes (worker thread) */
 
-    public enum ClaimOutcome { OK, TAKEN, LIMIT, NO_POINTS, NOT_ALLOWED }
+    public enum ClaimOutcome { OK, TAKEN, LIMIT, NO_POINTS, NOT_ALLOWED, PROTECTED }
 
     /** Claims a chunk for the team: owner or vice, within the level's limit, for CHUNK_COST team points. */
     public static ClaimOutcome claim(@NotNull TeamCacheObject team, @NotNull UUID actor, @NotNull String world, int x, int z) {
         if (!role(team, actor).canManage()) return ClaimOutcome.NOT_ALLOWED;
+        // no chunk that reaches into a spawn area or an arena (checked again here, the menu may be old)
+        if (Locations.touchesSpawnOrArena(world, x, z)) return ClaimOutcome.PROTECTED;
         String teamID = team.getTeamID();
         int limit = chunkLimit(team.getLevel());
         ClaimOutcome outcome = Database.inTransaction(connection -> {

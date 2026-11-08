@@ -55,15 +55,18 @@ public class CacheHandler {
     }
 
 
+    // only this session's entry: a reconnect that was already preloaded keeps its entry (see PlayerCache#removeSession)
     public void removePlayerFromCache(@NotNull Player player) {
-        UUID uuid = player.getUniqueId();
-        PlayerCache.removePlayer(uuid);
-        // an async task running during the quit may have cached the player again
+        PlayerCache.removeSession(player);
+        // an async task running during the quit may have cached this session again
         if (Main.getInstance().isEnabled()) {
-            Tasks.syncLater(1L, () -> {
-                if (Bukkit.getPlayer(uuid) == null) PlayerCache.removePlayer(uuid);
-            });
+            Tasks.syncLater(1L, () -> PlayerCache.removeSession(player));
         }
+    }
+
+    /** Main thread, now and then: entries of logins that never joined or sessions that are gone. */
+    public int sweepPlayerCache() {
+        return PlayerCache.sweep(10 * 60_000L);
     }
 
 
@@ -106,7 +109,7 @@ public class CacheHandler {
         if (founded.outcome() != TeamRepository.Founding.OK) return founded.outcome();
         // committed: nothing below may undo it, a failure only costs the announcement or the cache (fixed at the next login)
         try {
-            TeamCache.forgetUnknownTeams();
+            TeamCache.forgetUnknownTeam(founded.teamID());
             getPlayerInCache(player).teamChanged(founded.teamID());
             Component announcement = Text.section(Main.getChatPrefix() + (title == null
                     ? "§fDas Team " + teamColor + teamName + " §fwurde von §6" + player.getName() + " §fgegründet!"

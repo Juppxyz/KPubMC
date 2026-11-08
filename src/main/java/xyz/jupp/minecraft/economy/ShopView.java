@@ -18,6 +18,7 @@ import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.inventory.MainThread;
 import xyz.jupp.minecraft.utils.Tasks;
+import org.bukkit.plugin.IllegalPluginAccessException;
 import xyz.jupp.minecraft.utils.Text;
 
 import java.time.Duration;
@@ -132,8 +133,32 @@ public final class ShopView implements InventoryHolder {
         });
     }
 
-    /** Re-renders every open shop in place, e.g. after a trade or a price decay; Hondo shows the same prices. */
+    // a booking came back: free for the next click after a moment (the second click of a double click would book twice)
+    private void done() {
+        busy = false;
+        ignoreClicksUntil = System.currentTimeMillis() + CLICK_COOLDOWN_MILLIS;
+    }
+
+    private static boolean refreshQueued;
+
+    /**
+     * Main thread: re-renders every open shop in place, e.g. after a trade or a price decay; Hondo shows the same
+     * prices. Trades in the same tick share one redraw on the next tick. Every redraw locks the clicks for a moment:
+     * a click aimed at the old price must not book the new one.
+     */
     public static void refreshAll() {
+        if (refreshQueued) return;
+        refreshQueued = true;
+        try {
+            Tasks.sync(ShopView::refreshNow);
+        } catch (IllegalPluginAccessException e) {
+            // server stop: nothing to redraw any more
+            refreshQueued = false;
+        }
+    }
+
+    private static void refreshNow() {
+        refreshQueued = false;
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (player.getOpenInventory().getTopInventory().getHolder(false) instanceof ShopView shop) shop.render();
         }
@@ -164,11 +189,16 @@ public final class ShopView implements InventoryHolder {
     }
 
     private void render() {
+        render(true);
+    }
+
+    // lockClicks: a click right after a new layout would hit the wrong button; a price refresh keeps the layout
+    private void render(boolean lockClicks) {
         inventory.clear();
         contentSlots.clear();
         serviceSlots.clear();
         actions.clear();
-        ignoreClicksUntil = System.currentTimeMillis() + CLICK_COOLDOWN_MILLIS;
+        if (lockClicks) ignoreClicksUntil = System.currentTimeMillis() + CLICK_COOLDOWN_MILLIS;
         ItemStack frame = pane(Material.BLACK_STAINED_GLASS_PANE);
         for (int slot = 0; slot < SIZE; slot++) inventory.setItem(slot, frame);
 
@@ -580,7 +610,7 @@ public final class ShopView implements InventoryHolder {
             }
             Integer money = HondoView.moneyOrNull(player.getUniqueId());
             Runnable onMain = () -> {
-                busy = false;
+                done();
                 if (money != null) balance = money;
                 switch (purchase.outcome()) {
                     case OK -> {
@@ -589,7 +619,8 @@ public final class ShopView implements InventoryHolder {
                                     .append(Text.section(" §ffür " + Main.getCurrencyName(purchase.total()) + " §7(davon " + purchase.tax() + " Steuer)")));
                             player.playSound(player.getLocation(), Sound.BLOCK_BREWING_STAND_BREW, 1f, 1.2f);
                         } else {
-                            Tasks.async(() -> Services.refund(player.getUniqueId(), purchase));
+                            // right away while the server stops (this may run from MainThread.runPending then)
+                            Tasks.asyncOrNow(() -> Services.refund(player.getUniqueId(), purchase));
                             balance += purchase.total();
                             fail(player, "§fDas ging gerade nicht, du bekommst dein Geld zurück.");
                         }
@@ -730,7 +761,7 @@ public final class ShopView implements InventoryHolder {
             String limit = trade.outcome() == MarketRepository.Outcome.LIMIT ? limitMessage(player.getUniqueId(), item) : null;
             Integer money = HondoView.moneyOrNull(player.getUniqueId());
             Runnable onMain = () -> {
-                busy = false;
+                done();
                 if (money != null) balance = money;
                 switch (trade.outcome()) {
                     case OK -> {
@@ -748,8 +779,8 @@ public final class ShopView implements InventoryHolder {
                 refreshAll();
             };
             if (!MainThread.run(onMain) && trade.outcome() == MarketRepository.Outcome.OK) {
-                // server stop between booking and delivery
-                PlayerRepository.addMoney(player.getUniqueId(), trade.net() + trade.tax());
+                // server stop between booking and delivery: the money back, the tax out of the treasury again
+                Taxes.refund(player.getUniqueId(), trade.net(), trade.tax(), Treasury.Source.TRADE_TAX);
             }
         });
     }
@@ -776,7 +807,7 @@ public final class ShopView implements InventoryHolder {
             Market.update(trade.item());
             Integer money = HondoView.moneyOrNull(player.getUniqueId());
             boolean scheduled = MainThread.run(() -> {
-                busy = false;
+                done();
                 if (money != null) balance = money;
                 if (trade.outcome() == MarketRepository.Outcome.OK) {
                     player.sendMessage(receipt("§fVerkauft: §e" + quantity + "× ", item, " §ffür " + Main.getCurrencyName(trade.net())));
@@ -809,7 +840,7 @@ public final class ShopView implements InventoryHolder {
             String limit = trade.outcome() == MarketRepository.Outcome.LIMIT ? limitMessage(player.getUniqueId(), item) : null;
             Integer money = HondoView.moneyOrNull(player.getUniqueId());
             Runnable onMain = () -> {
-                busy = false;
+                done();
                 if (money != null) balance = money;
                 if (trade.outcome() == MarketRepository.Outcome.OK) {
                     HondoView.deliver(player.getUniqueId(), item.material(), item.amount());
@@ -825,7 +856,7 @@ public final class ShopView implements InventoryHolder {
                 render();
             };
             if (!MainThread.run(onMain) && trade.outcome() == MarketRepository.Outcome.OK) {
-                PlayerRepository.addMoney(player.getUniqueId(), trade.net() + trade.tax());
+                Taxes.refund(player.getUniqueId(), trade.net(), trade.tax(), Treasury.Source.TRADE_TAX);
             }
         });
     }
@@ -856,7 +887,7 @@ public final class ShopView implements InventoryHolder {
     private void unavailable(Player player, RuntimeException error, @Nullable Material giveBack, int quantity) {
         Main.getInstance().getSLF4JLogger().warn("Shop trade of {} failed: {}", player.getName(), error.toString());
         boolean scheduled = MainThread.run(() -> {
-            busy = false;
+            done();
             if (giveBack != null) HondoView.deliver(player.getUniqueId(), giveBack, quantity);
             fail(player, "§fDer Händler ist gerade nicht erreichbar, bitte versuche es gleich nochmal.");
         });

@@ -529,6 +529,10 @@ public final class Database {
 
     private Database() {}
 
+    private static final int SOCKET_TIMEOUT_SECONDS = 60;
+    private static final int STATEMENT_TIMEOUT_MILLIS = 30_000;
+    private static final int LOCK_TIMEOUT_MILLIS = 10_000;
+
 
     /* lifecycle: connect() in onEnable after the config was loaded, close() in onDisable */
 
@@ -536,14 +540,25 @@ public final class Database {
         if (dataSource != null) return;
 
         PGSimpleDataSource postgres = new PGSimpleDataSource();
-        postgres.setURL(resolveUrl());
+        String url = resolveUrl();
+        postgres.setURL(url);
+        // a stalled database or a half-open connection must not hang a worker (or the server stop) forever:
+        // statements and lock waits give up, a dead socket is noticed; values in the URL win
+        String lowerUrl = url.toLowerCase(java.util.Locale.ROOT);
+        if (!lowerUrl.contains("sockettimeout=")) postgres.setSocketTimeout(SOCKET_TIMEOUT_SECONDS);
+        if (!lowerUrl.contains("tcpkeepalive=")) postgres.setTcpKeepAlive(true);
+        if (!lowerUrl.contains("options=")) {
+            postgres.setOptions("-c statement_timeout=" + STATEMENT_TIMEOUT_MILLIS + " -c lock_timeout=" + LOCK_TIMEOUT_MILLIS);
+        }
 
         HikariConfig config = new HikariConfig();
         config.setPoolName("KPubMC");
         config.setDataSource(postgres);
-        config.setMaximumPoolSize(8);
+        config.setMaximumPoolSize(10);
         config.setMinimumIdle(2);
         config.setConnectionTimeout(5_000);
+        config.setValidationTimeout(3_000);
+        config.setKeepaliveTime(60_000);
 
         HikariDataSource pool;
         try {
@@ -554,7 +569,15 @@ public final class Database {
         }
 
         try (Connection connection = pool.getConnection(); Statement statement = connection.createStatement()) {
+            // a new index on a big table may take longer than a normal statement: no server limits and no client socket
+            // timeout for the schema; the connection goes back with the defaults (Hikari resets the network timeout too)
+            connection.setNetworkTimeout(Runnable::run, 0);
+            statement.execute("SET statement_timeout = 0");
+            statement.execute("SET lock_timeout = 0");
             for (String sql : SCHEMA) statement.execute(sql);
+            statement.execute("RESET statement_timeout");
+            statement.execute("RESET lock_timeout");
+            connection.setNetworkTimeout(Runnable::run, SOCKET_TIMEOUT_SECONDS * 1000);
         } catch (SQLException e) {
             pool.close();
             throw new IllegalStateException("Datenbankschema konnte nicht angelegt werden: " + e.getMessage(), e);

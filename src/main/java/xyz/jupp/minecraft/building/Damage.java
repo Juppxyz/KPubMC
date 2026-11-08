@@ -79,9 +79,13 @@ public final class Damage {
         wanted = true;
     }
 
-    void addBlock() {
-        blocks++;
-        amount += Bauamt.DAMAGE_PER_BLOCK;
+    void unmarkWanted() {
+        wanted = false;
+    }
+
+    void addBlocks(int count) {
+        blocks += count;
+        amount += Bauamt.DAMAGE_PER_BLOCK * count;
     }
 
     /** Breaking a row of blocks gives one notice every few seconds, not one per block. */

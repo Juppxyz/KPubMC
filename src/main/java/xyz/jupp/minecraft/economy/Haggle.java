@@ -42,6 +42,10 @@ final class Haggle {
         Talk talk = talks.get(player);
         int offerId = BlackMarketHandler.currentOffer();
         if (talk == null || talk.offerId() != offerId) {
+            // talks about earlier items and refusals of earlier visits are over (not on quit: a reconnect must not reset them)
+            int visit = BlackMarketHandler.currentVisit();
+            talks.values().removeIf(old -> old.offerId() != offerId);
+            refusedUntilVisit.values().removeIf(refused -> refused != visit);
             talk = new Talk(offerId, BlackMarketHandler.getAskingPrice(), 0, PATIENCE);
             talks.put(player, talk);
         }

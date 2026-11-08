@@ -122,6 +122,19 @@ public final class Taxes {
     }
 
     /**
+     * A booking whose goods could not be handed out any more (the server stopped in between): the whole amount back
+     * to the player and the tax out of the treasury again, in one transaction. Blocking.
+     */
+    public static void refund(@NotNull UUID player, int net, int tax, @NotNull Treasury.Source source) {
+        Database.inTransaction(connection -> {
+            Database.update(connection, "UPDATE players SET money = money + ? WHERE uuid = ?", net + tax, player);
+            Treasury.withdraw(connection, source, tax, player);
+            return null;
+        });
+        Treasury.committed(-tax);
+    }
+
+    /**
      * Cash withdrawal: the requested amount minus the standard tax is paid out in cash notes (a multiple of 10);
      * only the paid-out cash and the tax leave the account (the rest below 10 stays on it).
      */

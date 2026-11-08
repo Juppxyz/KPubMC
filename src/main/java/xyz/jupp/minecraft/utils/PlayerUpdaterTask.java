@@ -23,6 +23,7 @@ public class PlayerUpdaterTask {
 
     private void updateOnMainThread() {
         TabListUtil.updateTabForAll();
+        CacheHandler.getInstance().sweepPlayerCache();
     }
 
 }

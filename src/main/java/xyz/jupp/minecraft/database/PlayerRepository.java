@@ -151,6 +151,13 @@ public final class PlayerRepository {
         log().info("set wanted for {} until {}", uuid, wantedEnd);
     }
 
+    /** Wanted until caught (jail_end 0) unless the player sits in jail (that sentence would never end); true if set. */
+    public static boolean setWantedUntilCaughtIfFree(@NotNull UUID uuid) {
+        boolean set = Database.update("UPDATE players SET is_wanted = TRUE, jail_end = 0 WHERE uuid = ? AND NOT jail", uuid) > 0;
+        if (set) log().info("set wanted for {} until caught", uuid);
+        return set;
+    }
+
     public static void setIsWanted(@NotNull UUID uuid, boolean isWanted) {
         Database.update("UPDATE players SET is_wanted = ? WHERE uuid = ?", isWanted, uuid);
         log().info("set wanted for {} to {}", uuid, isWanted);

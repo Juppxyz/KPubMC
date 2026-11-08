@@ -32,6 +32,8 @@ public final class JailHandler {
     private static final Set<UUID> pendingPlayers = ConcurrentHashMap.newKeySet();
     // cache and database receive the jail changes in the same order
     private static final Object LOCK = new Object();
+    // on the way into a cell: the teleport loads the chunk asynchronously, a step before it lands is no escape
+    private static final Set<UUID> movingToCell = ConcurrentHashMap.newKeySet();
 
 
     private JailHandler() {
@@ -88,17 +90,36 @@ public final class JailHandler {
     }
 
 
-    /** Wanted until a player catches them (no end), e.g. for an unpaid loan; with the usual broadcast. */
-    public static void markWantedUntilCaught(@NotNull Player player, @NotNull String reason) {
+    /**
+     * Wanted until a player catches them (no end), e.g. for an unpaid fine; with the usual broadcast. false for a
+     * prisoner: jail_end 0 would make the sentence endless, the caller tries again after the release.
+     */
+    public static boolean markWantedUntilCaught(@NotNull Player player, @NotNull String reason) {
         PlayerCacheObject pco = cache(player);
+        if (pco.isJail()) return false;
         wantedPlayers.add(player.getUniqueId());
         offMainThread(() -> {
             synchronized (LOCK) {
-                pco.setWantedUntil(0);
+                // jailed meanwhile: the sentence stays as it is
+                if (!pco.isJail()) pco.setWantedUntil(0);
             }
             refreshPlayerName(player, pco);
         });
         playerWantedBroadcast(player, reason);
+        return true;
+    }
+
+    /** No longer wanted (an admin's decision); a prisoner keeps the sentence. */
+    public static void clearWanted(@NotNull Player player) {
+        PlayerCacheObject pco = cache(player);
+        wantedPlayers.remove(player.getUniqueId());
+        offMainThread(() -> {
+            synchronized (LOCK) {
+                if (pco.isJail()) pco.setWanted(false);
+                else pco.unsetJail(false);
+            }
+            refreshPlayerName(player, pco);
+        });
     }
 
     /** The wanted broadcast for a player who is offline (their status is already in the database). */
@@ -175,7 +196,7 @@ public final class JailHandler {
             Location cell = cellSpawn(pco);
             if (!pco.isWanted() && pco.isJail() && cell != null && !JailCells.contains(player.getLocation())) {
                 player.sendMessage(Main.getChatPrefix() + "Du wurdest verhaftet und deswegen ins Gefängnis teleportiert.");
-                player.teleport(cell);
+                teleportToCell(player, cell);
                 refreshPlayerName(player, pco);
                 return;
             }
@@ -235,7 +256,7 @@ public final class JailHandler {
         }, () -> {
             // the respawn point stays the player's own: a death in jail respawns in the cell anyway (DeathListener)
             Location cell = cellSpawn(pco);
-            if (cell != null) player.teleport(cell);
+            if (cell != null) teleportToCell(player, cell);
             player.sendMessage(Main.getChatPrefix()
                     + "§cDu wurdest für §e" + hours + "§c Stunde(n) inhaftiert. Grund: §f" + reason);
             refreshPlayerName(player, pco);
@@ -251,11 +272,16 @@ public final class JailHandler {
     public static void jailAfterDeath(@NotNull Player player, boolean caught) {
         PlayerCacheObject pco = cache(player);
         wantedPlayers.remove(player.getUniqueId());
-        offMainThread(() -> {
-            synchronized (LOCK) {
-                pco.setWanted(false);
-                pco.setJail(DEATH_SENTENCE_HOURS, JailCells.pickCell(), caught);
-            }
+        // pending until written: a move in between (respawned already) is no escape
+        pendingPlayers.add(player.getUniqueId());
+        changeJailState(player, () -> {
+            pco.setJail(DEATH_SENTENCE_HOURS, JailCells.pickCell(), caught);
+            pco.setWanted(false);
+            return true;
+        }, () -> {
+            // respawned before the sentence was written: into the cell now
+            Location cell = cellSpawn(pco);
+            if (cell != null && player.isOnline() && !player.isDead() && !JailCells.contains(player.getLocation())) teleportToCell(player, cell);
             refreshPlayerName(player, pco);
         });
     }
@@ -274,7 +300,7 @@ public final class JailHandler {
             pco.unsetJail(false);
             return true;
         }, () -> {
-            player.teleport(Locations.getCurrentSpawn());
+            player.teleportAsync(Locations.getCurrentSpawn());
             player.sendMessage(Main.getChatPrefix() + "§aDu bist wieder frei. Verhalte dich ab jetzt besser.");
             Bukkit.broadcast(Text.section(Main.getChatPrefix() + "§fDer Spieler §2" + player.getName() + " §fwurde aus dem Gefängnis §aentlassen§f."));
             refreshPlayerName(player, pco);
@@ -289,7 +315,8 @@ public final class JailHandler {
         if (!pco.isJail()) return;
 
         UUID uuid = player.getUniqueId();
-        if (pendingPlayers.contains(uuid)) return;
+        // still being written, or on the way into the cell (the chunk loads off the main thread): no escape
+        if (pendingPlayers.contains(uuid) || movingToCell.contains(uuid)) return;
         // without a ready cell there is no jail to escape from
         if (!JailCells.anyReady() || JailCells.contains(player.getLocation())) return;
 
@@ -303,7 +330,7 @@ public final class JailHandler {
                 return true;
             }, () -> {
                 Location spawn = cellSpawn(pco);
-                if (spawn != null) player.teleport(spawn);
+                if (spawn != null) teleportToCell(player, spawn);
             });
             return;
         }
@@ -384,6 +411,11 @@ public final class JailHandler {
                 if (!changed) pendingPlayers.remove(uuid);
             }
             if (!changed) return;
+            // a death or release during /stop: the state is written, the Bukkit part would get no tick any more
+            if (!Main.getInstance().isEnabled()) {
+                pendingPlayers.remove(uuid);
+                return;
+            }
 
             Tasks.sync(() -> {
                 try {
@@ -393,6 +425,13 @@ public final class JailHandler {
                 }
             });
         });
+    }
+
+    // main thread: into the cell without loading its chunk on the tick; the escape check waits until it landed
+    private static void teleportToCell(@NotNull Player player, @NotNull Location cell) {
+        UUID uuid = player.getUniqueId();
+        movingToCell.add(uuid);
+        player.teleportAsync(cell).whenComplete((done, error) -> movingToCell.remove(uuid));
     }
 
     private static void onMainThread(@NotNull Runnable task) {

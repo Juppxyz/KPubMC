@@ -17,12 +17,15 @@ import org.bukkit.entity.Fireball;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityShootBowEvent;
 import org.bukkit.event.player.PlayerFishEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -38,6 +41,7 @@ import xyz.jupp.minecraft.items.BedrockBreakerPickaxe;
 import xyz.jupp.minecraft.items.Charges;
 import xyz.jupp.minecraft.items.ForgedPapers;
 import xyz.jupp.minecraft.items.GrapplingHook;
+import xyz.jupp.minecraft.items.KeepInventoryItem;
 import xyz.jupp.minecraft.items.TrackerCompass;
 import xyz.jupp.minecraft.utils.JailHandler;
 import xyz.jupp.minecraft.utils.Locations;
@@ -58,6 +62,8 @@ public class CustomToolsListener implements Listener {
 
     @EventHandler(ignoreCancelled = true)
     public void onFlamethrowerUse(PlayerArmSwingEvent event) {
+        // the main hand's swing only (the off hand swings too, the item is in the main hand)
+        if (event.getHand() != EquipmentSlot.HAND) return;
         Player player = event.getPlayer();
         ItemStack item = player.getInventory().getItemInMainHand();
         if (item.getType().isAir()) return;
@@ -65,25 +71,38 @@ public class CustomToolsListener implements Listener {
         // read-only view, no ItemMeta copy on every swing
         if (!item.getPersistentDataContainer().has(FLAMETHROWER_KEY, PersistentDataType.BYTE)) return;
 
+        // no burning explosion at the spawn, and none from a prisoner
+        if (Locations.isLocationASpawn(player.getLocation()) || JailHandler.isPlayerInJail(player)) {
+            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
+            player.sendActionBar(Text.of("§cHier zündet der Flammenwerfer nicht."));
+            return;
+        }
+
         World world = player.getWorld();
         Location eye = player.getEyeLocation();
         Vector dir = eye.getDirection().normalize();
-        Location spawnLoc = eye.clone().add(dir.multiply(1.5));
+        Location spawnLoc = eye.clone().add(dir.clone().multiply(1.5));
+        Vector velocity = dir.multiply(2.8);
 
-        Fireball fb = world.spawn(spawnLoc, Fireball.class);
-        fb.setShooter(player);
-        fb.setIsIncendiary(true);
-        fb.setYield(4.0f);
-        fb.setVelocity(dir.multiply(2.8));
+        // set up before it enters the world, so the shooter is known from the first tick
+        world.spawn(spawnLoc, Fireball.class, fb -> {
+            fb.setShooter(player);
+            fb.setIsIncendiary(true);
+            fb.setYield(4.0f);
+            fb.setVelocity(velocity);
+        });
 
-        player.getInventory().setItemInMainHand(null);
+        // one shot uses up one, the rest of a stack stays
+        item.setAmount(item.getAmount() - 1);
+        player.getInventory().setItemInMainHand(item.getAmount() <= 0 ? null : item);
         player.playSound(player.getLocation(), Sound.ENTITY_BLAZE_SHOOT, 1f, 1.2f);
         player.sendMessage(Main.getChatPrefix() + "§c§lFlammenball §fgezündet!");
     }
 
 
 
-    @EventHandler(ignoreCancelled = true)
+    // HIGHEST: after the area locks and the spawn protection, a click they cancelled breaks nothing
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGHEST)
     public void onBedrockBreakerUse(PlayerInteractEvent event) {
         if (event.getHand() != EquipmentSlot.HAND) return;
 
@@ -281,6 +300,20 @@ public class CustomToolsListener implements Listener {
         if (event.getCause() != EntityDamageEvent.DamageCause.FALL || !(event.getEntity() instanceof Player player)) return;
         Long until = hookFallProtection.remove(player.getUniqueId());
         if (until != null && System.currentTimeMillis() < until) event.setCancelled(true);
+    }
+
+    @EventHandler
+    public void onQuit(PlayerQuitEvent event) {
+        hookFallProtection.remove(event.getPlayer().getUniqueId());
+    }
+
+    // the Box of Undying is a chest: placed, it would lose what makes it one (and stop protecting without a word)
+    @EventHandler(ignoreCancelled = true)
+    public void onPlaceBoxOfUndying(BlockPlaceEvent event) {
+        ItemStack item = event.getItemInHand();
+        if (item.getType() != Material.CHEST || !item.getPersistentDataContainer().has(KeepInventoryItem.KEY, PersistentDataType.BYTE)) return;
+        event.setCancelled(true);
+        event.getPlayer().sendActionBar(Text.of("§6Die Box of Undying wirkt im Inventar, platzieren geht nicht."));
     }
 
 }

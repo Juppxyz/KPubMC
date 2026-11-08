@@ -65,23 +65,22 @@ public class MobLimiterListener implements Listener {
         }
     }
 
-    @EventHandler
+    // cancelled, not removed: the entity never enters the world (no add and remove, no entity scan for nothing)
+    @EventHandler(ignoreCancelled = true)
     public void onSpawnCreature(CreatureSpawnEvent event) {
         Entity entity = event.getEntity();
         EntityType entityType = event.getEntityType();
         Location location = entity.getLocation();
 
         if (Locations.isLocationASpawn(location) && !ALLOWED_ENTITIES.contains(entityType)) {
-            entity.remove();
+            event.setCancelled(true);
             return;
         }
 
         int nearbyEntities = entity.getNearbyEntities(NEARBY_ENTITY_RADIUS_XZ, NEARBY_ENTITY_RADIUS_Y, NEARBY_ENTITY_RADIUS_XZ).size();
         if (nearbyEntities > NEARBY_ENTITY_LIMIT) {
-            entity.remove();
-            return;
+            event.setCancelled(true);
         }
-
     }
 
 

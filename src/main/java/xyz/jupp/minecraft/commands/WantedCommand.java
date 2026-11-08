@@ -55,7 +55,7 @@ public class WantedCommand implements CommandExecutor {
             lines.add("§fName§8: §c" + offlinePlayer.getName());
             lines.add("§fVerbleibende Zeit§8: §c§o" + left);
             lines.add(" ");
-            lines.add("§fBelohnung§8» " + Main.getCurrencyName(Loans.bounty(wantedPlayer.uuid())) + " §7und §a" + Bounties.TEAM_POINTS + " Team-Punkte");
+            lines.add("§fBelohnung§8» " + Main.getCurrencyName(Loans.bounty(wantedPlayer.uuid(), wantedPlayer.jailEnd())) + " §7und §a" + Bounties.TEAM_POINTS + " Team-Punkte");
             lines.add("§7Den Kopf zum §9Sheriff §7bringen.");
             lines.add("§7----------------------");
         }

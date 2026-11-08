@@ -84,7 +84,7 @@ public final class TeamRepository {
         });
     }
 
-    public enum Founding { OK, NO_MONEY, IN_TEAM }
+    public enum Founding { OK, NO_MONEY, IN_TEAM, NAME_TAKEN }
 
     public record Founded(Founding outcome, @Nullable String teamID) {}
 
@@ -100,6 +100,14 @@ public final class TeamRepository {
                     row -> row.getInt(1), owner.getUniqueId());
             if (money == null) return new Founded(Founding.IN_TEAM, null);
             if (money < price) return new Founded(Founding.NO_MONEY, null);
+            if (title == null) {
+                // foundings one at a time (a transaction lock): two teams founded at once cannot both take the free name;
+                // players alone share their title as a name on purpose
+                Database.queryOne(connection, "SELECT pg_advisory_xact_lock(hashtext('kpubmc.team_name'))", row -> 1);
+                if (Database.queryOne(connection, "SELECT 1 FROM teams WHERE title IS NULL AND lower(name) = lower(?)", row -> 1, teamName) != null) {
+                    return new Founded(Founding.NAME_TAKEN, null);
+                }
+            }
             Database.update(connection, "INSERT INTO teams (team_id, name, color, title, owner_uuid) VALUES (?, ?, ?, ?, ?)",
                     teamID, teamName, teamColor, title, owner.getUniqueId());
             insertMember(connection, teamID, TeamMember.of(owner, "owner"));

@@ -137,6 +137,12 @@ public class BauamtCommand implements TabExecutor {
             fail(player, "§fZu groß: höchstens " + MAX_EDGE + " Blöcke je Kante.");
             return;
         }
+        // reading a block in an unloaded chunk would load it on the main thread
+        if (!Blueprint.chunksLoaded(world, Math.min(corners[0].getBlockX(), corners[1].getBlockX()),
+                Math.min(corners[0].getBlockZ(), corners[1].getBlockZ()), sizeX, sizeZ)) {
+            fail(player, "§fDer Bereich ist nicht ganz geladen, geh näher heran.");
+            return;
+        }
         Blueprint.Capture capture = Blueprint.capture(world, corners[0].getBlockX(), corners[0].getBlockY(), corners[0].getBlockZ(),
                 corners[1].getBlockX(), corners[1].getBlockY(), corners[1].getBlockZ());
         if (capture == null || capture.blocks().size() < MIN_BLOCKS) {
@@ -241,6 +247,9 @@ public class BauamtCommand implements TabExecutor {
                 + (variant.mirrored() ? ", gespiegelt" : "") + ") §fRahmen ab §e" + diagnosis.ox() + " / " + diagnosis.oy() + " / " + diagnosis.oz()
                 + " §8| §fFalsch: " + (diagnosis.bad() == 0 ? "§a0" : "§c" + diagnosis.bad()) + " §7von " + variant.cells() + " Zellen");
         for (String line : diagnosis.lines()) player.sendMessage("§8» §7" + line);
+        if (diagnosis.cutShort()) {
+            player.sendMessage("§8» §7Suche wegen Zeitlimit abgebrochen, es kann eine bessere Lage geben. Nenne die Vorlage: §a/bauamt prüfen <Name>");
+        }
         if (diagnosis.overlapping() != null) {
             Build other = diagnosis.overlapping();
             player.sendMessage("§8» §7Überschneidet sich mit Bauwerk " + other.id() + " von " + other.playerName() + " (" + other.state().name().toLowerCase(Locale.ROOT) + ").");
@@ -275,6 +284,7 @@ public class BauamtCommand implements TabExecutor {
 
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
+        if (sender instanceof Player player && !PermissionsUtil.isPlayerAdmin(player)) return List.of();
         if (args.length == 1) {
             return SUBCOMMANDS.stream().filter(sub -> sub.startsWith(args[0].toLowerCase(Locale.ROOT))).toList();
         }

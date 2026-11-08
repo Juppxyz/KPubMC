@@ -66,13 +66,20 @@ public final class Blueprint {
 
     /**
      * The template turned and mirrored. Offsets are relative to the min corner of the turned box; the blocks come
-     * rarest material first, so a wrong candidate fails after one or two reads.
+     * rarest material first, so a wrong candidate fails after one or two reads. byMaterial holds the cells of each
+     * material, so a placed block only tries the cells it could be.
      */
     public record Variant(@NotNull StructureRotation rotation, boolean mirrored, int sizeX, int sizeY, int sizeZ,
-                          @NotNull List<Cell> blocks, @NotNull List<Gap> gaps, @NotNull List<Prop> props, @NotNull BlockData @NotNull [] grid) {
+                          @NotNull List<Cell> blocks, @NotNull List<Gap> gaps, @NotNull List<Prop> props, @NotNull BlockData @NotNull [] grid,
+                          @NotNull Map<Material, List<Cell>> byMaterial) {
         /** Everything a copy has to get right. */
         public int cells() {
             return blocks.size() + gaps.size() + props.size();
+        }
+
+        /** The cells of this material, empty if the template has none. */
+        public @NotNull List<Cell> cellsOf(@NotNull Material material) {
+            return byMaterial.getOrDefault(material, List.of());
         }
 
         /** The block the template wants in the cell, null for a gap or outside the box. */
@@ -269,6 +276,22 @@ public final class Blueprint {
         return bad;
     }
 
+    /**
+     * Cheap pre-check before the full one: the rarest cells (the first ones) are in a loaded chunk and hold their block.
+     * Material first, which needs no BlockData; almost every wrong origin fails here after one read.
+     */
+    public static boolean rarestMatch(@NotNull World world, int ox, int oy, int oz, @NotNull Variant variant) {
+        List<Cell> cells = variant.blocks();
+        for (int i = 0, n = Math.min(2, cells.size()); i < n; i++) {
+            Cell cell = cells.get(i);
+            int x = ox + cell.dx(), y = oy + cell.dy(), z = oz + cell.dz();
+            if (!world.isChunkLoaded(x >> 4, z >> 4)) return false;
+            if (world.getType(x, y, z) != cell.material()) return false;
+            if (!same(cell.data(), world.getBlockData(x, y, z))) return false;
+        }
+        return true;
+    }
+
     /** Diagnostic, main thread: the first cells at this origin that do not match, as readable lines (world coordinates). */
     public static @NotNull List<String> explain(@NotNull World world, int ox, int oy, int oz, @NotNull Variant variant, int limit) {
         List<String> lines = new ArrayList<>();
@@ -391,8 +414,11 @@ public final class Blueprint {
                         }
                     }
                 }
+                Map<Material, List<Cell>> byMaterial = new EnumMap<>(Material.class);
+                for (Cell cell : turnedBlocks) byMaterial.computeIfAbsent(cell.material(), material -> new ArrayList<>()).add(cell);
+                byMaterial.replaceAll((material, list) -> List.copyOf(list));
                 Variant variant = new Variant(rotation, mirrored, turnedX, sizeY, turnedZ,
-                        List.copyOf(turnedBlocks), List.copyOf(gaps), List.copyOf(turnedProps), grid);
+                        List.copyOf(turnedBlocks), List.copyOf(gaps), List.copyOf(turnedProps), grid, byMaterial);
                 unique.putIfAbsent(signature(variant), variant);
             }
         }

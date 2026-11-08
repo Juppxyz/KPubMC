@@ -24,6 +24,15 @@ public final class Tasks {
         return Bukkit.getScheduler().runTask(Main.getInstance(), task);
     }
 
+    /**
+     * Blocking work that must not get lost: on a worker normally, right here while the plugin shuts down (a delivery
+     * run by MainThread.runPending in onDisable can no longer schedule anything, the booking would be dropped).
+     */
+    public static void asyncOrNow(@NotNull Runnable task) {
+        if (Main.getInstance().isEnabled()) async(task);
+        else task.run();
+    }
+
     public static BukkitTask syncLater(long delayTicks, @NotNull Runnable task) {
         return Bukkit.getScheduler().runTaskLater(Main.getInstance(), task, delayTicks);
     }

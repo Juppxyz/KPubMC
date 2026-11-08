@@ -14,7 +14,8 @@ public class MoneyCommand implements CommandExecutor {
         if (commandSender instanceof Player player) {
             MoneyInventory.openInventory(player, MoneyInventory.MoneyInventoryTypes.MAIN);
         }
-        return false;
+        // true: false makes Bukkit print the usage line after every opened menu
+        return true;
     }
 
 }

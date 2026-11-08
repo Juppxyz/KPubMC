@@ -78,13 +78,24 @@ public class TeamAreaListener implements Listener {
 
 
 
-    // harmful splash potions leave the thrower's partners alone
+    // harmful splash potions follow the PvP rules of a hit: never partners, and nobody in an area with PvP off (unless at war)
     @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGH)
     public void onPotionSplash(PotionSplashEvent event) {
         if (!(event.getPotion().getShooter() instanceof Player thrower) || !harmful(event.getPotion().getEffects())) return;
         for (LivingEntity target : event.getAffectedEntities()) {
-            if (target instanceof Player player && player != thrower && partners(thrower, player)) event.setIntensity(target, 0);
+            if (target instanceof Player player && player != thrower && sparedFrom(thrower, player)) event.setIntensity(target, 0);
         }
+    }
+
+    // a harmful potion of the thrower must not reach this player (same rules as onPlayerAttackOther)
+    private static boolean sparedFrom(Player thrower, Player target) {
+        if (thrower.isOnline()) {
+            String throwerTeam = CacheHandler.getInstance().getPlayerInCache(thrower).getTeamID();
+            String targetTeam = CacheHandler.getInstance().getPlayerInCache(target).getTeamID();
+            if (Relations.partners(throwerTeam, targetTeam)) return true;
+            if (Relations.atWar(throwerTeam, targetTeam)) return false;
+        }
+        return isPvPProtected(target.getLocation()) || isPvPProtected(thrower.getLocation());
     }
 
     // the same for lingering clouds
@@ -96,7 +107,7 @@ public class TeamAreaListener implements Listener {
         PotionType base = cloud.getBasePotionType();
         if (base != null) effects.addAll(base.getPotionEffects());
         if (!harmful(effects)) return;
-        event.getAffectedEntities().removeIf(target -> target instanceof Player player && player != thrower && partners(thrower, player));
+        event.getAffectedEntities().removeIf(target -> target instanceof Player player && player != thrower && sparedFrom(thrower, player));
     }
 
     private static boolean harmful(Collection<PotionEffect> effects) {
@@ -106,10 +117,6 @@ public class TeamAreaListener implements Listener {
         return false;
     }
 
-    private static boolean partners(Player one, Player other) {
-        if (!one.isOnline() || !other.isOnline()) return false;
-        return Relations.partners(CacheHandler.getInstance().getPlayerInCache(one).getTeamID(), CacheHandler.getInstance().getPlayerInCache(other).getTeamID());
-    }
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGH)
     public void onPlayerInteractWithProtectedArea(PlayerInteractEvent event) {
@@ -117,7 +124,8 @@ public class TeamAreaListener implements Listener {
         TeamCacheObject teamCacheObject = clicked != null
                 ? ClaimedAreaHelper.getClaimingTeam(clicked)
                 : ClaimedAreaHelper.getClaimingTeam(event.getPlayer().getLocation());
-        if (teamCacheObject == null || teamCacheObject.isZoneOptionInteract()) return;
+        // the lock belongs to INTERACTION_LEVEL: a team that sold levels back loses it (like the other area options)
+        if (teamCacheObject == null || teamCacheObject.isZoneOptionInteract() || teamCacheObject.getLevel() < Teams.INTERACTION_LEVEL) return;
 
         PlayerCacheObject pco = CacheHandler.getInstance().getPlayerInCache(event.getPlayer());
         // partners share their areas

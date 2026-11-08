@@ -90,8 +90,19 @@ public final class HondoView implements InventoryHolder {
         }
     }
 
-    private void render() {
+    // a booking came back: free for the next click after a moment (the second click of a double click would book twice)
+    private void done() {
+        busy = false;
         ignoreClicksUntil = System.currentTimeMillis() + CLICK_COOLDOWN_MILLIS;
+    }
+
+    private void render() {
+        render(true);
+    }
+
+    // lockClicks: a new layout locks the clicks for a moment, a price refresh (same layout) does not
+    private void render(boolean lockClicks) {
+        if (lockClicks) ignoreClicksUntil = System.currentTimeMillis() + CLICK_COOLDOWN_MILLIS;
         ItemStack frame = pane(Material.BLACK_STAINED_GLASS_PANE);
         for (int slot = 0; slot < SIZE; slot++) inventory.setItem(slot, frame);
 
@@ -255,7 +266,7 @@ public final class HondoView implements InventoryHolder {
             Integer money = moneyOrNull(uuid);
             HondoRepository.Friendship fresh = ok ? result.friendship() : friendshipOrNull(uuid);
             Runnable onMain = () -> {
-                busy = false;
+                done();
                 balance = money != null ? money : balance - (ok ? result.net() + result.tax() : 0);
                 if (fresh != null) friendship = fresh;
                 switch (result.outcome()) {
@@ -310,7 +321,7 @@ public final class HondoView implements InventoryHolder {
             Material receive = ok ? exchange.get() : exchange.give();
             int quantity = ok ? exchange.amount() : input;
             Runnable onMain = () -> {
-                busy = false;
+                done();
                 if (fresh != null) friendship = fresh;
                 deliver(uuid, receive, quantity);
                 if (ok) {
@@ -357,7 +368,7 @@ public final class HondoView implements InventoryHolder {
             Integer money = moneyOrNull(uuid);
             HondoRepository.Friendship fresh = ok ? result.friendship() : friendshipOrNull(uuid);
             Runnable onMain = () -> {
-                busy = false;
+                done();
                 balance = money != null ? money : balance - (ok ? result.net() + result.tax() : 0);
                 if (fresh != null) friendship = fresh;
                 switch (result.outcome()) {
@@ -403,7 +414,7 @@ public final class HondoView implements InventoryHolder {
         Main.getInstance().getSLF4JLogger().warn("Hondo trade of {} failed: {}", player.getName(), error.toString());
         UUID uuid = player.getUniqueId();
         boolean scheduled = MainThread.run(() -> {
-            busy = false;
+            done();
             if (giveBack != null) deliver(uuid, giveBack, quantity);
             fail(player, "§fHondo ist gerade nicht erreichbar, bitte versuche es gleich nochmal.");
         });
