@@ -2,7 +2,6 @@ package xyz.jupp.minecraft.listener;
 
 import net.kyori.adventure.text.Component;
 import org.bukkit.Location;
-import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -51,10 +50,7 @@ public class PlayerMovementListener implements Listener {
         Location from = e.getFrom();
         Location to = e.getTo();
 
-        // Entity#isOnGround: Player only re-declares the same method as deprecated
-        if (e.hasExplicitlyChangedBlock() && JailHandler.handlePossibleEscape(player) && ((Entity) player).isOnGround()) {
-            e.setCancelled(true);
-        }
+        if (e.hasExplicitlyChangedBlock()) JailHandler.handlePossibleEscape(player);
         if (!sameChunk(from, to)) enteredChunk(player, to);
     }
 

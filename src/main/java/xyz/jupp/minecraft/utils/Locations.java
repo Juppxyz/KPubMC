@@ -69,13 +69,4 @@ public class Locations {
         return new Location(mainWorld(), 150069.500, 240, 150293.500, 180, 0);
     }
 
-    public static Location getJailCorner1() {
-        return new Location(mainWorld(), 150038, 235, 150225);
-    }
-    public static Location getJailCorner2() {
-        return new Location(mainWorld(), 150045, 248, 150233);
-    }
-    public static Location getJailSpawn() {
-        return new Location(mainWorld(), 150041, 239.500, 150228);
-    }
 }

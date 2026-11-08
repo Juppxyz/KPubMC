@@ -31,6 +31,8 @@ public final class BankLog {
     public static final String BOND_REPAY = "BOND_REPAY";
     public static final String TEAM_DEPOSIT = "TEAM_DEPOSIT";
     public static final String TEAM_WITHDRAW = "TEAM_WITHDRAW";
+    // note: the name of the wanted player
+    public static final String BOUNTY = "BOUNTY";
 
     /**
      * SQL for the part of the account an open loan locks (borrowed amount plus its full interest): it may be spent, but

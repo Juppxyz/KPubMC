@@ -507,6 +507,7 @@ public final class BankView implements InventoryHolder {
             case BankLog.BOND_REPAY -> "Staatsanleihe zurückgezahlt";
             case BankLog.TEAM_DEPOSIT -> "In die Team-Kasse";
             case BankLog.TEAM_WITHDRAW -> "Aus der Team-Kasse";
+            case BankLog.BOUNTY -> "Kopfgeld" + (entry.note() == null ? "" : " für " + entry.note());
             case "TAX_DEATH_TAX" -> "Todessteuer";
             case "TAX_NETHER_TAX" -> "Nether-Steuer";
             default -> kind;

@@ -449,7 +449,41 @@ public final class Database {
             )""",
             "CREATE INDEX IF NOT EXISTS bauamt_damage_open_idx ON bauamt_damage (player_uuid) WHERE paid_at IS NULL",
             // a player alone: a team of one under a title (Teams.Title), null for a real team
-            "ALTER TABLE teams ADD COLUMN IF NOT EXISTS title TEXT CHECK (title IN ('soeldner', 'haendler', 'vagabund'))"
+            "ALTER TABLE teams ADD COLUMN IF NOT EXISTS title TEXT CHECK (title IN ('soeldner', 'haendler', 'vagabund'))",
+            // jail cells (an area between two block corners and a spawn, set by admins), the cell of each prisoner and
+            // whether a bounty hunter caught them (no escape until the sentence is over)
+            """
+            CREATE TABLE IF NOT EXISTS jail_cells (
+                id          INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                name        TEXT    NOT NULL UNIQUE,
+                world       TEXT    NOT NULL,
+                x1          INTEGER,
+                y1          INTEGER,
+                z1          INTEGER,
+                x2          INTEGER,
+                y2          INTEGER,
+                z2          INTEGER,
+                spawn_x     DOUBLE PRECISION,
+                spawn_y     DOUBLE PRECISION,
+                spawn_z     DOUBLE PRECISION,
+                spawn_yaw   REAL,
+                spawn_pitch REAL
+            )""",
+            "ALTER TABLE players ADD COLUMN IF NOT EXISTS jail_cell INTEGER REFERENCES jail_cells (id) ON DELETE SET NULL",
+            "ALTER TABLE players ADD COLUMN IF NOT EXISTS caught BOOLEAN NOT NULL DEFAULT FALSE",
+            // a wanted player killed by a hunter: the head drops, whoever brings it to the Sheriff gets the bounty once
+            """
+            CREATE TABLE IF NOT EXISTS bounties (
+                id          UUID    PRIMARY KEY,
+                wanted_uuid UUID    NOT NULL,
+                wanted_name TEXT    NOT NULL,
+                wanted_team TEXT,
+                hunter_uuid UUID    NOT NULL,
+                amount      INTEGER NOT NULL CHECK (amount >= 0),
+                created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+                claimed_by  UUID,
+                claimed_at  TIMESTAMPTZ
+            )"""
     );
 
     private static volatile HikariDataSource dataSource;

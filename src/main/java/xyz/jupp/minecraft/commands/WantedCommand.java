@@ -11,6 +11,7 @@ import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.economy.Loans;
 import xyz.jupp.minecraft.database.PlayerRepository;
+import xyz.jupp.minecraft.jail.Bounties;
 import xyz.jupp.minecraft.utils.Tasks;
 
 import java.util.ArrayList;
@@ -54,7 +55,8 @@ public class WantedCommand implements CommandExecutor {
             lines.add("§fName§8: §c" + offlinePlayer.getName());
             lines.add("§fVerbleibende Zeit§8: §c§o" + left);
             lines.add(" ");
-            lines.add("§fBelohnung§8» " + Main.getCurrencyName(Loans.bounty(wantedPlayer.uuid())) + " §7und §a1000 Team-Punkte");
+            lines.add("§fBelohnung§8» " + Main.getCurrencyName(Loans.bounty(wantedPlayer.uuid())) + " §7und §a" + Bounties.TEAM_POINTS + " Team-Punkte");
+            lines.add("§7Den Kopf zum §9Sheriff §7bringen.");
             lines.add("§7----------------------");
         }
         return lines;

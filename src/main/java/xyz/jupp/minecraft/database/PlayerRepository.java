@@ -22,8 +22,9 @@ public final class PlayerRepository {
     public enum TransferResult { SUCCESS, INSUFFICIENT_FUNDS, TARGET_NOT_FOUND }
 
     // the column team_invites (the old /invites switch) is no longer read: invitations are answered in the chat now
+    // jailCell: the prisoner's cell (JailCells), caught: a bounty hunter caught them, no escape this sentence
     public record PlayerData(UUID uuid, int money, @Nullable String teamID,
-                             boolean jail, long jailEnd, boolean isWanted) {}
+                             boolean jail, long jailEnd, boolean isWanted, @Nullable Integer jailCell, boolean caught) {}
 
     private static PlayerData map(ResultSet row) throws SQLException {
         return new PlayerData(
@@ -32,7 +33,9 @@ public final class PlayerRepository {
                 row.getString("team_id"),
                 row.getBoolean("jail"),
                 row.getLong("jail_end"),
-                row.getBoolean("is_wanted"));
+                row.getBoolean("is_wanted"),
+                row.getObject("jail_cell", Integer.class),
+                row.getBoolean("caught"));
     }
 
     private static Logger log() {
@@ -125,14 +128,20 @@ public final class PlayerRepository {
 
     /* jail (new added in 2025) */
 
-    public static void setJail(@NotNull UUID uuid, boolean jail, long jailEnd) {
-        Database.update("UPDATE players SET jail = ?, jail_end = ? WHERE uuid = ?", jail, jailEnd, uuid);
-        log().info("set jail for {} until {}", uuid, jailEnd);
+    public static void setJail(@NotNull UUID uuid, long jailEnd, @Nullable Integer cell, boolean caught) {
+        Database.update("UPDATE players SET jail = TRUE, jail_end = ?, jail_cell = ?, caught = ? WHERE uuid = ?", jailEnd, cell, caught, uuid);
+        log().info("set jail for {} until {} (cell {}{})", uuid, jailEnd, cell, caught ? ", caught" : "");
+    }
+
+    /** A prisoner without a (usable) cell gets one. */
+    public static void setJailCell(@NotNull UUID uuid, @Nullable Integer cell) {
+        Database.update("UPDATE players SET jail_cell = ? WHERE uuid = ? AND jail", cell, uuid);
     }
 
     // wanted is written as well: a timed wanted that ran out must not stay TRUE (with jail_end 0 it means "until caught")
     public static void unsetJail(@NotNull UUID uuid, long jailEnd, boolean wanted) {
-        Database.update("UPDATE players SET jail = FALSE, jail_end = ?, is_wanted = ? WHERE uuid = ?", jailEnd, wanted, uuid);
+        Database.update("UPDATE players SET jail = FALSE, jail_end = ?, is_wanted = ?, jail_cell = NULL, caught = FALSE WHERE uuid = ?",
+                jailEnd, wanted, uuid);
         log().info("unset jail for {}", uuid);
     }
 

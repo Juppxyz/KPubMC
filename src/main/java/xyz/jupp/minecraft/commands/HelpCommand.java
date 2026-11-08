@@ -51,8 +51,9 @@ public class HelpCommand implements CommandExecutor {
             player.sendMessage("§8§l» §a/createbankier §8- §fErstellt einen neuen Finanz Händler.");
             player.sendMessage("§8§l» §a/createdealer §8- §fErstellt einen neuen Schwarzmarkt Händler.");
             player.sendMessage("§8§l» §a/createbauamt §8- §fErstellt den Bauamt Villager.");
+            player.sendMessage("§8§l» §a/createsheriff §8- §fErstellt den Sheriff (nimmt Köpfe von Gesuchten an).");
             player.sendMessage("§8§l» §a/bauamt §8- §fVerwaltet die Bauvorlagen der Bauförderung.");
-            player.sendMessage("§8§l» §a/bestrafung §8- §fStellt ein ob ein Spieler im Gefängnis ist");
+            player.sendMessage("§8§l» §a/bestrafung §8- §fGefängnis, Fahndung und Zellen §7(/bestrafung zelle, /bestrafung zellen)");
         }
     }
 }

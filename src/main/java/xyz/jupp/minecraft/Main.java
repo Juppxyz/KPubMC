@@ -27,6 +27,8 @@ import xyz.jupp.minecraft.economy.Services;
 import xyz.jupp.minecraft.economy.ShopViewListener;
 import xyz.jupp.minecraft.economy.Treasury;
 import xyz.jupp.minecraft.economy.Vault;
+import xyz.jupp.minecraft.jail.BountyHeadListener;
+import xyz.jupp.minecraft.jail.JailCells;
 import xyz.jupp.minecraft.listener.*;
 import xyz.jupp.minecraft.utils.*;
 
@@ -39,6 +41,7 @@ public final class Main extends JavaPlugin {
     private final static String blackMarketDealerVillagerName = "§8§lMorpheus";
     private final static String teamPointsDealerVillagerName = "§6§lNomad";
     private final static String bauamtVillagerName = "§e§lBauamt";
+    private final static String sheriffVillagerName = "§9§lSheriff";
 
     private final static String currencyName = "Schilling";
     private final static String teamName = "§aTeam";
@@ -84,6 +87,7 @@ public final class Main extends JavaPlugin {
         this.getCommand("shopadmin").setExecutor(new ShopAdminCommand());
         this.getCommand("bauamt").setExecutor(new BauamtCommand());
         this.getCommand("createbauamt").setExecutor(new CreateBauamtCommand());
+        this.getCommand("createsheriff").setExecutor(new CreateSheriffCommand());
     }
 
     private void registerListener() {
@@ -110,6 +114,7 @@ public final class Main extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new CombatListener(), this);
         Bukkit.getPluginManager().registerEvents(new DntLootListener(), this);
         Bukkit.getPluginManager().registerEvents(new BauamtListener(), this);
+        Bukkit.getPluginManager().registerEvents(new BountyHeadListener(), this);
 
         // afk
         Bukkit.getPluginManager().registerEvents(new AfkListener(), this);
@@ -163,6 +168,8 @@ public final class Main extends JavaPlugin {
         Hondo.load();
         Bankruptcy.load();
         Bauamt.load();
+        int jailCells = JailCells.load();
+        Logger.console("loaded " + jailCells + " ready jail cells");
         Logger.console("loaded " + Market.all().size() + " market items, " + Market.dailyOffers().size() + " daily offers, "
                 + Bauamt.templates().size() + " building templates, " + Bauamt.builds().size() + " builds");
         registerCommands();
@@ -170,7 +177,6 @@ public final class Main extends JavaPlugin {
         registerTasks();
         Npcs.keepLoaded();
 
-        JailHandler.initJails(Locations.getJailCorner1(), Locations.getJailCorner2());
         JailHandler.startJailWatcherTask();
     }
 
@@ -220,6 +226,7 @@ public final class Main extends JavaPlugin {
     public static String getTeamPointsDealerVillagerName() {return teamPointsDealerVillagerName;}
     public static String getBlackMarketDealerVillagerName() {return blackMarketDealerVillagerName;}
     public static String getBauamtVillagerName() {return bauamtVillagerName;}
+    public static String getSheriffVillagerName() {return sheriffVillagerName;}
     public static String getCurrencyName(int amount)  {return String.format("§a%d %s", amount, currencyName);}
 
     // Getter for jail

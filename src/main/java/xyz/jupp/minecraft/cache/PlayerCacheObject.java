@@ -22,6 +22,8 @@ public class PlayerCacheObject {
     private volatile boolean jail = false;
     private volatile long jailEnd = 0;
     private volatile boolean isWanted = false;
+    private volatile @Nullable Integer jailCell;
+    private volatile boolean caught;
 
 
     private PlayerCacheObject(@NotNull PlayerData data) {
@@ -33,6 +35,8 @@ public class PlayerCacheObject {
         this.jail = data.jail();
         this.jailEnd = data.jailEnd();
         this.isWanted = data.isWanted();
+        this.jailCell = data.jailCell();
+        this.caught = data.caught();
     }
 
     // Loads the player from the database (blocking). A missing player is created like on the first login.
@@ -105,16 +109,24 @@ public class PlayerCacheObject {
 
 
 
-    // new added in 2025 (jail)
-    public void setJail(boolean jail, int hours) {
-        this.jail = jail;
+    // jail for the given hours in the cell (null: none set up yet); caught: a bounty hunter got them, no escape
+    public void setJail(int hours, @Nullable Integer cell, boolean caught) {
+        this.jail = true;
         long now = System.currentTimeMillis();
         long futureMillis = now + (hours * 60L * 60L * 1000L);
         this.jailEnd = futureMillis;
-        PlayerRepository.setJail(uuid, jail, futureMillis);
+        this.jailCell = cell;
+        this.caught = caught;
+        PlayerRepository.setJail(uuid, futureMillis, cell, caught);
+    }
+    public void setJailCell(@Nullable Integer cell) {
+        this.jailCell = cell;
+        PlayerRepository.setJailCell(uuid, cell);
     }
     public void unsetJail(boolean isEscaped) {
         this.jail = false;
+        this.jailCell = null;
+        this.caught = false;
         if (isEscaped) {
             long now = System.currentTimeMillis();
             long futureMillis = now + (72L * 60L * 60L * 1000L);
@@ -133,6 +145,12 @@ public class PlayerCacheObject {
     }
     public boolean isWanted() {
         return isWanted;
+    }
+    public @Nullable Integer getJailCell() {
+        return jailCell;
+    }
+    public boolean isCaught() {
+        return caught;
     }
     // wanted for a limited time (black market), ends like an escape
     public void setWantedUntil(long wantedEnd) {

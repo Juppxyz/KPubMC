@@ -15,6 +15,7 @@ import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.economy.HondoView;
 import xyz.jupp.minecraft.economy.NomadView;
 import xyz.jupp.minecraft.economy.ShopView;
+import xyz.jupp.minecraft.jail.Sheriff;
 import xyz.jupp.minecraft.utils.Npcs;
 import xyz.jupp.minecraft.utils.Text;
 
@@ -49,6 +50,12 @@ public class ShopListener implements Listener {
             if (Main.getBauamtVillagerName().equals(villagerName)) {
                 event.setCancelled(true);
                 BauamtView.open(event.getPlayer());
+                return;
+            }
+
+            if (Main.getSheriffVillagerName().equals(villagerName)) {
+                event.setCancelled(true);
+                Sheriff.interact(event.getPlayer());
                 return;
             }
         }

@@ -2,14 +2,15 @@ package xyz.jupp.minecraft.utils;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.economy.Loans;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.PlayerCacheObject;
 import xyz.jupp.minecraft.cache.TeamCacheObject;
+import xyz.jupp.minecraft.jail.JailCells;
 
 import java.util.Set;
 import java.util.UUID;
@@ -18,17 +19,14 @@ import java.util.function.BooleanSupplier;
 
 /**
  * Jail and wanted system. The public methods may be called from any thread: cache and database writes run
- * off the main thread, teleports, names and messages on it.
+ * off the main thread, teleports, names and messages on it. Prisoners sit in the cells of JailCells.
  */
 public final class JailHandler {
 
-    private static volatile JailArea jailArea;
+    // a wanted player who dies goes to jail for this long
+    public static final int DEATH_SENTENCE_HOURS = 72;
 
     private static final Set<UUID> wantedPlayers = ConcurrentHashMap.newKeySet();
-    private static final Set<UUID> alreadyKilledPlayer = ConcurrentHashMap.newKeySet();
-    public static Set<UUID> getAlreadyKilledPlayer() {
-        return alreadyKilledPlayer;
-    }
 
     // players whose jail state is being written right now: no escape check and no second release meanwhile
     private static final Set<UUID> pendingPlayers = ConcurrentHashMap.newKeySet();
@@ -39,20 +37,6 @@ public final class JailHandler {
     private JailHandler() {
         // Utility-Klasse
     }
-
-    public static void initJails(@NotNull Location corner1, @NotNull Location corner2) {
-        jailArea = new JailArea(corner1.getWorld(),
-                Math.min(corner1.getX(), corner2.getX()), Math.max(corner1.getX(), corner2.getX()),
-                Math.min(corner1.getY(), corner2.getY()), Math.max(corner1.getY(), corner2.getY()),
-                Math.min(corner1.getZ(), corner2.getZ()), Math.max(corner1.getZ(), corner2.getZ()));
-        Logger.console("JailHandler initialisiert: " + locToString(corner1) + " <-> " + locToString(corner2));
-    }
-
-    private static String locToString(Location loc) {
-        if (loc == null || loc.getWorld() == null) return "null";
-        return loc.getWorld().getName() + " (" + loc.getBlockX() + ", " + loc.getBlockY() + ", " + loc.getBlockZ() + ")";
-    }
-
 
     public static boolean isPlayerWanted(@NotNull Player player) {
         return wantedPlayers.contains(player.getUniqueId());
@@ -153,8 +137,23 @@ public final class JailHandler {
 
 
 
+    /** Where the player is put in jail: their cell's spawn (any ready cell's without one), null if no cell is set up. */
+    public static @Nullable Location cellSpawn(@NotNull PlayerCacheObject pco) {
+        return JailCells.spawnFor(pco.getJailCell());
+    }
+
     public static void handleJoin(@NotNull Player player) {
         PlayerCacheObject pco = cache(player);
+        // a prisoner whose cell is gone (or who was jailed before there was one) gets one now
+        JailCells.Cell ownCell = JailCells.get(pco.getJailCell());
+        if (pco.isJail() && (ownCell == null || !ownCell.ready())) {
+            Integer cell = JailCells.pickCell();
+            if (cell != null) {
+                synchronized (LOCK) {
+                    pco.setJailCell(cell);
+                }
+            }
+        }
         boolean loanDefault = false;
         if (pco.isWanted() && pco.getJailEnd() == 0) {
             try {
@@ -167,9 +166,11 @@ public final class JailHandler {
         boolean defaulted = loanDefault;
 
         onMainThread(() -> {
-            if (!pco.isWanted() && pco.isJail() && !isInJailArea(player.getLocation())) {
-                player.sendMessage(Main.getChatPrefix() + "Du wurdest verhaftet und deswegen ins Gefägnis teleportiert.");
-                player.teleport(Locations.getJailSpawn());
+            Location cell = cellSpawn(pco);
+            if (!pco.isWanted() && pco.isJail() && cell != null && !JailCells.contains(player.getLocation())) {
+                player.sendMessage(Main.getChatPrefix() + "Du wurdest verhaftet und deswegen ins Gefängnis teleportiert.");
+                player.teleport(cell);
+                refreshPlayerName(player, pco);
                 return;
             }
 
@@ -222,18 +223,35 @@ public final class JailHandler {
         wantedPlayers.remove(player.getUniqueId());
 
         changeJailState(player, () -> {
-            pco.setJail(true, hours);
+            pco.setJail(hours, JailCells.pickCell(), false);
             pco.setWanted(false);
             return true;
         }, () -> {
-            player.teleport(Locations.getJailSpawn());
-            player.setRespawnLocation(Locations.getJailSpawn());
+            // the respawn point stays the player's own: a death in jail respawns in the cell anyway (DeathListener)
+            Location cell = cellSpawn(pco);
+            if (cell != null) player.teleport(cell);
             player.sendMessage(Main.getChatPrefix()
                     + "§cDu wurdest für §e" + hours + "§c Stunde(n) inhaftiert. Grund: §f" + reason);
             refreshPlayerName(player, pco);
         });
 
         Logger.console("Jail: " + player.getName() + " für " + hours + "h. Grund: " + reason);
+    }
+
+    /**
+     * A wanted player died: DEATH_SENTENCE_HOURS in jail, they respawn in the cell (DeathListener). caught: a bounty
+     * hunter got them, they cannot escape this sentence.
+     */
+    public static void jailAfterDeath(@NotNull Player player, boolean caught) {
+        PlayerCacheObject pco = cache(player);
+        wantedPlayers.remove(player.getUniqueId());
+        offMainThread(() -> {
+            synchronized (LOCK) {
+                pco.setWanted(false);
+                pco.setJail(DEATH_SENTENCE_HOURS, JailCells.pickCell(), caught);
+            }
+            refreshPlayerName(player, pco);
+        });
     }
 
 
@@ -253,25 +271,46 @@ public final class JailHandler {
             player.teleport(Locations.getCurrentSpawn());
             player.sendMessage(Main.getChatPrefix() + "§aDu bist wieder frei. Verhalte dich ab jetzt besser.");
             Bukkit.broadcast(Text.section(Main.getChatPrefix() + "§fDer Spieler §2" + player.getName() + " §fwurde aus dem Gefängnis §aentlassen§f."));
-            alreadyKilledPlayer.remove(player.getUniqueId());
             refreshPlayerName(player, pco);
         });
     }
 
 
-    // PlayerMoveEvent (main thread): the answer decides whether the move is cancelled, the escape itself is written async
-    public static boolean handlePossibleEscape(@NotNull Player player) {
+    // PlayerMoveEvent (main thread): a prisoner outside every cell has escaped (written async); one a bounty hunter
+    // caught goes back into the cell instead
+    public static void handlePossibleEscape(@NotNull Player player) {
         PlayerCacheObject pco = cache(player);
-        if (!pco.isJail()) return false;
+        if (!pco.isJail()) return;
 
         UUID uuid = player.getUniqueId();
-        if (pendingPlayers.contains(uuid)) return false;
+        if (pendingPlayers.contains(uuid)) return;
+        // without a ready cell there is no jail to escape from
+        if (!JailCells.anyReady() || JailCells.contains(player.getLocation())) return;
 
-        if (isInJailArea(player.getLocation())) {
-            return alreadyKilledPlayer.contains(uuid);
+        // jailed before there was a cell: put into one, that is no escape
+        if (pco.getJailCell() == null) {
+            if (!pendingPlayers.add(uuid)) return;
+            changeJailState(player, () -> {
+                Integer cell = JailCells.pickCell();
+                if (cell == null || !pco.isJail()) return false;
+                pco.setJailCell(cell);
+                return true;
+            }, () -> {
+                Location spawn = cellSpawn(pco);
+                if (spawn != null) player.teleport(spawn);
+            });
+            return;
         }
 
-        if (!pendingPlayers.add(uuid)) return false;
+        if (pco.isCaught()) {
+            Location cell = cellSpawn(pco);
+            if (cell == null) return;
+            player.teleport(cell);
+            player.sendMessage(Main.getChatPrefix() + "§cDich hat ein Kopfgeldjäger gefasst, diese Strafe sitzt du ab.");
+            return;
+        }
+
+        if (!pendingPlayers.add(uuid)) return;
         changeJailState(player, () -> {
             if (!pco.isJail()) return false;
             pco.unsetJail(true);
@@ -285,7 +324,6 @@ public final class JailHandler {
             Bukkit.broadcast(Text.section(Main.getChatPrefix() + "§fMehr Infos gibts mit§8: §a/wanted"));
             refreshPlayerName(player, pco);
         });
-        return false;
     }
 
 
@@ -323,12 +361,6 @@ public final class JailHandler {
             }
 
         }, 20L, 20L * 30);
-    }
-
-
-    public static boolean isInJailArea(Location loc) {
-        JailArea area = jailArea;
-        return loc != null && area != null && area.contains(loc);
     }
 
 
@@ -378,19 +410,4 @@ public final class JailHandler {
         return CacheHandler.getInstance().getPlayerInCache(player);
     }
 
-
-    private record JailArea(World world, double minX, double maxX, double minY, double maxY, double minZ, double maxZ) {
-
-        boolean contains(@NotNull Location loc) {
-            if (world == null || !world.equals(loc.getWorld())) return false;
-
-            double x = loc.getX();
-            double y = loc.getY();
-            double z = loc.getZ();
-
-            return x >= minX && x <= maxX
-                    && y >= minY && y <= maxY
-                    && z >= minZ && z <= maxZ;
-        }
-    }
 }

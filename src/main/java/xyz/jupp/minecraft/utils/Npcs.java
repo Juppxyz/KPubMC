@@ -25,7 +25,8 @@ public final class Npcs {
             return Main.getShopVillagerName().equals(name)
                     || Main.getFinanceVillagerFredName().equals(name)
                     || Main.getJewelerVillagerName().equals(name)
-                    || Main.getBauamtVillagerName().equals(name);
+                    || Main.getBauamtVillagerName().equals(name)
+                    || Main.getSheriffVillagerName().equals(name);
         }
         // Morpheus has a hidden name
         if (type == EntityType.VINDICATOR) {

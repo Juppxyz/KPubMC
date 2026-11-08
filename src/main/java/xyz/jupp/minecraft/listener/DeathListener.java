@@ -21,14 +21,14 @@ import xyz.jupp.minecraft.economy.Loans;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.PlayerCacheObject;
 import xyz.jupp.minecraft.cache.TeamCacheObject;
-import xyz.jupp.minecraft.database.PlayerRepository;
-import xyz.jupp.minecraft.database.TeamRepository;
 import xyz.jupp.minecraft.items.KeepInventoryItem;
+import xyz.jupp.minecraft.jail.Bounties;
 import xyz.jupp.minecraft.utils.JailHandler;
 import xyz.jupp.minecraft.utils.Locations;
 import xyz.jupp.minecraft.utils.Tasks;
 import xyz.jupp.minecraft.utils.Text;
 
+import java.util.UUID;
 import java.util.function.Consumer;
 
 
@@ -121,29 +121,24 @@ public class DeathListener implements Listener {
         Location deathLoc = player.getLocation();
         player.sendMessage(Main.getChatPrefix() + "§fDein Todesort » §7x: §a" + Math.round(deathLoc.getX()) + " §7y: §a" + Math.round(deathLoc.getY()) + " §7z: §a" + Math.round(deathLoc.getZ()));
 
-        // the bounty is recognised by the prefix in the tab list name
-        boolean listedAsWanted = killer != null && Text.legacy(player.playerListName()).startsWith(Main.getIsWantedPrefix());
+        // a wanted player killed by someone outside their team drops the head, the Sheriff pays the bounty for it
+        PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
+        boolean wanted = playerCacheObject.isWanted();
+        String playerTeamID = playerCacheObject.getTeamID();
+        String killerTeamID = killer == null ? null : CacheHandler.getInstance().getPlayerInCache(killer).getTeamID();
+        boolean bounty = wanted && killer != null && killer != player && (playerTeamID == null || !playerTeamID.equals(killerTeamID));
+        UUID bountyID = bounty ? UUID.randomUUID() : null;
+        if (bounty) event.getDrops().add(Bounties.head(bountyID, player, playerTeamID, killer.getName()));
 
         Tasks.async(() -> {
             chargeDeathTax(player);
 
-            PlayerCacheObject playerCacheObject = CacheHandler.getInstance().getPlayerInCache(player);
-            if (killer == null) {
-                if (!playerCacheObject.isWanted()) return;
-                jailAfterDeath(player, playerCacheObject);
-                sync(() -> {
-                    player.sendMessage(Main.getChatPrefix() + "§cManchmal hat man eben einfach Unglück.");
-                    player.sendMessage(Main.getChatPrefix() + "§6Deine Haft wurde auf §c72h §6festgesetzt.");
-                });
+            if (wanted) {
+                jailWanted(player, killer, bountyID, playerTeamID, killerTeamID);
                 return;
             }
-
-            PlayerCacheObject killerPlayerCacheObject = CacheHandler.getInstance().getPlayerInCache(killer);
-            if (listedAsWanted) {
-                collectBounty(player, killer, playerCacheObject, killerPlayerCacheObject);
-            } else {
-                settleTeamKill(player, killer, playerCacheObject, killerPlayerCacheObject);
-            }
+            if (killer == null) return;
+            settleTeamKill(player, killer, playerCacheObject, CacheHandler.getInstance().getPlayerInCache(killer));
         });
     }
 
@@ -165,53 +160,35 @@ public class DeathListener implements Listener {
         sync(() -> player.sendMessage(message));
     }
 
-    // worker thread: the wanted player goes to jail for 72 h
-    private static void jailAfterDeath(Player player, PlayerCacheObject playerCacheObject) {
-        sync(() -> player.playSound(player.getLocation(), Sound.BLOCK_DEADBUSH_IDLE, 1, 1));
-        playerCacheObject.setWanted(false);
-        playerCacheObject.setJail(true, 72);
-        sync(() -> player.teleport(Locations.getJailSpawn()));
-    }
-
-    // worker thread
-    private static void collectBounty(Player player, Player killer, PlayerCacheObject playerCacheObject, PlayerCacheObject killerPlayerCacheObject) {
-        jailAfterDeath(player, playerCacheObject);
-
-        String killerTeamID = killerPlayerCacheObject.getTeamID();
-        if (killerTeamID != null && killerTeamID.equals(playerCacheObject.getTeamID())) {
-            sync(() -> killer.sendMessage(Main.getChatPrefix() + "§cDu kannst keine Belohnung von deinem Teamteamkollegen eintreiben."));
+    // worker thread: the wanted player goes to jail; with a bounty (bountyID) the head dropped and a hunter caught them
+    private static void jailWanted(Player player, Player killer, UUID bountyID, String playerTeamID, String killerTeamID) {
+        JailHandler.jailAfterDeath(player, bountyID != null);
+        String sentence = Main.getChatPrefix() + "§6Deine Haft wurde auf §c" + JailHandler.DEATH_SENTENCE_HOURS + "h §6festgesetzt.";
+        if (killer == null) {
+            sync(() -> {
+                player.playSound(player.getLocation(), Sound.BLOCK_DEADBUSH_IDLE, 1, 1);
+                player.sendMessage(Main.getChatPrefix() + "§cManchmal hat man eben einfach Unglück.");
+                player.sendMessage(sentence);
+            });
+            return;
+        }
+        if (bountyID == null) {
+            sync(() -> {
+                killer.sendMessage(Main.getChatPrefix() + "§cFür deinen Teamkollegen gibt es kein Kopfgeld.");
+                player.sendMessage(sentence);
+            });
             return;
         }
         // catching a wanted enemy is a kill in a war as well
-        String victimTeamID = playerCacheObject.getTeamID();
-        if (killerTeamID != null && victimTeamID != null) Relations.warKill(killerTeamID, victimTeamID);
-
-        boolean alreadyCollected = JailHandler.getAlreadyKilledPlayer().contains(player.getUniqueId());
+        if (killerTeamID != null && playerTeamID != null) Relations.warKill(killerTeamID, playerTeamID);
+        Bounties.record(bountyID, player.getUniqueId(), player.getName(), playerTeamID, killer.getUniqueId(), Loans.bounty(player.getUniqueId()));
         sync(() -> {
-            killer.sendMessage(Main.getChatPrefix() + "§aDu hast den gesuchten Spieler §6" + player.getName() + " §agefunden!");
-            if (alreadyCollected) return;
-            killer.sendMessage(Main.getChatPrefix() + "§fHier deine Belohnung!");
-            killer.sendMessage(Main.getChatPrefix() + " ");
-        });
-        if (alreadyCollected) return;
-
-        int reward = Loans.bounty(player.getUniqueId());
-        if (reward > 0) PlayerRepository.addMoney(killer, reward);
-        sync(() -> killer.sendMessage(Main.getChatPrefix() + "§a+" + Main.getCurrencyName(reward)));
-
-        if (killerTeamID != null) {
-            TeamRepository.addTeamPoints(killerTeamID, 1000);
-            sync(() -> forEachOnlineTeamMember(killerTeamID, p -> {
-                p.playSound(p.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1, 1);
-                p.playSound(p.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 1, 1);
-                p.sendMessage(Main.getChatPrefix() + "§a+1000 Team-Punkte §ffür das Eintreiben des Kopfgeldes von §a" + player.getName());
-            }));
-        }
-
-        JailHandler.getAlreadyKilledPlayer().add(player.getUniqueId());
-        sync(() -> {
+            killer.sendMessage(Main.getChatPrefix() + "§aDu hast den gesuchten Spieler §6" + player.getName() + " §agefasst!");
+            killer.sendMessage(Main.getChatPrefix() + "§fBring den Kopf zum §9Sheriff§f, dort gibt es das Kopfgeld.");
+            killer.playSound(killer.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1, 1);
+            player.playSound(player.getLocation(), Sound.BLOCK_DEADBUSH_IDLE, 1, 1);
             player.sendMessage(Main.getChatPrefix() + "§cWenn dich das Gesetz nicht holt, §a" + Main.getCurrencyName() + "e §ctun es.");
-            player.sendMessage(Main.getChatPrefix() + "§6Deine Haft wurde auf §c72h §6festgesetzt.");
+            player.sendMessage(sentence + " §7(Diesmal ohne Flucht.)");
         });
     }
 
@@ -256,12 +233,11 @@ public class DeathListener implements Listener {
         TeamCacheObject team = cache.getTeamID() == null ? null : cache.getTeamCacheObject();
         String name = JoinQuitListener.teamPlayerName(player, team, true);
 
-        if (cache.isWanted()) {
-            name = Main.getIsWantedPrefix() + name;
-            event.setRespawnLocation(Locations.getJailSpawn());
-        } else if (cache.isJail()) {
-            name = Main.getInJailPrefix() + name;
-            event.setRespawnLocation(Locations.getJailSpawn());
+        // a wanted player who died is on the way to jail (JailHandler.jailAfterDeath), prisoners stay in their cell
+        if (cache.isWanted() || cache.isJail()) {
+            name = (cache.isJail() ? Main.getInJailPrefix() : Main.getIsWantedPrefix()) + name;
+            Location cell = JailHandler.cellSpawn(cache);
+            if (cell != null) event.setRespawnLocation(cell);
         } else if (isPlayerInArena(player)) {
             event.setRespawnLocation(Locations.getCurrentSpawn());
         }
