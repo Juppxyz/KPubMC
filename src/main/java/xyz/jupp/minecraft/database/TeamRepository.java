@@ -27,7 +27,8 @@ public final class TeamRepository {
         }
     }
 
-    public record TeamData(String teamID, String name, @Nullable String color, UUID owner, int points, int level,
+    // title: the key of a player alone's title (Teams.Title), null for a real team
+    public record TeamData(String teamID, String name, @Nullable String color, @Nullable String title, UUID owner, int points, int level,
                            boolean zonePvP, boolean zoneMobDamage, boolean zoneInteract, boolean zoneAlarm, List<TeamMember> members) {}
 
     private static Logger log() {
@@ -51,6 +52,7 @@ public final class TeamRepository {
                     row.getString("team_id"),
                     row.getString("name"),
                     row.getString("color"),
+                    row.getString("title"),
                     row.getObject("owner_uuid", UUID.class),
                     row.getInt("points"),
                     row.getInt("level"),
@@ -70,6 +72,7 @@ public final class TeamRepository {
                     row.getString("team_id"),
                     row.getString("name"),
                     row.getString("color"),
+                    row.getString("title"),
                     row.getObject("owner_uuid", UUID.class),
                     row.getInt("points"),
                     row.getInt("level"),
@@ -87,9 +90,9 @@ public final class TeamRepository {
 
     /**
      * Creates the team, takes the price from the founder and makes them its owner, all in one transaction;
-     * only for a player without a team who has the money.
+     * only for a player without a team who has the money. title: the key of a player alone's title, null for a team.
      */
-    public static Founded createNewTeam(@NotNull Player owner, @NotNull String teamName, @Nullable String teamColor, int price) {
+    public static Founded createNewTeam(@NotNull Player owner, @NotNull String teamName, @Nullable String teamColor, @Nullable String title, int price) {
         String teamID = UUID.randomUUID().toString().replace("-", "");
         Founded founded = Database.inTransaction(connection -> {
             // the player row is locked: a team invite at the same moment waits and then finds the player in a team
@@ -97,8 +100,8 @@ public final class TeamRepository {
                     row -> row.getInt(1), owner.getUniqueId());
             if (money == null) return new Founded(Founding.IN_TEAM, null);
             if (money < price) return new Founded(Founding.NO_MONEY, null);
-            Database.update(connection, "INSERT INTO teams (team_id, name, color, owner_uuid) VALUES (?, ?, ?, ?)",
-                    teamID, teamName, teamColor, owner.getUniqueId());
+            Database.update(connection, "INSERT INTO teams (team_id, name, color, title, owner_uuid) VALUES (?, ?, ?, ?, ?)",
+                    teamID, teamName, teamColor, title, owner.getUniqueId());
             insertMember(connection, teamID, TeamMember.of(owner, "owner"));
             Database.update(connection, "UPDATE players SET money = money - ?, team_id = ? WHERE uuid = ?", price, teamID, owner.getUniqueId());
             return new Founded(Founding.OK, teamID);

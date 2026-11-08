@@ -25,15 +25,17 @@ public final class Teams {
 
     private Teams() {}
 
-    public static final int CREATION_COST = 2_500;
-    // XP level the founder needs, it is not used up
+    public static final int CREATION_COST = 5_000;
+    // a player alone under a title (/team allein)
+    public static final int SOLO_COST = 2_000;
+    // XP level the founder needs (also alone), it is not used up
     public static final int CREATION_LEVEL = 30;
     public static final int NAME_MIN = 3;
     public static final int NAME_MAX = 12;
 
-    public static final int MAX_LEVEL = 7;
+    public static final int MAX_LEVEL = 10;
     public static final int CHUNK_COST = 200;
-    private static final int[] CHUNK_LIMITS = {4, 9, 16, 25, 36, 49, 64};
+    private static final int[] CHUNK_LIMITS = {4, 9, 16, 25, 36, 49, 64, 81, 100, 121};
     public static final int MOB_GRIEFING_LEVEL = 2;
     public static final int WARP_LEVEL = 2;
     public static final int PVP_LEVEL = 3;
@@ -43,8 +45,47 @@ public final class Teams {
     public static final int INTERACTION_LEVEL = 5;
     public static final int SECOND_WARP_LEVEL = 6;
     public static final int STRONG_HASTE_LEVEL = 7;
+    public static final int PHANTOM_LEVEL = 8;
     // a member killed by a player costs the team this many points (the killer's team gets them)
     public static final int DEATH_COST = 500;
+
+    /**
+     * What a player alone calls themselves instead of a team name: a team of one with the title as its name and the
+     * title's fixed colour. Teams cannot pick §7 and §8, so the colour alone tells them apart.
+     */
+    public enum Title {
+        SOELDNER("soeldner", "Söldner", "§8"), HAENDLER("haendler", "Händler", "§7"), VAGABUND("vagabund", "Vagabund", "§7");
+
+        private final String key;
+        private final String label;
+        private final String colour;
+
+        Title(String key, String label, String colour) {
+            this.key = key;
+            this.label = label;
+            this.colour = colour;
+        }
+
+        /** As stored in teams.title. */
+        public String key() {
+            return key;
+        }
+
+        public String label() {
+            return label;
+        }
+
+        public String colour() {
+            return colour;
+        }
+
+        public static @Nullable Title of(@Nullable String stored) {
+            for (Title title : values()) {
+                if (title.key.equals(stored)) return title;
+            }
+            return null;
+        }
+    }
 
     public enum Role {
         OWNER("Boss"), VICE("Vize"), MEMBER("Mitglied"), NONE("-");
@@ -101,7 +142,7 @@ public final class Teams {
             case 2 -> 1.25;
             case 3 -> 1.35;
             case 4 -> 1.50;
-            case 5, 6, 7 -> 2.0;
+            case 5, 6, 7, 8, 9, 10 -> 2.0;
             default -> 1.0;
         };
     }
@@ -125,6 +166,7 @@ public final class Teams {
         if (level == INTERACTION_LEVEL) lines.add("§7Neu: §fGebiet für Fremde sperrbar");
         if (level == SECOND_WARP_LEVEL) lines.add("§7Neu: §fzweiter Team-Warp");
         if (level == STRONG_HASTE_LEVEL) lines.add("§7Neu: §fEile II im eigenen Gebiet");
+        if (level == PHANTOM_LEVEL) lines.add("§7Neu: §fkeine Phantome im eigenen Gebiet");
         return lines;
     }
 
@@ -341,8 +383,11 @@ public final class Teams {
         return true;
     }
 
-    /** Case-insensitive: is the name used by another team already? */
+    /** Case-insensitive: is the name used by another team already? The titles of players alone are never free. */
     public static boolean nameTaken(@NotNull String name) {
+        for (Title title : Title.values()) {
+            if (title.label().equalsIgnoreCase(name) || title.key().equalsIgnoreCase(name)) return true;
+        }
         return Database.queryOne("SELECT 1 FROM teams WHERE lower(name) = lower(?)", row -> 1, name) != null;
     }
 

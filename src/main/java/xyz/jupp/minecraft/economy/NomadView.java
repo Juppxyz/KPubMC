@@ -16,6 +16,7 @@ import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.TeamCacheObject;
 import xyz.jupp.minecraft.database.TeamRepository;
+import xyz.jupp.minecraft.inventory.Items;
 import xyz.jupp.minecraft.inventory.MainThread;
 import xyz.jupp.minecraft.team.TeamCreateView;
 import xyz.jupp.minecraft.team.Teams;
@@ -110,7 +111,8 @@ public final class NomadView implements InventoryHolder {
             // Nomad only trades with teams: explain how to get into one instead of opening the menu
             player.sendMessage(Nomad.PREFIX + "Ich handle nur mit Teams, Fremder.");
             player.sendMessage(Nomad.PREFIX + "Gründe dein eigenes mit §a/team neu <Name> §7(ab Level "
-                    + Teams.CREATION_LEVEL + ", kostet " + Teams.CREATION_COST + " Schilling)§f,");
+                    + Teams.CREATION_LEVEL + ", kostet " + Items.format(Teams.CREATION_COST) + " Schilling)§f,");
+            player.sendMessage(Nomad.PREFIX + "zieh allein los mit §a/team allein §7(kostet " + Items.format(Teams.SOLO_COST) + " Schilling)§f,");
             player.sendMessage(Nomad.PREFIX + "oder lass dich von einem Team einladen §7(offene Einladungen: §a/einladungen§7)§f.");
             player.playSound(player.getLocation(), Sound.ENTITY_WANDERING_TRADER_NO, 1f, 1f);
             return;

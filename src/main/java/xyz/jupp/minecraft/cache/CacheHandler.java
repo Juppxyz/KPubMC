@@ -8,6 +8,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.database.TeamRepository;
+import xyz.jupp.minecraft.team.Teams;
 import xyz.jupp.minecraft.utils.AreaOptionsEnum;
 import xyz.jupp.minecraft.utils.Tasks;
 import xyz.jupp.minecraft.utils.Text;
@@ -97,15 +98,19 @@ public class CacheHandler {
     }
 
 
-    // blocking, called on a worker: founds the team (price included); the announcement is sent on the main thread
-    public TeamRepository.Founding createNewTeam(@NotNull Player player, @NotNull String teamName, @NotNull String teamColor, int price) {
-        TeamRepository.Founded founded = TeamRepository.createNewTeam(player, teamName, teamColor, price);
+    // blocking, called on a worker: founds the team (price included); the announcement is sent on the main thread.
+    // title: a player alone founds a team of one under it (name and colour are the title's), null for a team
+    public TeamRepository.Founding createNewTeam(@NotNull Player player, @NotNull String teamName, @NotNull String teamColor,
+                                                 @Nullable Teams.Title title, int price) {
+        TeamRepository.Founded founded = TeamRepository.createNewTeam(player, teamName, teamColor, title == null ? null : title.key(), price);
         if (founded.outcome() != TeamRepository.Founding.OK) return founded.outcome();
         // committed: nothing below may undo it, a failure only costs the announcement or the cache (fixed at the next login)
         try {
             TeamCache.forgetUnknownTeams();
             getPlayerInCache(player).teamChanged(founded.teamID());
-            Component announcement = Text.section(Main.getChatPrefix() + "§fDas Team " + teamColor + teamName + " §fwurde von §6" + player.getName() + " §fgegründet!");
+            Component announcement = Text.section(Main.getChatPrefix() + (title == null
+                    ? "§fDas Team " + teamColor + teamName + " §fwurde von §6" + player.getName() + " §fgegründet!"
+                    : "§6" + player.getName() + " §fzieht jetzt allein los, als " + teamColor + teamName + "§f."));
             Tasks.sync(() -> Bukkit.broadcast(announcement));
         } catch (IllegalPluginAccessException e) {
             // server stop: only the announcement is dropped

@@ -132,13 +132,13 @@ public class JoinQuitListener implements Listener {
     }
 
     /**
-     * Team colour plus §l for the owner and §o for vices, "§a" without a team.
+     * Team colour plus §l for the owner (not for a player alone) and §o for vices, "§a" without a team.
      * The join checks the vices first, the respawn the owner: ownerFirst keeps that order for a player listed as both.
      */
     static String teamPlayerName(@NotNull Player player, @Nullable TeamCacheObject team, boolean ownerFirst) {
         if (team == null) return "§a" + player.getName();
         String uuid = player.getUniqueId().toString();
-        boolean owner = uuid.equals(team.getTeamOwner());
+        boolean owner = uuid.equals(team.getTeamOwner()) && !team.isSolo();
         boolean vice = team.getTeamVices().contains(uuid);
         String role = owner && (ownerFirst || !vice) ? "§l" : vice ? "§o" : "";
         return team.getTeamColor() + role + player.getName();

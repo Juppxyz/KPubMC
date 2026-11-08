@@ -240,7 +240,8 @@ public final class TeamView implements InventoryHolder {
         Teams.Role role = Teams.role(team, viewer.getUniqueId());
         switch (page) {
             case TABS -> {
-                renderTabs();
+                // the overview has no tab row: its tiles lead to the tabs, they show the row to switch and come back
+                if (tab != Tab.OVERVIEW) renderTabs();
                 switch (tab) {
                     case OVERVIEW -> renderOverview(team, role);
                     case MEMBERS -> renderMembers(team, role);
@@ -274,10 +275,10 @@ public final class TeamView implements InventoryHolder {
         String colour = team.getTeamColor();
         set(SLOT_TEAM, Items.named(TeamCreateView.colourBanner(colour), colour + "§l" + team.getTeamName(), List.of(
                 "§7Level §f" + team.getLevel() + " §8· §f" + Items.format(state.points()) + " §7Team-Punkte",
-                "§7Deine Rolle: " + colour + role.label())), null);
+                team.isSolo() ? "§7Dein Titel: " + colour + team.getShortName() : "§7Deine Rolle: " + colour + role.label())), null);
         boolean dissolve = role == Teams.Role.OWNER && state.successor() == null;
-        set(SLOT_LEAVE, Items.named(dissolve ? Material.TNT : Material.DARK_OAK_DOOR, dissolve ? "§cTeam auflösen" : "§cTeam verlassen",
-                List.of()), () -> {
+        set(SLOT_LEAVE, Items.named(dissolve ? Material.TNT : Material.DARK_OAK_DOOR,
+                team.isSolo() ? "§cTitel ablegen" : dissolve ? "§cTeam auflösen" : "§cTeam verlassen", List.of()), () -> {
             page = Page.LEAVE;
             render();
         });
@@ -289,33 +290,42 @@ public final class TeamView implements InventoryHolder {
         boolean dissolve = role == Teams.Role.OWNER && state.successor() == null;
         List<String> lore = new ArrayList<>();
         if (dissolve) {
-            lore.add("§7Du bist allein: das Team wird aufgelöst.");
+            lore.add(team.isSolo() ? "§7Du bist dann wieder ohne Team." : "§7Du bist allein: das Team wird aufgelöst.");
             lore.add("§7Chunks, Warps und Beziehungen fallen weg,");
             lore.add("§7die Team-Kasse bekommst du §7(minus Steuer)§7.");
         } else if (role == Teams.Role.OWNER) {
             lore.add("§7Neuer Boss wird §f" + state.successor() + "§7.");
         }
-        String label = team.getTeamColor() + team.getTeamName();
-        inventory.setItem(SLOT_INFO, Items.named(dissolve ? Material.TNT : Material.DARK_OAK_DOOR,
-                (dissolve ? "§fWillst du " + label + " §fwirklich auflösen?" : "§fWillst du " + label + " §fwirklich verlassen?"), lore));
+        String label = team.getTeamColor() + (team.isSolo() ? team.getShortName() : team.getTeamName());
+        String question = team.isSolo() ? "§fWillst du den Titel " + label + " §fwirklich ablegen?"
+                : dissolve ? "§fWillst du " + label + " §fwirklich auflösen?" : "§fWillst du " + label + " §fwirklich verlassen?";
+        inventory.setItem(SLOT_INFO, Items.named(dissolve ? Material.TNT : Material.DARK_OAK_DOOR, question, lore));
         // what this page promised: someone may have joined (accepted an invitation) or left since the last load
         String shownSuccessor = state.successor();
-        set(20, Items.named(Material.RED_CONCRETE, dissolve ? "§c§lJa, auflösen" : "§c§lJa, verlassen", List.of()), () -> act(() -> leave(shownSuccessor)));
+        set(20, Items.named(Material.RED_CONCRETE, team.isSolo() ? "§c§lJa, ablegen" : dissolve ? "§c§lJa, auflösen" : "§c§lJa, verlassen",
+                List.of()), () -> act(() -> leave(shownSuccessor)));
         set(24, Items.named(Material.LIME_CONCRETE, "§a§lNein, zurück", List.of()), () -> backTo(Tab.OVERVIEW));
     }
 
+    // two rows of four tiles; the ones leading to a tab say so
     private void renderOverview(TeamCacheObject team, Teams.Role role) {
         String colour = team.getTeamColor();
+        boolean solo = team.isSolo();
         long online = state.members().stream().filter(member -> Bukkit.getPlayer(member.uuid()) != null).count();
         String boss = state.members().stream().filter(member -> member.role() == Teams.Role.OWNER).map(Member::name).findFirst().orElse("?");
         List<String> info = new ArrayList<>();
-        info.add("§7Boss: " + colour + boss);
-        info.add("§7Mitglieder: §f" + state.members().size() + " §7(" + online + " online)");
-        int partnerCount = Relations.of(teamID, Relations.Kind.PARTNER).size();
-        int warCount = Relations.of(teamID, Relations.Kind.WAR).size();
-        if (partnerCount + warCount > 0) info.add("§a✦ " + partnerCount + " Partner §8· §c⚔ " + warCount + (warCount == 1 ? " Krieg" : " Kriege"));
+        if (solo) {
+            info.add("§7Allein unterwegs als " + colour + team.getShortName());
+        } else {
+            info.add("§7Boss: " + colour + boss);
+            info.add("§7Mitglieder: §f" + state.members().size() + " §7(" + online + " online)");
+        }
         if (state.founded() != null) info.add("§7Gegründet: §f" + DATE.format(state.founded()));
-        set(20, Items.named(TeamCreateView.colourBanner(colour), colour + "§l" + team.getTeamName(), info), () -> show(Tab.MEMBERS));
+        if (!solo) {
+            info.add("");
+            info.add("§e» Klicken zu den Mitgliedern");
+        }
+        set(19, Items.named(TeamCreateView.colourBanner(colour), colour + "§l" + team.getTeamName(), info), solo ? null : () -> show(Tab.MEMBERS));
 
         int level = team.getLevel();
         List<String> levelLore = new ArrayList<>();
@@ -324,19 +334,21 @@ public final class TeamView implements InventoryHolder {
                 : "§7Nächstes Level: §f" + Items.format(Teams.upgradeCost(level)) + " Team-Punkte");
         levelLore.add("");
         levelLore.add("§e» Klicken: alle Level");
-        set(22, Items.named(Material.EXPERIENCE_BOTTLE, "§dLevel " + level, levelLore), () -> show(Tab.LEVEL));
+        set(21, Items.named(Material.EXPERIENCE_BOTTLE, "§dLevel " + level, levelLore), () -> show(Tab.LEVEL));
 
         List<String> pointsLore = new ArrayList<>();
         pointsLore.add("§7Diese Woche bei Nomad: §a+" + Items.format(state.weekPoints()));
         pointsLore.add(state.racePlace() > 0 ? "§7Wochen-Rennen: §fPlatz " + state.racePlace() : "§7Wochen-Rennen: §fnoch nichts geliefert");
         if (state.rankPlace() > 0) pointsLore.add("§7Rangliste: §fPlatz " + state.rankPlace() + " von " + state.teamCount());
-        set(24, Items.named(Material.GOLD_INGOT, "§6" + Items.format(state.points()) + " Team-Punkte", pointsLore), null);
+        set(23, Items.named(Material.GOLD_INGOT, "§6" + Items.format(state.points()) + " Team-Punkte", pointsLore), null);
 
-        set(29, Items.named(Material.GOLD_BLOCK, "§eTeam-Kasse: §f" + Items.format(state.treasury()) + " Schilling",
+        set(25, Items.named(Material.GOLD_BLOCK, "§eTeam-Kasse: §f" + Items.format(state.treasury()) + " Schilling",
                 List.of("", "§e» Klicken zur Kasse")), () -> show(Tab.TREASURY));
+
         int claimed = Teams.claimedChunks(teamID);
-        set(31, Items.named(Material.GRASS_BLOCK, "§aGebiet: §f" + claimed + " von " + Teams.chunkLimit(level) + " Chunks",
+        set(28, Items.named(Material.GRASS_BLOCK, "§aGebiet: §f" + claimed + " von " + Teams.chunkLimit(level) + " Chunks",
                 List.of("", "§e» Klicken zum Gebiet")), () -> show(Tab.AREA));
+
         List<String> warpLines = new ArrayList<>();
         for (int number = 1; number <= TeamWarps.COUNT; number++) {
             TeamWarps.Warp warp = TeamWarps.get(teamID, number);
@@ -345,16 +357,30 @@ public final class TeamView implements InventoryHolder {
                     : warp == null ? "nicht gesetzt" : worldLabel(warp.world())));
         }
         warpLines.add("§7Im §a/warp§7-Menü.");
-        set(33, Items.named(Material.ENDER_PEARL, "§5Team-Warps", warpLines), null);
+        set(30, Items.named(Material.ENDER_PEARL, "§5Team-Warps", warpLines), null);
+
+        int partnerCount = Relations.of(teamID, Relations.Kind.PARTNER).size();
+        int warCount = Relations.of(teamID, Relations.Kind.WAR).size();
+        int requests = Relations.incoming(teamID).size();
+        List<String> relationLore = new ArrayList<>();
+        relationLore.add("§a✦ " + partnerCount + " Partner §8· §c⚔ " + warCount + (warCount == 1 ? " Krieg" : " Kriege"));
+        if (requests > 0) relationLore.add("§e" + requests + (requests == 1 ? " offene Anfrage" : " offene Anfragen"));
+        relationLore.add("");
+        relationLore.add("§e» Klicken zu den Beziehungen");
+        set(32, Items.named(Material.SHIELD, "§fBeziehungen", relationLore), () -> show(Tab.RELATIONS));
 
         List<String> roleLore = new ArrayList<>();
-        switch (role) {
-            case OWNER -> roleLore.addAll(List.of("§7Du darfst alles: Rollen vergeben,", "§7Mitglieder entfernen, auszahlen,", "§7Chunks, Warp und Upgrades."));
-            case VICE -> roleLore.addAll(List.of("§7Du darfst einladen, Mitglieder entfernen,", "§7auszahlen, Chunks, Warp und Upgrades."));
-            default -> roleLore.addAll(List.of("§7Du kannst einzahlen und bei Nomad", "§7Punkte für dein Team sammeln."));
+        if (solo) {
+            roleLore.addAll(List.of("§7Du entscheidest alles allein:", "§7Kasse, Chunks, Warp und Upgrades."));
+        } else {
+            switch (role) {
+                case OWNER -> roleLore.addAll(List.of("§7Du darfst alles: Rollen vergeben,", "§7Mitglieder entfernen, auszahlen,", "§7Chunks, Warp und Upgrades."));
+                case VICE -> roleLore.addAll(List.of("§7Du darfst einladen, Mitglieder entfernen,", "§7auszahlen, Chunks, Warp und Upgrades."));
+                default -> roleLore.addAll(List.of("§7Du kannst einzahlen und bei Nomad", "§7Punkte für dein Team sammeln."));
+            }
         }
-        set(40, Items.named(role == Teams.Role.OWNER ? Material.DIAMOND_SWORD : Material.GOLDEN_SWORD,
-                "§fDeine Rolle: " + colour + role.label(), roleLore), null);
+        set(34, Items.named(role == Teams.Role.OWNER ? Material.DIAMOND_SWORD : Material.GOLDEN_SWORD,
+                solo ? "§fDein Titel: " + colour + team.getShortName() : "§fDeine Rolle: " + colour + role.label(), roleLore), null);
     }
 
     private void renderMembers(TeamCacheObject team, Teams.Role role) {
@@ -377,7 +403,12 @@ public final class TeamView implements InventoryHolder {
         if (members.size() > MEMBER_SLOTS.length) {
             inventory.setItem(36, Items.named(Material.PAPER, "§7… und " + (members.size() - MEMBER_SLOTS.length) + " weitere", List.of()));
         }
-        if (role.canManage()) {
+        if (team.isSolo()) {
+            inventory.setItem(40, Items.named(Material.GRAY_DYE, "§7Allein unterwegs", List.of(
+                    "§7Als " + team.getTeamColor() + team.getShortName() + " §7lädst du niemanden ein.",
+                    "§7Für ein Team: Titel ablegen und",
+                    "§7mit §a/team neu <Name> §7gründen.")));
+        } else if (role.canManage()) {
             set(40, Items.named(Material.WRITABLE_BOOK, "§aSpieler einladen", List.of(
                     "§7Lade Spieler ohne Team ein,",
                     "§7sie nehmen im Chat an.",
@@ -598,11 +629,12 @@ public final class TeamView implements InventoryHolder {
             boolean reached = i <= level;
             List<String> lore = new ArrayList<>(Teams.benefits(i));
             if (i > 1) lore.add("§7Kosten: " + Items.format(Teams.upgradeCost(i - 1)) + " Team-Punkte");
-            inventory.setItem(19 + i, Items.glow(Items.named(reached ? Material.EXPERIENCE_BOTTLE : Material.GRAY_DYE,
+            // five per row
+            inventory.setItem((i <= 5 ? 20 : 29) + (i - 1) % 5, Items.glow(Items.named(reached ? Material.EXPERIENCE_BOTTLE : Material.GRAY_DYE,
                     (reached ? team.getTeamColor() : "§7") + "Level " + i + (i == level ? " §a(jetzt)" : ""), lore), i == level));
         }
         if (level >= Teams.MAX_LEVEL) {
-            inventory.setItem(40, Items.named(Material.NETHER_STAR, "§6Höchstes Level erreicht", List.of()));
+            inventory.setItem(39, Items.named(Material.NETHER_STAR, "§6Höchstes Level erreicht", List.of()));
         } else {
             int cost = Teams.upgradeCost(level);
             List<String> lore = new ArrayList<>();
@@ -614,10 +646,10 @@ public final class TeamView implements InventoryHolder {
             } else {
                 lore.add("§7Upgraden: Boss und Vize");
             }
-            set(40, Items.named(role.canManage() ? Material.NETHER_STAR : Material.GRAY_DYE, "§a§lAuf Level " + (level + 1) + " upgraden", lore),
+            set(39, Items.named(role.canManage() ? Material.NETHER_STAR : Material.GRAY_DYE, "§a§lAuf Level " + (level + 1) + " upgraden", lore),
                     role.canManage() ? () -> act(this::upgrade) : null);
         }
-        inventory.setItem(31, Items.named(Material.SKELETON_SKULL, "§fVorsicht", List.of(
+        inventory.setItem(41, Items.named(Material.SKELETON_SKULL, "§fVorsicht", List.of(
                 "§7Stirbt ein Mitglied durch einen Spieler,",
                 "§7kostet das " + Teams.DEATH_COST + " Team-Punkte. Reichen sie nicht,",
                 "§7fällt das Team eine Stufe und bekommt",
@@ -1062,6 +1094,7 @@ public final class TeamView implements InventoryHolder {
         TeamCacheObject team = team();
         Player target = Bukkit.getPlayer(targetID);
         if (team == null || !Teams.role(team, viewer.getUniqueId()).canManage()) return Feedback.fail("Einladen dürfen nur Boss und Vize.");
+        if (team.isSolo()) return Feedback.fail("Allein unterwegs lädst du niemanden ein.");
         if (target == null) return Feedback.fail("Der Spieler ist nicht mehr online.");
         if (CacheHandler.getInstance().getPlayerInCache(target).getTeamID() != null) return Feedback.fail("Der Spieler ist schon in einem Team.");
         String name = target.getName();
@@ -1104,11 +1137,14 @@ public final class TeamView implements InventoryHolder {
         if (handover == null) return Feedback.fail("Das ging gerade nicht, versuch es gleich nochmal.");
         if (handover.outdated()) return Feedback.fail("Im Team hat sich gerade etwas geändert, schau es dir nochmal an.");
         if (handover.dissolved()) {
-            return Feedback.ok("Das Team " + label + " §fist aufgelöst." + (handover.paid() > 0
+            String done = team.isSolo() ? "Du hast den Titel " + team.getTeamColor() + team.getShortName() + " §fabgelegt."
+                    : "Das Team " + label + " §fist aufgelöst.";
+            return Feedback.ok(done + (handover.paid() > 0
                     ? " §7Aus der Kasse: §a+" + Items.format(handover.paid()) + " Schilling §7(Steuer " + Items.format(handover.tax()) + ")" : ""), () -> {
                 viewer.closeInventory();
                 if (viewer.isOnline()) JailHandler.refreshPlayerName(viewer, CacheHandler.getInstance().getPlayerInCache(viewer));
-                broadcast("§7Das Team " + label + " §7wurde aufgelöst.");
+                // a player alone giving up the title is no news for everyone
+                if (!team.isSolo()) broadcast("§7Das Team " + label + " §7wurde aufgelöst.");
             });
         }
         UUID newOwner = handover.newOwner();

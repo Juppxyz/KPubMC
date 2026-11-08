@@ -447,7 +447,9 @@ public final class Database {
                 paid_at     TIMESTAMPTZ,
                 wanted_at   TIMESTAMPTZ
             )""",
-            "CREATE INDEX IF NOT EXISTS bauamt_damage_open_idx ON bauamt_damage (player_uuid) WHERE paid_at IS NULL"
+            "CREATE INDEX IF NOT EXISTS bauamt_damage_open_idx ON bauamt_damage (player_uuid) WHERE paid_at IS NULL",
+            // a player alone: a team of one under a title (Teams.Title), null for a real team
+            "ALTER TABLE teams ADD COLUMN IF NOT EXISTS title TEXT CHECK (title IN ('soeldner', 'haendler', 'vagabund'))"
     );
 
     private static volatile HikariDataSource dataSource;

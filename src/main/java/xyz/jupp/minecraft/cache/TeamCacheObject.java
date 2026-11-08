@@ -6,6 +6,7 @@ import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.database.TeamRepository;
 import xyz.jupp.minecraft.database.TeamRepository.TeamData;
 import xyz.jupp.minecraft.database.TeamRepository.TeamMember;
+import xyz.jupp.minecraft.team.Teams;
 import xyz.jupp.minecraft.utils.AreaOptionsEnum;
 
 import java.util.List;
@@ -17,6 +18,7 @@ public class TeamCacheObject {
     private final String            teamID;
     private final String            teamName;
     private final String            teamColor;
+    private final @Nullable Teams.Title title;
     private final List<TeamMember>  membersList;
     private volatile int            level;
     private volatile boolean        zoneOptionPvP;
@@ -33,6 +35,7 @@ public class TeamCacheObject {
         this.teamID = data.teamID();
         this.teamName = data.name();
         this.teamColor = data.color();
+        this.title = Teams.Title.of(data.title());
         this.teamOwner = data.owner().toString();
         this.membersList = new CopyOnWriteArrayList<>(data.members());
         this.level = data.level();
@@ -132,8 +135,22 @@ public class TeamCacheObject {
         return teamVices;
     }
 
+    // a player alone: the title plus the player's name, so two Söldner differ in lists, areas and relations
     public String getTeamName() {
-        return teamName;
+        if (title == null) return teamName;
+        String owner = teamOwner;
+        return membersList.stream().filter(member -> member.uuid().toString().equals(owner))
+                .map(member -> title.label() + " " + member.nickname()).findFirst().orElse(title.label());
+    }
+
+    /** The name in front of a member's own name (chat): the title alone for a player alone. */
+    public String getShortName() {
+        return title == null ? teamName : title.label();
+    }
+
+    /** A team of one under a title (/team allein): nobody can be invited. */
+    public boolean isSolo() {
+        return title != null;
     }
 
     public String getTeamOwner() {

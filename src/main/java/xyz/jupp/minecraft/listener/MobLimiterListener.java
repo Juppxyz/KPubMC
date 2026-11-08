@@ -1,5 +1,6 @@
 package xyz.jupp.minecraft.listener;
 
+import com.destroystokyo.paper.event.entity.PhantomPreSpawnEvent;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.entity.EnderDragon;
@@ -21,6 +22,7 @@ import org.bukkit.inventory.EntityEquipment;
 import org.bukkit.inventory.EquipmentSlot;
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.cache.TeamCacheObject;
+import xyz.jupp.minecraft.team.Teams;
 import xyz.jupp.minecraft.utils.ClaimedAreaHelper;
 import xyz.jupp.minecraft.utils.Locations;
 
@@ -47,6 +49,20 @@ public class MobLimiterListener implements Listener {
 
     private static boolean isProtected(Location location) {
         return isProtected(ClaimedAreaHelper.getClaimingTeam(location));
+    }
+
+    private static boolean isPhantomFree(@Nullable Location location) {
+        TeamCacheObject claimingTeam = location == null ? null : ClaimedAreaHelper.getClaimingTeam(location);
+        return claimingTeam != null && claimingTeam.getLevel() >= Teams.PHANTOM_LEVEL;
+    }
+
+    // from PHANTOM_LEVEL on no phantoms in a team's area: neither above it nor for a sleepless player standing in it
+    @EventHandler(ignoreCancelled = true)
+    public void onPhantomPreSpawn(PhantomPreSpawnEvent event) {
+        Entity sleepless = event.getSpawningEntity();
+        if (isPhantomFree(event.getSpawnLocation()) || (sleepless != null && isPhantomFree(sleepless.getLocation()))) {
+            event.setCancelled(true);
+        }
     }
 
     @EventHandler

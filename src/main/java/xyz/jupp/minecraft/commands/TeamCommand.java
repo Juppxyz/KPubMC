@@ -9,13 +9,15 @@ import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.database.PlayerRepository;
+import xyz.jupp.minecraft.inventory.Items;
 import xyz.jupp.minecraft.team.TeamCreateView;
 import xyz.jupp.minecraft.team.TeamInvites;
 import xyz.jupp.minecraft.team.TeamView;
 import xyz.jupp.minecraft.team.Teams;
 import xyz.jupp.minecraft.utils.Tasks;
 
-// /team opens the team menu, /team neu <Name> founds a team, /team annehmen|ablehnen <Team> answers an invitation (chat buttons)
+// /team opens the team menu, /team neu <Name> founds a team, /team allein goes alone under a title,
+// /team annehmen|ablehnen <Team> answers an invitation (chat buttons)
 public class TeamCommand implements CommandExecutor {
 
     private record Check(int money, boolean taken) {}
@@ -62,10 +64,31 @@ public class TeamCommand implements CommandExecutor {
             return true;
         }
 
+        if (args.length >= 1 && (args[0].equalsIgnoreCase("allein") || args[0].equalsIgnoreCase("solo"))) {
+            if (inTeam) {
+                fail(player, "Du bist schon in einem Team.");
+            } else if (player.getLevel() < Teams.CREATION_LEVEL) {
+                fail(player, "Du brauchst §a" + Teams.CREATION_LEVEL + " §fLevel, um allein loszuziehen §7(sie werden nicht abgezogen)§f.");
+            } else {
+                Tasks.supplyAsync(() -> PlayerRepository.getMoney(player.getUniqueId()), money -> {
+                    if (!player.isOnline()) return;
+                    if (money < Teams.SOLO_COST) {
+                        fail(player, "Allein loszuziehen kostet " + Main.getCurrencyName(Teams.SOLO_COST) + "§f.");
+                    } else {
+                        TeamCreateView.openSolo(player);
+                    }
+                });
+            }
+            return true;
+        }
+
         if (!inTeam) {
             player.sendMessage(Main.getChatPrefix() + "Du bist noch in keinem " + Main.getTeamName() + "§f.");
-            player.sendMessage(Main.getChatPrefix() + "Gründe eins mit §a/team neu <Name> §7(ab Level " + Teams.CREATION_LEVEL
-                    + ", " + Teams.CREATION_COST + " Schilling)§f, oder lass dich von einem Team einladen §7(offene Einladungen: §a/einladungen§7)§f.");
+            player.sendMessage(Main.getChatPrefix() + "Gründe eins mit §a/team neu <Name> §7(" + Items.format(Teams.CREATION_COST) + " Schilling)§f,");
+            player.sendMessage(Main.getChatPrefix() + "zieh allein los mit §a/team allein §7(Söldner, Händler oder Vagabund, "
+                    + Items.format(Teams.SOLO_COST) + " Schilling)§f,");
+            player.sendMessage(Main.getChatPrefix() + "oder lass dich von einem Team einladen §7(offene Einladungen: §a/einladungen§7)§f.");
+            player.sendMessage(Main.getChatPrefix() + "§7Gründen geht ab Level " + Teams.CREATION_LEVEL + ".");
             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 1f);
             return true;
         }

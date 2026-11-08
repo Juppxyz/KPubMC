@@ -141,7 +141,8 @@ public final class JailHandler {
         }
 
         String uuid = player.getUniqueId().toString();
-        if (team.getTeamOwner().equals(uuid)) {
+        // a player alone is nobody's boss: just the title's colour
+        if (team.getTeamOwner().equals(uuid) && !team.isSolo()) {
             return team.getTeamColor() + "§l" + baseName;
         }
         if (team.getTeamVices().contains(uuid)) {

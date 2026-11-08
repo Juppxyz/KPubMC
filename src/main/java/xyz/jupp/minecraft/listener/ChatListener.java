@@ -46,6 +46,11 @@ public class ChatListener implements Listener {
                 return;
             }
 
+            if (team.isSolo()) {
+                deny(event, player, "§fAllein unterwegs gibt es keinen TeamChat.");
+                return;
+            }
+
             if (team.getLevel() < Teams.CHAT_LEVEL) {
                 deny(event, player, "§fFür den TeamChat muss dein Team mindestens Level §a" + Teams.CHAT_LEVEL + " §fsein.");
                 return;
@@ -70,7 +75,7 @@ public class ChatListener implements Listener {
             prefixLegacy = Text.legacy(player.playerListName()) + "§8» §f";
         } else {
             prefixLegacy = String.format("§8[%s%s§8] %s%s§8» §f",
-                    team.getTeamColor(), team.getTeamName(), team.getTeamColor(), player.getName());
+                    team.getTeamColor(), team.getShortName(), team.getTeamColor(), player.getName());
         }
         final Component prefix = Text.section(time + prefixLegacy);
         event.message(LEGACY_AMP.deserialize(plain));
