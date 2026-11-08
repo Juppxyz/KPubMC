@@ -29,6 +29,8 @@ import xyz.jupp.minecraft.economy.Treasury;
 import xyz.jupp.minecraft.economy.Vault;
 import xyz.jupp.minecraft.jail.BountyHeadListener;
 import xyz.jupp.minecraft.jail.JailCells;
+import xyz.jupp.minecraft.jail.PrisonListener;
+import xyz.jupp.minecraft.jail.WantedBoard;
 import xyz.jupp.minecraft.listener.*;
 import xyz.jupp.minecraft.utils.*;
 
@@ -81,7 +83,6 @@ public final class Main extends JavaPlugin {
         this.getCommand("dummy").setExecutor(new CreateDummyEntityCommand());
         this.getCommand("bestrafung").setExecutor(new JailCommand());
         this.getCommand("wanted").setExecutor(new WantedCommand());
-        this.getCommand("origin").setExecutor(new NullpointCommand());
         this.getCommand("removechunk").setExecutor(new RemoveChunkCommand());
         this.getCommand("staatskasse").setExecutor(new TreasuryCommand());
         this.getCommand("shopadmin").setExecutor(new ShopAdminCommand());
@@ -118,6 +119,7 @@ public final class Main extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new DntLootListener(), this);
         Bukkit.getPluginManager().registerEvents(new BauamtListener(), this);
         Bukkit.getPluginManager().registerEvents(new BountyHeadListener(), this);
+        Bukkit.getPluginManager().registerEvents(new PrisonListener(), this);
 
         // afk
         Bukkit.getPluginManager().registerEvents(new AfkListener(), this);
@@ -133,6 +135,7 @@ public final class Main extends JavaPlugin {
         PlayerTracker.startTask();
         CombatLock.tickTask().runTaskTimer(this, 20L, 20L);
         Bauamt.startTask();
+        WantedBoard.startTask();
     }
 
 
@@ -174,7 +177,8 @@ public final class Main extends JavaPlugin {
         int mapAreas = Locations.load();
         Logger.console("loaded " + mapAreas + " ready spawn areas and arenas");
         int jailCells = JailCells.load();
-        Logger.console("loaded " + jailCells + " ready jail cells");
+        int boardSpots = WantedBoard.load();
+        Logger.console("loaded " + jailCells + " ready jail cells, " + boardSpots + " wanted board spots");
         Logger.console("loaded " + Market.all().size() + " market items, " + Market.dailyOffers().size() + " daily offers, "
                 + Bauamt.templates().size() + " building templates, " + Bauamt.builds().size() + " builds");
         registerCommands();

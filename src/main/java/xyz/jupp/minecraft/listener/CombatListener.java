@@ -11,6 +11,7 @@ import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.PlayerQuitEvent;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.utils.CombatLock;
+import xyz.jupp.minecraft.utils.JailHandler;
 import xyz.jupp.minecraft.utils.Text;
 
 import java.util.HashSet;
@@ -37,6 +38,8 @@ public class CombatListener implements Listener {
         // own arrows or TNT are no fight, neither are snowballs and eggs (no damage)
         if (attacker == null || attacker == victim || !attacker.isOnline() || event.getDamage() <= 0) return;
         if (!canFight(victim) || !canFight(attacker)) return;
+        // a caught prisoner is out of every fight (PrisonListener cancels their damage, this is the safety net)
+        if (JailHandler.isCaughtPrisoner(victim) || JailHandler.isCaughtPrisoner(attacker)) return;
 
         CombatLock.tag(victim, attacker);
         CombatLock.tag(attacker, victim);
@@ -57,6 +60,8 @@ public class CombatListener implements Listener {
         Player opponent = CombatLock.lastOpponent(player);
         CombatLock.untag(player.getUniqueId());
         if (!inCombat || player.isDead()) return;
+        // a caught prisoner cannot die in the cell, not even by a fight tagged just before the arrest
+        if (JailHandler.isCaughtPrisoner(player)) return;
         // a kick (AFK, admin, server stop) is not the player's choice; a lost connection counts, a cable can be pulled on purpose
         PlayerQuitEvent.QuitReason reason = event.getReason();
         if (reason != PlayerQuitEvent.QuitReason.DISCONNECTED && reason != PlayerQuitEvent.QuitReason.TIMED_OUT) return;

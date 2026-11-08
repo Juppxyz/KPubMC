@@ -46,9 +46,6 @@ commands:
   dummy:
   bestrafung:
   wanted:
-  origin:
-    aliases: [ursprung]
-    usage: /<command>
   removechunk:
   staatskasse:
     aliases: [kasse]

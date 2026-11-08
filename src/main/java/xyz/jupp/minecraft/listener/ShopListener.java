@@ -16,6 +16,7 @@ import xyz.jupp.minecraft.economy.HondoView;
 import xyz.jupp.minecraft.economy.NomadView;
 import xyz.jupp.minecraft.economy.ShopView;
 import xyz.jupp.minecraft.jail.Sheriff;
+import xyz.jupp.minecraft.utils.JailHandler;
 import xyz.jupp.minecraft.utils.Npcs;
 import xyz.jupp.minecraft.utils.Text;
 
@@ -26,6 +27,8 @@ public class ShopListener implements Listener {
     public void onInteractWithShopVillager(PlayerInteractEntityEvent event) {
         Entity interactedEntity = event.getRightClicked();
         EntityType entityType = interactedEntity.getType();
+        // this handler runs for cancelled clicks too (spawn protection cancels them), so the prison lock is checked here
+        if (JailHandler.isCaughtPrisoner(event.getPlayer())) return;
 
         if (entityType == EntityType.VILLAGER) {
             String villagerName = Npcs.visibleName(interactedEntity);

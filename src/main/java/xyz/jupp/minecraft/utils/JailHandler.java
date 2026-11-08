@@ -46,6 +46,12 @@ public final class JailHandler {
         return cache(player).isJail();
     }
 
+    /** In jail and caught by a bounty hunter: locked in the cell without any interaction (PrisonListener). */
+    public static boolean isCaughtPrisoner(@NotNull Player player) {
+        PlayerCacheObject pco = cache(player);
+        return pco.isJail() && pco.isCaught();
+    }
+
 
     public static void setPlayerWanted(@NotNull Player player, boolean wanted) {
         PlayerCacheObject pco = cache(player);

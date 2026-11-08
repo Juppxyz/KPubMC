@@ -53,7 +53,7 @@ public class HelpCommand implements CommandExecutor {
             player.sendMessage("§8§l» §a/createbauamt §8- §fErstellt den Bauamt Villager.");
             player.sendMessage("§8§l» §a/createsheriff §8- §fErstellt den Sheriff (nimmt Köpfe von Gesuchten an).");
             player.sendMessage("§8§l» §a/bauamt §8- §fVerwaltet die Bauvorlagen der Bauförderung.");
-            player.sendMessage("§8§l» §a/bestrafung §8- §fGefängnis, Fahndung und Zellen §7(/bestrafung zelle, /bestrafung zellen)");
+            player.sendMessage("§8§l» §a/bestrafung §8- §fGefängnis, Fahndung, Zellen und Gesucht-Tafel §7(/bestrafung zelle, zellen, tafel)");
             player.sendMessage("§8§l» §a/ort §8- §fSpawnpunkt, Spawnbereiche und Arena der Karte §7(/ort liste)");
         }
     }

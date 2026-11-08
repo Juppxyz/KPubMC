@@ -21,6 +21,7 @@ import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.inventory.MainThread;
+import xyz.jupp.minecraft.utils.JailHandler;
 import xyz.jupp.minecraft.utils.Logger;
 import xyz.jupp.minecraft.utils.Tasks;
 import xyz.jupp.minecraft.utils.Text;
@@ -61,6 +62,8 @@ public class CreateLocalShopListener implements Listener {
         if (!SHOP_TITLE.equals(firstLine)) return;
 
         Player player = event.getPlayer();
+        // runs for cancelled clicks too (spawn protection), so a caught prisoner is turned away here
+        if (JailHandler.isCaughtPrisoner(player)) return;
         String secondLine = line(sign, 1);
         String shieldPlayerName = "§6" + player.getName();
 
