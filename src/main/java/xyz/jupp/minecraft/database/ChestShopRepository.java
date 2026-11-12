@@ -41,6 +41,9 @@ public final class ChestShopRepository {
     /** The goods went to the buyer: the seller gets the money, the sale is logged. */
     public static void sold(@NotNull UUID seller, @NotNull UUID buyer, @NotNull Material material, int quantity, int price) {
         Database.inTransaction(connection -> {
+            // the shop stands in the world, the owner's account may not exist (yet) after a season reset: created here,
+            // so the money is not lost
+            Database.update(connection, "INSERT INTO players (uuid) VALUES (?) ON CONFLICT (uuid) DO NOTHING", seller);
             Database.update(connection, "UPDATE players SET money = money + ? WHERE uuid = ?", price, seller);
             BankLog.add(connection, seller, SALE, price, buyer.toString());
             Database.update(connection, "INSERT INTO chest_shop_sales (seller_uuid, buyer_uuid, material, quantity, price) VALUES (?, ?, ?, ?, ?)",

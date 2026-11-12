@@ -54,6 +54,8 @@ commands:
   removechunk:
   staatskasse:
     aliases: [kasse]
+  saisonreset:
+    usage: /<command> [bestätigen|abbrechen]
   shopadmin:
   bauamt:
   createbauamt:

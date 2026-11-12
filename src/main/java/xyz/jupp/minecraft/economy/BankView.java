@@ -631,7 +631,9 @@ public final class BankView implements InventoryHolder {
         // taken right away on the main thread, so the same notes cannot be paid in twice
         long amount = Cash.takeAll(player, true);
         if (amount <= 0) {
-            fail(player, "§fDu hast kein Bargeld dabei.");
+            fail(player, Cash.hasOldSeason(player)
+                    ? "§fDeine Scheine sind aus der letzten Saison und nichts mehr wert."
+                    : "§fDu hast kein Bargeld dabei.");
             return;
         }
         // the notes leave the player file soon, not at the next autosave (a hard crash would hand them back)

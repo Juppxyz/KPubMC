@@ -17,7 +17,9 @@ import xyz.jupp.minecraft.cache.WarpCache;
 import xyz.jupp.minecraft.commands.*;
 import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.database.Database;
+import xyz.jupp.minecraft.database.SeasonReset;
 import xyz.jupp.minecraft.economy.Bank;
+import xyz.jupp.minecraft.economy.Cash;
 import xyz.jupp.minecraft.economy.Bankruptcy;
 import xyz.jupp.minecraft.inventory.MainThread;
 import xyz.jupp.minecraft.inventory.WarpView;
@@ -93,6 +95,9 @@ public final class Main extends JavaPlugin {
         this.getCommand("wanted").setExecutor(new WantedCommand());
         this.getCommand("removechunk").setExecutor(new RemoveChunkCommand());
         this.getCommand("staatskasse").setExecutor(new TreasuryCommand());
+        SeasonResetCommand seasonReset = new SeasonResetCommand();
+        this.getCommand("saisonreset").setExecutor(seasonReset);
+        this.getCommand("saisonreset").setTabCompleter(seasonReset);
         this.getCommand("shopadmin").setExecutor(new ShopAdminCommand());
         this.getCommand("bauamt").setExecutor(new BauamtCommand());
         this.getCommand("createbauamt").setExecutor(new CreateBauamtCommand());
@@ -166,6 +171,10 @@ public final class Main extends JavaPlugin {
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
+        // a season reset marked with /saisonreset runs before anything is loaded
+        String backup = SeasonReset.runIfPending();
+        if (backup != null) Logger.console("season reset done, backup in schema " + backup);
+        Cash.load();
         Logger.console("init warps..");
         int warps = WarpCache.getInstance().load();
         int claimedChunks = ChunkCache.getInstance().load();
