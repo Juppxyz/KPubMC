@@ -56,7 +56,7 @@ public final class HondoRepository {
         }
     }
 
-    /** Result of a trade. net/tax: the booked (or current) price, input: the pieces an exchange needs. */
+    /** Result of a trade. net/tax: the booked (or current) price; input: unused since the exchanges are gone (0). */
     public record Result(Outcome outcome, int net, int tax, int input, int levelBefore, @Nullable Friendship friendship) {
 
         static Result of(Outcome outcome) {
@@ -168,43 +168,6 @@ public final class HondoRepository {
             Treasury.committed(result.tax());
             changed.forEach(Market::update);
         }
-        return result;
-    }
-
-    /**
-     * Exchanges items (the caller has already taken expectedInput pieces of the exchange's give material from the player).
-     * If the needed amount changed meanwhile, nothing is booked and the caller gives the items back.
-     */
-    public static Result exchange(@NotNull UUID player, int index, int expectedInput) {
-        if (index < 0 || index >= Hondo.EXCHANGES.size()) return Result.of(Outcome.UNAVAILABLE);
-        Hondo.Exchange exchange = Hondo.EXCHANGES.get(index);
-        Result result = Database.inTransaction(connection -> {
-            // both rows in material order (like MarketRepository.decayDemand), so nothing waits for each other in a circle
-            boolean giveFirst = exchange.give().name().compareTo(exchange.get().name()) < 0;
-            MarketItem first = MarketRepository.lock(connection, giveFirst ? exchange.give() : exchange.get());
-            MarketItem second = MarketRepository.lock(connection, giveFirst ? exchange.get() : exchange.give());
-            MarketItem give = giveFirst ? first : second;
-            MarketItem get = giveFirst ? second : first;
-            if (give == null || get == null || !EndAccess.isAvailable(get.material())) return Result.of(Outcome.UNAVAILABLE);
-            Friend friend = lockFriend(connection, player);
-            int level = Hondo.level(friend.points());
-
-            int input = Hondo.exchangeInput(give, get, exchange.amount(), Hondo.fee(level));
-            if (input == 0) return Result.of(Outcome.UNAVAILABLE);
-            if (input != expectedInput) return new Result(Outcome.PRICE_CHANGED, 0, 0, input, level, null);
-            if (receivedToday(connection, player, get.material(), "EXCHANGE") + exchange.amount() > Hondo.EMERALDS_PER_DAY) {
-                return new Result(Outcome.DAILY_LIMIT, 0, 0, input, level, null);
-            }
-
-            // fixed rates: an exchange moves no market (it neither floods the given good nor makes emeralds dearer)
-            int value = (int) Math.round((double) get.basePrice() / get.amount() * exchange.amount());
-            int given = (int) Math.floor(Hondo.exchangeValue(give) * input);
-            MarketRepository.logTrade(connection, player, give.material(), "SELL", input, given, 0, false);
-            MarketRepository.logTrade(connection, player, get.material(), "BUY", exchange.amount(), value, 0, false);
-            Friendship after = recordTrade(connection, player, friend, "EXCHANGE", get.material(), exchange.amount(),
-                    give.material(), input, value);
-            return new Result(Outcome.OK, value, 0, input, level, after);
-        });
         return result;
     }
 

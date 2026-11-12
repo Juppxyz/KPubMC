@@ -10,17 +10,13 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Hondo, the jeweler: sells jewels, exchanges them for emeralds and rewards regular customers.
+ * Hondo, the jeweler: sells jewels and rewards regular customers (no exchanges since 2026-11-12, the owner removed
+ * them: they gave too little for the effort).
  * <p>
  * Selling: the shop's price curve per piece (dearer the more is bought), never below {@link #PRICE_FLOOR} of the base
  * price and never below the most the shop can ever pay for it (plus a margin), so buying here and selling in the
  * shop never pays off. Netherite at most {@link #NETHERITE_PER_DAY} pieces per player and day.
- * <p>
- * Exchanges: fixed rates, the same every time. The player's pieces count with what the shop pays for them at a normal
- * market (base price * sell ratio, not the price of a flooded market), the emeralds with Hondo's normal price, plus
- * Hondo's fee. Only into emeralds: the shop does not buy them, so an exchange never turns cheap goods into money; at
- * most {@link #EMERALDS_PER_DAY} emeralds per player and day.
- * The friendship bonus only lowers the discount side (sale discount, exchange fee), the floors always hold.
+ * The friendship bonus only lowers the sale price (discount), the floors always hold.
  */
 public final class Hondo {
 
@@ -28,23 +24,11 @@ public final class Hondo {
 
     public static final String PREFIX = Main.getJewelerVillagerName() + " §7» §f";
 
-    /* goods, exchanges and friendship offers */
+    /* goods and friendship offers */
 
     public static final List<Material> GOODS = List.of(Material.EMERALD, Material.GOLD_INGOT, Material.DIAMOND,
             Material.NETHERITE_INGOT, Material.AMETHYST_SHARD, Material.RESIN_CLUMP, Material.LAPIS_LAZULI);
 
-    /** The player gives pieces of {@code give} (computed from the prices) and gets {@code amount} pieces of {@code get}. */
-    public record Exchange(Material give, Material get, int amount) {}
-
-    public static final List<Exchange> EXCHANGES = List.of(
-            new Exchange(Material.GOLD_INGOT, Material.EMERALD, 4),
-            new Exchange(Material.DIAMOND, Material.EMERALD, 4),
-            new Exchange(Material.LAPIS_LAZULI, Material.EMERALD, 4),
-            new Exchange(Material.AMETHYST_SHARD, Material.EMERALD, 4),
-            new Exchange(Material.RESIN_CLUMP, Material.EMERALD, 4));
-
-    /** Emeralds a player gets by exchanges per day. */
-    public static final int EMERALDS_PER_DAY = 64;
     /** Netherite a player gets from Hondo per day (bought or as a friendship offer). */
     public static final int NETHERITE_PER_DAY = 2;
     /** Hondo never sells below this share of the base price, however many were sold to the shop. */
@@ -72,18 +56,13 @@ public final class Hondo {
             Map.entry(Material.AMETHYST_SHARD, "§dAmethystsplitter"),
             Map.entry(Material.RESIN_CLUMP, "§6Harzklumpen"),
             Map.entry(Material.LAPIS_LAZULI, "§9Lapislazuli"),
-            Map.entry(Material.IRON_INGOT, "§7Eisenbarren"),
             Map.entry(Material.TOTEM_OF_UNDYING, "§eTotem der Unsterblichkeit"),
             Map.entry(Material.ENCHANTED_GOLDEN_APPLE, "§dVerzauberter Goldener Apfel"));
 
     static final TaxClass TAX_CLASS = TaxClass.LUXURY;
     // Hondo's lowest price lies this much above the most the shop could ever pay
     static final double FLOOR_MARGIN = 1.1;
-    static final double BASE_FEE = 0.15;
-    static final double FEE_STEP = 0.02;
     static final double DISCOUNT_STEP = 0.02;
-    // an exchange asks for at most 9 stacks
-    static final int MAX_EXCHANGE_INPUT = 576;
     public static final int BULK = 8;
 
     /** Pieces a right click buys: BULK, netherite only up to its daily limit. */
@@ -128,10 +107,6 @@ public final class Hondo {
         return level * DISCOUNT_STEP;
     }
 
-    public static double fee(int level) {
-        return BASE_FEE - level * FEE_STEP;
-    }
-
     static double pointsForTrade(int value, int tradesToday) {
         return value / SCHILLING_PER_POINT + (tradesToday < BONUS_TRADES_PER_DAY ? 1 : 0);
     }
@@ -171,25 +146,6 @@ public final class Hondo {
         if (!item.sellable()) return 0;
         long maxPerBundle = Math.round(item.basePrice() * item.sellRatio());
         return (int) Math.ceil(units * (double) maxPerBundle * FLOOR_MARGIN / item.amount());
-    }
-
-    /** What one piece counts for in an exchange: what the shop pays for it at a normal market, 0 if it buys none. */
-    static double exchangeValue(@NotNull MarketItem item) {
-        if (!item.sellable()) return 0;
-        return Math.round(item.basePrice() * item.sellRatio()) / (double) item.amount();
-    }
-
-    /**
-     * Pieces of {@code give} the exchange needs, 0 if it is not possible: a fixed rate (normal values, not today's
-     * market), only into goods the shop does not buy back.
-     */
-    public static int exchangeInput(@NotNull MarketItem give, @NotNull MarketItem get, int amount, double fee) {
-        if (!give.enabled() || !get.enabled() || get.sellable()) return 0;
-        double value = exchangeValue(give);
-        if (value <= 0) return 0;
-        double cost = (double) get.basePrice() / get.amount() * amount * (1.0 + fee);
-        int input = (int) Math.ceil(cost / value - 1e-9);
-        return input > MAX_EXCHANGE_INPUT ? 0 : Math.max(1, input);
     }
 
     /** Net price of a friendship offer; it does not move the market. */

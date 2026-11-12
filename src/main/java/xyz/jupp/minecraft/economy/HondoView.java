@@ -22,30 +22,28 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-import static xyz.jupp.minecraft.economy.ShopView.countPlain;
 import static xyz.jupp.minecraft.economy.ShopView.fail;
 import static xyz.jupp.minecraft.economy.ShopView.freeSpace;
 import static xyz.jupp.minecraft.economy.ShopView.give;
 import static xyz.jupp.minecraft.economy.ShopView.named;
 import static xyz.jupp.minecraft.economy.ShopView.pane;
-import static xyz.jupp.minecraft.economy.ShopView.takePlain;
 
 /**
- * Hondo's counter: his goods, the exchanges and the friendship offers (rules and prices in {@link Hondo}).
+ * Hondo's counter, three rows: account / friendship / close, his goods, the friendship offers (rules and prices in
+ * {@link Hondo}).
  * Items the player gives are taken on the main thread before the booking and given back if it fails.
  */
 public final class HondoView implements InventoryHolder {
 
-    private static final int SIZE = 54;
+    private static final int SIZE = 27;
     private static final int SLOT_BALANCE = 0;
     private static final int SLOT_FRIENDSHIP = 4;
     private static final int SLOT_CLOSE = 8;
     private static final int SLOT_GOODS_LABEL = 9;
     private static final int GOODS_START = 10;
-    private static final int SLOT_EXCHANGE_LABEL = 27;
-    private static final int EXCHANGE_START = 28;
-    private static final int SLOT_OFFER_LABEL = 45;
-    private static final int OFFER_START = 47;
+    private static final int SLOT_OFFER_LABEL = 18;
+    // the five offers in the middle of the row
+    private static final int OFFER_START = 20;
     // clicks right after a re-render are ignored (double clicks, scroll mods)
     private static final long CLICK_COOLDOWN_MILLIS = 300;
 
@@ -115,10 +113,6 @@ public final class HondoView implements InventoryHolder {
                 List.of("§7Preise wie im Shop.", "§7Als Freund bekommst du Rabatt.")));
         for (int i = 0; i < Hondo.GOODS.size(); i++) inventory.setItem(GOODS_START + i, goodItem(Hondo.GOODS.get(i), level));
 
-        inventory.setItem(SLOT_EXCHANGE_LABEL, named(Material.LIME_STAINED_GLASS_PANE, "§aTauschen §7▶",
-                List.of("§7Hondo nimmt nur, was auch", "§7der Shop ankauft. Steuerfrei.")));
-        for (int i = 0; i < Hondo.EXCHANGES.size(); i++) inventory.setItem(EXCHANGE_START + i, exchangeItem(Hondo.EXCHANGES.get(i), level));
-
         inventory.setItem(SLOT_OFFER_LABEL, named(Material.PINK_STAINED_GLASS_PANE, "§dFreundschaftsangebote §7▶",
                 List.of("§7Jede Stufe schaltet ein", "§7Angebot frei, jedes nur einmal.")));
         for (int i = 0; i < Hondo.OFFERS.size(); i++) inventory.setItem(OFFER_START + i, offerItem(Hondo.OFFERS.get(i), level));
@@ -139,7 +133,6 @@ public final class HondoView implements InventoryHolder {
         if (level > 0) {
             lore.add("§7Rabatt auf Hondos Ware: §a-" + ShopView.percent(Hondo.discount(level)));
         }
-        lore.add("§7Hondos Anteil beim Tausch: §f" + ShopView.percent(Hondo.fee(level)));
         lore.add("");
         if (friendship.activeToday()) {
             lore.add("§aHondo hat sich heute über dich gefreut.");
@@ -173,28 +166,6 @@ public final class HondoView implements InventoryHolder {
         lore.add("§e» Linksklick: §f1 Stück §7(" + gross(one) + " inkl. Steuer)");
         lore.add("§e» Rechtsklick: §f" + Hondo.bulk(material) + " Stück §7(" + gross(bulk) + " inkl. Steuer)");
         return named(material, Hondo.label(material), lore);
-    }
-
-    private ItemStack exchangeItem(Hondo.Exchange exchange, int level) {
-        MarketItem give = Market.get(exchange.give());
-        MarketItem get = Market.get(exchange.get());
-        int input = give == null || get == null ? 0 : Hondo.exchangeInput(give, get, exchange.amount(), Hondo.fee(level));
-        if (input == 0) {
-            return named(Material.GRAY_DYE, "§7" + Text.strip(Hondo.label(exchange.give())) + " → " + Text.strip(Hondo.label(exchange.get())),
-                    List.of("§7Dieser Tausch geht gerade nicht."));
-        }
-        List<String> lore = new ArrayList<>();
-        lore.add("§7Du gibst: §f" + input + "× " + Hondo.label(exchange.give()));
-        lore.add("§7Du bekommst: §f" + exchange.amount() + "× " + Hondo.label(exchange.get()));
-        lore.add("§7Du hast: §f" + countPlain(viewer, exchange.give()));
-        lore.add("§7Fester Kurs, Hondos Anteil: " + ShopView.percent(Hondo.fee(level)) + " §7(weniger mit mehr Freundschaft)");
-        lore.add("§7Höchstens " + Hondo.EMERALDS_PER_DAY + " Smaragde am Tag");
-        lore.add("");
-        lore.add("§e» Linksklick: tauschen");
-        ItemStack stack = named(exchange.get(), "§f" + input + "× " + Hondo.label(exchange.give()) + " §7→ §f"
-                + exchange.amount() + "× " + Hondo.label(exchange.get()), lore);
-        stack.setAmount(Math.min(exchange.amount(), exchange.get().getMaxStackSize()));
-        return stack;
     }
 
     private ItemStack offerItem(Hondo.FriendOffer offer, int level) {
@@ -239,8 +210,6 @@ public final class HondoView implements InventoryHolder {
         } else if (slot >= GOODS_START && slot < GOODS_START + Hondo.GOODS.size()) {
             Material good = Hondo.GOODS.get(slot - GOODS_START);
             buy(player, good, click == ClickType.RIGHT ? Hondo.bulk(good) : 1);
-        } else if (slot >= EXCHANGE_START && slot < EXCHANGE_START + Hondo.EXCHANGES.size() && click == ClickType.LEFT) {
-            exchange(player, slot - EXCHANGE_START);
         } else if (slot >= OFFER_START && slot < OFFER_START + Hondo.OFFERS.size() && click == ClickType.LEFT) {
             claim(player, Hondo.OFFERS.get(slot - OFFER_START));
         }
@@ -289,61 +258,6 @@ public final class HondoView implements InventoryHolder {
                 ShopView.refreshAll();
             };
             if (!MainThread.run(onMain) && ok) keepForLater(uuid, material, units);
-        });
-    }
-
-    private void exchange(Player player, int index) {
-        Hondo.Exchange exchange = Hondo.EXCHANGES.get(index);
-        MarketItem give = Market.get(exchange.give());
-        MarketItem get = Market.get(exchange.get());
-        if (give == null || get == null) return;
-        int input = Hondo.exchangeInput(give, get, exchange.amount(), Hondo.fee(friendship.level()));
-        if (input == 0) return;
-        if (countPlain(player, exchange.give()) < input) {
-            fail(player, "§fDafür brauchst du §e" + input + "× " + Hondo.label(exchange.give()) + "§f.");
-            return;
-        }
-        if (freeSpace(player, exchange.get()) < exchange.amount()) {
-            fail(player, "§fDafür ist in deinem Inventar nicht genug Platz.");
-            return;
-        }
-        UUID uuid = player.getUniqueId();
-        // taken right away on the main thread, so the same items cannot be exchanged twice
-        takePlain(player, exchange.give(), input);
-        busy = true;
-        Tasks.async(() -> {
-            HondoRepository.Result result;
-            try {
-                result = HondoRepository.exchange(uuid, index, input);
-            } catch (RuntimeException e) {
-                unavailable(player, e, exchange.give(), input);
-                return;
-            }
-            boolean ok = result.outcome() == HondoRepository.Outcome.OK;
-            HondoRepository.Friendship fresh = ok ? result.friendship() : friendshipOrNull(uuid);
-            // what the player gets now: Hondo's goods, or the own items back
-            Material receive = ok ? exchange.get() : exchange.give();
-            int quantity = ok ? exchange.amount() : input;
-            Runnable onMain = () -> {
-                done();
-                if (fresh != null) friendship = fresh;
-                deliver(uuid, receive, quantity);
-                if (ok) {
-                    player.sendMessage(Main.getChatPrefix() + "§fGetauscht: §e" + input + "× " + Hondo.label(exchange.give())
-                            + " §f→ §e" + exchange.amount() + "× " + Hondo.label(exchange.get()));
-                    player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_RESONATE, 1f, 1.2f);
-                    traded(player, result);
-                } else {
-                    fail(player, switch (result.outcome()) {
-                        case PRICE_CHANGED -> "§fDer Kurs hat sich gerade geändert, bitte prüfe den neuen Kurs.";
-                        case DAILY_LIMIT -> "§fHeute tauscht Hondo dir keine weiteren Smaragde mehr §7(höchstens "
-                                + Hondo.EMERALDS_PER_DAY + " am Tag)§f.";
-                        default -> "§fDieser Tausch geht gerade nicht.";
-                    });
-                }
-                ShopView.refreshAll();
-            };
-            if (!MainThread.run(onMain)) keepForLater(uuid, receive, quantity);
         });
     }
 
