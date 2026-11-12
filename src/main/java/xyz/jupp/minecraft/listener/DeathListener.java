@@ -119,7 +119,12 @@ public class DeathListener implements Listener {
         if (bounty) event.getDrops().add(Bounties.head(bountyID, player, playerTeamID, killer.getName()));
 
         Tasks.async(() -> {
-            chargeDeathTax(player);
+            try {
+                chargeDeathTax(player);
+            } catch (RuntimeException e) {
+                // the jail below must not depend on the tax
+                Main.getInstance().getSLF4JLogger().error("Death tax of {} failed", player.getName(), e);
+            }
 
             if (wanted) {
                 jailWanted(player, killer, bountyID, playerTeamID, killerTeamID, wantedEnd);
@@ -150,7 +155,21 @@ public class DeathListener implements Listener {
 
     // worker thread: the wanted player goes to jail; with a bounty (bountyID) the head dropped and a hunter caught them
     private static void jailWanted(Player player, Player killer, UUID bountyID, String playerTeamID, String killerTeamID, long wantedEnd) {
+        // jailed first, whatever the database says below
         JailHandler.jailAfterDeath(player, bountyID != null);
+        // the bounty is fixed before the debts behind the warrant count as served (each caps only its own warrant);
+        // a failure pays nothing rather than creating money
+        int bounty = 0;
+        try {
+            if (bountyID != null) {
+                bounty = Loans.bounty(player.getUniqueId(), wantedEnd);
+                // the money players put on the head goes with it
+                Bounties.record(bountyID, player.getUniqueId(), player.getName(), playerTeamID, killer.getUniqueId(), bounty);
+            }
+            Loans.warrantServed(player.getUniqueId());
+        } catch (RuntimeException e) {
+            Main.getInstance().getSLF4JLogger().error("Bounty of {} could not be fixed", player.getName(), e);
+        }
         String sentence = Main.getChatPrefix() + "§6Deine Haft wurde auf §c" + JailHandler.DEATH_SENTENCE_HOURS + "h §6festgesetzt.";
         if (killer == null) {
             sync(() -> {
@@ -169,7 +188,6 @@ public class DeathListener implements Listener {
         }
         // catching a wanted enemy is a kill in a war as well
         if (killerTeamID != null && playerTeamID != null) Relations.warKill(killerTeamID, playerTeamID);
-        Bounties.record(bountyID, player.getUniqueId(), player.getName(), playerTeamID, killer.getUniqueId(), Loans.bounty(player.getUniqueId(), wantedEnd));
         sync(() -> {
             killer.sendMessage(Main.getChatPrefix() + "§aDu hast den gesuchten Spieler §6" + player.getName() + " §agefasst!");
             killer.sendMessage(Main.getChatPrefix() + "§fBring den Kopf zum §9Sheriff§f, dort gibt es das Kopfgeld.");

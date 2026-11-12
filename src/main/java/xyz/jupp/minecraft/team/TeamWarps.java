@@ -9,6 +9,7 @@ import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.TeamCacheObject;
 import xyz.jupp.minecraft.database.Database;
 import xyz.jupp.minecraft.economy.TeamBank;
+import xyz.jupp.minecraft.economy.Treasury;
 
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -79,6 +80,8 @@ public final class TeamWarps {
             if (!TeamBank.pay(connection, teamID, actor, exists ? TeamBank.WARP_MOVE : TeamBank.WARP_SET, cost)) {
                 return new Result(Outcome.INSUFFICIENT_FUNDS, cost);
             }
+            // the fee goes to the state treasury
+            Treasury.deposit(connection, Treasury.Source.FEES, cost, null);
             Database.update(connection, """
                     INSERT INTO team_warps (team_id, number, world, x, y, z) VALUES (?, ?, ?, ?, ?, ?)
                     ON CONFLICT (team_id, number) DO UPDATE SET world = EXCLUDED.world, x = EXCLUDED.x, y = EXCLUDED.y, z = EXCLUDED.z""",
@@ -86,6 +89,7 @@ public final class TeamWarps {
             return new Result(Outcome.OK, cost);
         });
         if (result.outcome() == Outcome.OK) {
+            Treasury.committed(result.cost());
             warps.put(new Key(teamID, number), warp);
             Main.getInstance().getSLF4JLogger().info("team warp {} of {} set to {} {} {} {} by {}", number, teamID, warp.world(),
                     Math.round(warp.x()), Math.round(warp.y()), Math.round(warp.z()), actor);

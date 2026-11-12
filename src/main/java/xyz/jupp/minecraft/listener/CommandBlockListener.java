@@ -22,9 +22,13 @@ public class CommandBlockListener implements Listener {
             "/spenden", "/spawn", "/regeln", "/rules", "/ec", "/enderchest", "/wanted", "/sit",
             "/removechunk", "/staatskasse", "/kasse"
     );
+    // allowed with any arguments (compared by the first word, so /payxyz stays blocked)
+    private static final Set<String> ALLOWED_WITH_ARGUMENTS = Set.of("/zahlen", "/pay", "/ueberweisen", "/kopfgeld");
 
     private static boolean isAllowedForNormalPlayer(String msg) {
+        String command = msg.split(" ", 2)[0].toLowerCase(java.util.Locale.ROOT);
         return ALLOWED_COMMANDS.contains(msg)
+                || ALLOWED_WITH_ARGUMENTS.contains(command)
                 || msg.startsWith("/team")
                 || msg.startsWith("/msg")
                 || msg.startsWith("/head")

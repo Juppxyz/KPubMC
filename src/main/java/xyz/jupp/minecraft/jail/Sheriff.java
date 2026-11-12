@@ -78,7 +78,7 @@ public final class Sheriff {
         // paid now or before: the head is worth nothing any more
         Set<UUID> spent = new HashSet<>();
         for (Bounties.Claim claim : claims) {
-            if (claim.outcome() != Bounties.Outcome.UNKNOWN) spent.add(claim.id());
+            if (claim.outcome() == Bounties.Outcome.PAID || claim.outcome() == Bounties.Outcome.ALREADY_PAID) spent.add(claim.id());
         }
         if (!player.isOnline()) return;
         PlayerInventory inventory = player.getInventory();
@@ -99,6 +99,14 @@ public final class Sheriff {
                 }
                 case ALREADY_PAID -> player.sendMessage(PREFIX + "Für den Kopf von §c" + claim.wantedName() + " §fhabe ich schon bezahlt.");
                 case UNKNOWN -> player.sendMessage(PREFIX + "Diesen Kopf kenne ich nicht.");
+                case TREASURY_EMPTY -> {
+                    if (claim.amount() > 0) {
+                        paid = true;
+                        player.sendMessage(PREFIX + "Das Kopfgeld der Spieler für §c" + claim.wantedName() + "§f: §a+" + Items.format(claim.amount()) + " Schilling§f.");
+                    }
+                    player.sendMessage(PREFIX + "Der Staat schuldet dir für §c" + claim.wantedName() + " §fnoch §a" + Items.format(claim.pending())
+                            + " Schilling§f, aber die Staatskasse hat das gerade nicht. §7Behalt den Kopf, bring ihn später wieder.");
+                }
             }
         }
         if (failed) player.sendMessage(PREFIX + "Gerade geht nichts, versuch es gleich nochmal.");

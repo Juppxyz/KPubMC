@@ -43,7 +43,14 @@ public final class Treasury {
         // paid out: the Bauamt's grants for copies of its building templates
         BUILDING_GRANT("Bauförderung"),
         // what players pay for damaging state property (paid builds)
-        DAMAGE_FINE("Schadensersatz");
+        DAMAGE_FINE("Schadensersatz"),
+        // Basil lends the treasury's money: out when a loan starts, back when it is repaid (no income, no spending)
+        LOAN_OUT("Kredite ausgezahlt"),
+        LOAN_BACK("Kredite zurück"),
+        // paid out: the Sheriff's bounties
+        BOUNTY("Kopfgeld"),
+        // warps, teleports and team foundings
+        FEES("Gebühren");
 
         private final String label;
 
@@ -100,7 +107,7 @@ public final class Treasury {
     public static long income(Map<Source, Long> inflow) {
         return inflow.entrySet().stream()
                 .filter(entry -> switch (entry.getKey()) {
-                    case INTEREST, FIXED_DEPOSIT, BOND_SALE, BOND_REPAY, BUILDING_GRANT -> false;
+                    case INTEREST, FIXED_DEPOSIT, BOND_SALE, BOND_REPAY, BUILDING_GRANT, LOAN_OUT, LOAN_BACK, BOUNTY -> false;
                     default -> true;
                 })
                 .mapToLong(Map.Entry::getValue).sum();

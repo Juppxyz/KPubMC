@@ -272,12 +272,12 @@ public class MoneyInventoryListener implements Listener {
             Logger.console("withdraw from " + player.getUniqueId() + " (" + netAmount + " cash, " + withdrawal.tax() + " tax)");
 
             boolean scheduled = MainThread.run(() -> {
-                Bank.handOut(player.getUniqueId(), netAmount);
+                Bank.handOut(player.getUniqueId(), netAmount, withdrawal.tax());
                 player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f, 2f);
                 player.sendMessage(Main.getChatPrefix() + "§fDu hast §2" + netAmount + " " + Main.getCurrencyName() + " §fabgehoben §7(Steuer: " + withdrawal.tax() + ")");
             });
             // server stop before the hand-out: everything back, the tax leaves the treasury again
-            if (!scheduled) Taxes.refund(player.getUniqueId(), netAmount, withdrawal.tax(), Treasury.Source.WITHDRAW_TAX);
+            if (!scheduled) Taxes.refundWithdrawal(player.getUniqueId(), netAmount, withdrawal.tax());
         });
     }
 

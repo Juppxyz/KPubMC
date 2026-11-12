@@ -15,6 +15,7 @@ import xyz.jupp.minecraft.economy.Economy;
 import xyz.jupp.minecraft.economy.Market;
 import xyz.jupp.minecraft.economy.MarketItem;
 import xyz.jupp.minecraft.economy.MarketRepository;
+import xyz.jupp.minecraft.economy.MarketReview;
 import xyz.jupp.minecraft.economy.ServiceOffer;
 import xyz.jupp.minecraft.economy.Services;
 import xyz.jupp.minecraft.economy.ShopView;
@@ -177,8 +178,12 @@ public class ShopAdminCommand implements TabExecutor {
         Tasks.supplyAsync(() -> {
             List<String> lines = new ArrayList<>();
             lines.add("§8=-- §aAnpassungen §8--=");
-            String report = Economy.latestAiSummary();
-            if (report != null) lines.add("§7KI-Bericht: §o" + report);
+            Economy.Review note = Economy.latestAdminNote();
+            if (note != null) lines.add("§7KI-Notiz vom " + note.day() + ": §o" + note.text());
+            Economy.Review report = Economy.latestReport();
+            if (report != null) lines.add("§7Marktbericht für Spieler: §o" + report.text());
+            String error = MarketReview.lastError();
+            if (error != null) lines.add("§cKI-Prüfung fehlgeschlagen: §7" + error);
             for (MarketRepository.Adjustment adjustment : MarketRepository.recentAdjustments(12)) {
                 lines.add("§7#" + adjustment.id() + " §7" + adjustment.day() + " §f" + adjustment.material() + " §7" + fieldName(adjustment.field())
                         + " §c" + adjustment.oldValue() + " §7→ §a" + adjustment.newValue() + " §7(" + adjustment.source() + ": " + adjustment.reason() + ")");

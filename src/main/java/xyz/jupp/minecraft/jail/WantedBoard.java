@@ -148,7 +148,8 @@ public final class WantedBoard {
         List<Wanted> wanted = new ArrayList<>();
         for (PlayerRepository.PlayerData data : PlayerRepository.getWantedPlayers()) {
             String name = Bukkit.getOfflinePlayer(data.uuid()).getName();
-            wanted.add(new Wanted(data.uuid(), name == null ? "Unbekannt" : name, Loans.bounty(data.uuid(), data.jailEnd()), data.jailEnd()));
+            int bounty = (int) Math.min(Integer.MAX_VALUE, Loans.bounty(data.uuid(), data.jailEnd()) + Bounties.pledged(data.uuid()));
+            wanted.add(new Wanted(data.uuid(), name == null ? "Unbekannt" : name, bounty, data.jailEnd()));
         }
         wanted.sort(Comparator.comparingInt(Wanted::bounty).reversed()
                 .thenComparing(entry -> entry.wantedEnd() != 0)

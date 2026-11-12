@@ -14,6 +14,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import xyz.jupp.minecraft.utils.PlayerSaves;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.inventory.MainThread;
@@ -267,7 +268,7 @@ public final class ShopView implements InventoryHolder {
         if (page > 0) inventory.setItem(SLOT_PREVIOUS, named(Material.ARROW, "§f◀ Vorherige Seite", List.of("§7Seite " + page + " von " + pages)));
         if (page < pages - 1) inventory.setItem(SLOT_NEXT, named(Material.ARROW, "§fNächste Seite ▶", List.of("§7Seite " + (page + 2) + " von " + pages)));
         if (tab == Tab.DAILY && Market.randomItemPrice() > 0) {
-            inventory.setItem(SLOT_RANDOM, named(Material.EXPERIENCE_BOTTLE, "§5§oZufall", List.of("§7Ein zufälliges Tagesangebot,", "§7günstiger als im Schnitt.", "", "§e» Klicken für Details")));
+            inventory.setItem(SLOT_RANDOM, named(Material.EXPERIENCE_BOTTLE, "§5§oZufall", List.of("§7Ein zufälliges Tagesangebot,", "§7günstiger als im Schnitt.", "§7Ein Versuch pro Tag.", "", "§e» Klicken für Details")));
         }
     }
 
@@ -357,7 +358,7 @@ public final class ShopView implements InventoryHolder {
                 "§7  Essen & Farm-Sachen: §a" + percent(Taxes.rate(TaxClass.BASIC)),
                 "§7  Normale Waren: §a" + percent(Taxes.rate(TaxClass.STANDARD)),
                 "§7  Seltenes & Luxus: §a" + percent(Taxes.rate(TaxClass.LUXURY)),
-                "§7Beim Sterben: §a" + percent(Taxes.deathRate()) + " §7deines Geldes §7(ab 250)",
+                "§7Beim Sterben: §a" + percent(Taxes.deathRate()) + " §7deines Geldes §7(über 250)",
                 "§7Beim Nether-Portal: je mehr Geld",
                 "§7du hast, desto mehr §7(bis " + percent(Taxes.topNetherRate()) + ")",
                 "",
@@ -488,6 +489,7 @@ public final class ShopView implements InventoryHolder {
         inventory.setItem(SLOT_GOOD, named(Material.EXPERIENCE_BOTTLE, "§5§oZufall", List.of(
                 "§7Du bekommst ein zufälliges Paket",
                 "§7aus den heutigen Tagesangeboten.",
+                "§7Ein Versuch pro Tag.",
                 "§7Preis: " + Main.getCurrencyName(net + tax) + " §7(inkl. " + tax + " Steuer)")));
         if (net <= 0) return;
         List<String> lore = new ArrayList<>(List.of("§7Preis: " + Main.getCurrencyName(net + tax) + " §7(inkl. " + tax + " Steuer)"));
@@ -748,11 +750,12 @@ public final class ShopView implements InventoryHolder {
         if (!item.buyable()) return;
         double discount = isDailyPrice(item) ? Market.dailyDiscount() : 0;
         int expectedNet = item.buyTotal(bundles, discount);
+        int expectedTax = Taxes.taxOn(expectedNet, item.taxClass());
         busy = true;
         Tasks.async(() -> {
             MarketRepository.Trade trade;
             try {
-                trade = MarketRepository.buy(player.getUniqueId(), item.material(), bundles, discount, expectedNet);
+                trade = MarketRepository.buy(player.getUniqueId(), item.material(), bundles, discount, expectedNet, expectedTax);
             } catch (RuntimeException e) {
                 unavailable(player, e, null, 0);
                 return;
@@ -794,6 +797,7 @@ public final class ShopView implements InventoryHolder {
         }
         int expected = item.sellTotal(bundles);
         takePlain(player, item.material(), quantity);
+        PlayerSaves.soon(player);
         busy = true;
         Tasks.async(() -> {
             MarketRepository.Trade trade;
@@ -832,7 +836,7 @@ public final class ShopView implements InventoryHolder {
         Tasks.async(() -> {
             MarketRepository.Trade trade;
             try {
-                trade = MarketRepository.buyFixed(player.getUniqueId(), item.material(), item.amount(), net, TaxClass.STANDARD);
+                trade = MarketRepository.buyRandom(player.getUniqueId(), item.material(), item.amount(), net, TaxClass.STANDARD);
             } catch (RuntimeException e) {
                 unavailable(player, e, null, 0);
                 return;
@@ -850,6 +854,8 @@ public final class ShopView implements InventoryHolder {
                     if (isSpawnEgg(item.material())) spawnEggNotice(player);
                 } else if (limit != null) {
                     fail(player, limit);
+                } else if (trade.outcome() == MarketRepository.Outcome.ALREADY) {
+                    fail(player, "§fDu hast heute schon gezogen. §7Morgen gibt es einen neuen Versuch.");
                 } else {
                     fail(player, "§fDafür fehlen dir Schilling §7(benötigt: " + (trade.net() + trade.tax()) + ")§f.");
                 }
@@ -857,6 +863,7 @@ public final class ShopView implements InventoryHolder {
             };
             if (!MainThread.run(onMain) && trade.outcome() == MarketRepository.Outcome.OK) {
                 Taxes.refund(player.getUniqueId(), trade.net(), trade.tax(), Treasury.Source.TRADE_TAX);
+                MarketRepository.forgetRandomDraw(player.getUniqueId());
             }
         });
     }

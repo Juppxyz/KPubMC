@@ -25,7 +25,7 @@ public final class MarketRepository {
 
     private MarketRepository() {}
 
-    public enum Outcome { OK, INSUFFICIENT_FUNDS, PRICE_CHANGED, UNAVAILABLE, LIMIT }
+    public enum Outcome { OK, INSUFFICIENT_FUNDS, PRICE_CHANGED, UNAVAILABLE, LIMIT, ALREADY }
 
     /** Result of a trade; item is the catalog entry with the new demand (null if the item does not exist). */
     public record Trade(Outcome outcome, int net, int tax, @Nullable MarketItem item) {}
@@ -93,6 +93,14 @@ public final class MarketRepository {
         return value == null ? -1 : Integer.parseInt(value);
     }
 
+    public static @Nullable String meta(@NotNull String key) {
+        return Database.queryOne("SELECT value FROM market_meta WHERE key = ?", row -> row.getString(1), key);
+    }
+
+    public static void setMeta(@NotNull String key, @NotNull String value) {
+        Database.update("INSERT INTO market_meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value", key, value);
+    }
+
     public static void setCatalogVersion(int version) {
         Database.update("INSERT INTO market_meta (key, value) VALUES ('catalog_version', ?) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
                 String.valueOf(version));
@@ -107,6 +115,26 @@ public final class MarketRepository {
             if (Database.update(connection, "INSERT INTO market_meta (key, value) VALUES ('elasticity_eased', ?) ON CONFLICT (key) DO NOTHING",
                     String.valueOf(factor)) == 0) return 0;
             return Database.update(connection, "UPDATE market_items SET elasticity = elasticity * ?", factor);
+        });
+    }
+
+    /** Once per database (the key in market_meta): sets these sell ratios; returns the goods changed, 0 if already done. */
+    public static int setSellRatiosOnce(@NotNull String key, @NotNull java.util.Map<Material, Double> ratios) {
+        return Database.inTransaction(connection -> {
+            if (Database.update(connection, "INSERT INTO market_meta (key, value) VALUES (?, '1') ON CONFLICT (key) DO NOTHING", key) == 0) return 0;
+            int changed = 0;
+            for (java.util.Map.Entry<Material, Double> entry : ratios.entrySet()) {
+                // only lower: a value an admin or the review already set lower stays
+                Double old = Database.queryOne(connection, "SELECT sell_ratio FROM market_items WHERE material = ? FOR UPDATE",
+                        row -> row.getDouble(1), entry.getKey().name());
+                if (old == null || old <= entry.getValue()) continue;
+                Database.update(connection, "UPDATE market_items SET sell_ratio = ? WHERE material = ?", entry.getValue(), entry.getKey().name());
+                Database.update(connection, "INSERT INTO market_adjustments (day, material, field, old_value, new_value, reason, source) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        Date.valueOf(LocalDate.now(Market.ZONE)), entry.getKey().name(), "sell_ratio", MarketReview.exact(old),
+                        MarketReview.exact(entry.getValue()), "Ankauf von Farm-Gütern gesenkt (2026-11)", "Katalog");
+                changed++;
+            }
+            return changed;
         });
     }
 
@@ -179,11 +207,11 @@ public final class MarketRepository {
     }
 
     /**
-     * Buys n bundles. expectedNet is the price the player saw; if the current price differs, nothing happens
-     * and PRICE_CHANGED is returned (null skips the check).
+     * Buys n bundles. expectedNet and expectedTax are what the player saw; if the current price or tax differs (the tax
+     * factor moved meanwhile), nothing happens and PRICE_CHANGED is returned (null skips the check).
      */
     public static Trade buy(@NotNull UUID player, @NotNull Material material, int bundles, double discount,
-                            @Nullable Integer expectedNet) {
+                            @Nullable Integer expectedNet, @Nullable Integer expectedTax) {
         Trade trade = Database.inTransaction(connection -> {
             MarketItem item = lock(connection, material);
             if (item == null || !item.enabled() || !item.buyable()) return new Trade(Outcome.UNAVAILABLE, 0, 0, item);
@@ -194,7 +222,9 @@ public final class MarketRepository {
 
             int net = item.buyTotal(bundles, discount);
             int tax = Taxes.taxOn(net, item.taxClass());
-            if (expectedNet != null && expectedNet != net) return new Trade(Outcome.PRICE_CHANGED, net, tax, item);
+            if ((expectedNet != null && expectedNet != net) || (expectedTax != null && expectedTax != tax)) {
+                return new Trade(Outcome.PRICE_CHANGED, net, tax, item);
+            }
 
             if (Database.update(connection, "UPDATE players SET money = money - ? WHERE uuid = ? AND money >= ?",
                     net + tax, player, net + tax) == 0) {
@@ -229,7 +259,35 @@ public final class MarketRepository {
         });
     }
 
-    /** A purchase with a fixed price that does not move the market (random item). */
+    /**
+     * The random item, once per player and day (ALREADY after the first draw of the day). No hourly limit: one bundle a
+     * day needs none, and a refusal for the limit would let a player draw again until the dear item comes.
+     */
+    public static Trade buyRandom(@NotNull UUID player, @NotNull Material material, int quantity, int net, @NotNull TaxClass taxClass) {
+        int tax = Taxes.taxOn(net, taxClass);
+        Trade trade = Database.inTransaction(connection -> {
+            if (Database.update(connection, "INSERT INTO random_draws (day, player_uuid) VALUES (?, ?) ON CONFLICT DO NOTHING",
+                    Date.valueOf(LocalDate.now(Market.ZONE)), player) == 0) return new Trade(Outcome.ALREADY, net, tax, null);
+            if (Database.update(connection, "UPDATE players SET money = money - ? WHERE uuid = ? AND money >= ?",
+                    net + tax, player, net + tax) == 0) {
+                // rolled back with the transaction: the try of the day stays
+                connection.rollback();
+                return new Trade(Outcome.INSUFFICIENT_FUNDS, net, tax, null);
+            }
+            logTrade(connection, player, material, "BUY", quantity, net, tax);
+            Treasury.deposit(connection, Treasury.Source.TRADE_TAX, tax, player);
+            return new Trade(Outcome.OK, net, tax, null);
+        });
+        if (trade.outcome() == Outcome.OK) Treasury.committed(tax);
+        return trade;
+    }
+
+    /** The random item of today was refunded (server stop before the hand-out): the player may draw again. */
+    public static void forgetRandomDraw(@NotNull UUID player) {
+        Database.update("DELETE FROM random_draws WHERE day = ? AND player_uuid = ?", Date.valueOf(LocalDate.now(Market.ZONE)), player);
+    }
+
+    /** A purchase with a fixed price that does not move the market. */
     public static Trade buyFixed(@NotNull UUID player, @NotNull Material material, int quantity, int net, @NotNull TaxClass taxClass) {
         int tax = Taxes.taxOn(net, taxClass);
         Trade trade = Database.inTransaction(connection -> {
@@ -310,7 +368,7 @@ public final class MarketRepository {
     public static void logAdjustment(@NotNull LocalDate day, @NotNull Material material, @NotNull String column,
                                      @Nullable Object oldValue, @Nullable Object newValue, @NotNull String reason, @NotNull String source) {
         Database.update("INSERT INTO market_adjustments (day, material, field, old_value, new_value, reason, source) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                Date.valueOf(day), material.name(), column, MarketReview.text(oldValue), MarketReview.text(newValue), reason, source);
+                Date.valueOf(day), material.name(), column, MarketReview.exact(oldValue), MarketReview.exact(newValue), reason, source);
     }
 
     public static List<Adjustment> recentAdjustments(int limit) {

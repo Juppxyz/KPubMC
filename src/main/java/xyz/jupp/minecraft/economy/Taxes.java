@@ -81,7 +81,8 @@ public final class Taxes {
     public static BalanceTax chargeDeathTax(@NotNull UUID player) {
         double rate = deathRate();
         return chargeBalanceTax(player, Treasury.Source.DEATH_TAX,
-                balance -> balance <= DEATH_TAX_EXEMPTION ? 0 : (int) Math.round(balance * rate));
+                // an allowance, not a cliff: only what is above it is taxed
+                balance -> (int) Math.round(Math.max(0, balance - DEATH_TAX_EXEMPTION) * rate));
     }
 
     public static BalanceTax chargeNetherTax(@NotNull UUID player) {
@@ -129,6 +130,38 @@ public final class Taxes {
         Database.inTransaction(connection -> {
             Database.update(connection, "UPDATE players SET money = money + ? WHERE uuid = ?", net + tax, player);
             Treasury.withdraw(connection, source, tax, player);
+            return null;
+        });
+        Treasury.committed(-tax);
+    }
+
+    /** A fixed fee (warps, teleports): from the account into the treasury in one transaction; false if the money is not there. Blocking. */
+    public static boolean payFee(@NotNull UUID player, int fee) {
+        boolean paid = Database.inTransaction(connection -> {
+            if (Database.update(connection, "UPDATE players SET money = money - ? WHERE uuid = ? AND money >= ?", fee, player, fee) == 0) return false;
+            Treasury.deposit(connection, Treasury.Source.FEES, fee, player);
+            return true;
+        });
+        if (paid) Treasury.committed(fee);
+        return paid;
+    }
+
+    /** A fee whose service did not happen: back to the account and out of the treasury again. Blocking. */
+    public static void refundFee(@NotNull UUID player, int fee) {
+        Database.inTransaction(connection -> {
+            Database.update(connection, "UPDATE players SET money = money + ? WHERE uuid = ?", fee, player);
+            Treasury.withdraw(connection, Treasury.Source.FEES, fee, player);
+            return null;
+        });
+        Treasury.committed(-fee);
+    }
+
+    /** A cash withdrawal whose notes could not be handed out: money and tax back, and on Basil's statement. Blocking. */
+    public static void refundWithdrawal(@NotNull UUID player, int cash, int tax) {
+        Database.inTransaction(connection -> {
+            Database.update(connection, "UPDATE players SET money = money + ? WHERE uuid = ?", cash + tax, player);
+            Treasury.withdraw(connection, Treasury.Source.WITHDRAW_TAX, tax, player);
+            BankLog.add(connection, player, BankLog.DEPOSIT, cash + tax, "Rückbuchung");
             return null;
         });
         Treasury.committed(-tax);

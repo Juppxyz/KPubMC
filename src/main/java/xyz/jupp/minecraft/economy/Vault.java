@@ -141,6 +141,13 @@ public final class Vault implements InventoryHolder {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
+        // a save that failed earlier gets one more try: after the restart the database copy is the truth, and it would
+        // still hold the items taken out since
+        for (UUID owner : java.util.List.copyOf(unsaved)) {
+            ItemStack[] items = contents.get(owner);
+            if (items != null) save(owner, ItemStack.serializeItemsAsBytes(items));
+        }
+        if (!unsaved.isEmpty()) Main.getInstance().getSLF4JLogger().error("Vaults not saved at shutdown: {}", unsaved);
     }
 
     private static ItemStack[] decode(byte[] bytes) {

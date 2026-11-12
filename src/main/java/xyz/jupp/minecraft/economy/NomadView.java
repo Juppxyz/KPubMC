@@ -13,6 +13,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import xyz.jupp.minecraft.utils.PlayerSaves;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.TeamCacheObject;
 import xyz.jupp.minecraft.database.TeamRepository;
@@ -440,6 +441,7 @@ public final class NomadView implements InventoryHolder {
         int offered = Math.min(countPlain(player, contract.material()), missing);
         if (offered <= 0) return;
         takePlain(player, contract.material(), offered);
+        PlayerSaves.soon(player);
         busy = true;
         Tasks.async(() -> {
             Nomad.Delivery delivery;
@@ -500,6 +502,7 @@ public final class NomadView implements InventoryHolder {
         int quantity = countPlain(player, material);
         if (quantity <= 0) return;
         takePlain(player, material, quantity);
+        PlayerSaves.soon(player);
         busy = true;
         Tasks.async(() -> {
             int points;

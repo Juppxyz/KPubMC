@@ -3,6 +3,7 @@ package xyz.jupp.minecraft;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitWorker;
+import xyz.jupp.minecraft.utils.PlayerSaves;
 import xyz.jupp.minecraft.team.TeamAreaEffects;
 import xyz.jupp.minecraft.team.Relations;
 import xyz.jupp.minecraft.team.TeamViewListener;
@@ -60,6 +61,12 @@ public final class Main extends JavaPlugin {
     private void registerCommands() {
         Logger.console("register commands..");
         this.getCommand("money").setExecutor(new MoneyCommand());
+        PayCommand pay = new PayCommand();
+        this.getCommand("zahlen").setExecutor(pay);
+        this.getCommand("zahlen").setTabCompleter(pay);
+        BountyCommand bounty = new BountyCommand();
+        this.getCommand("kopfgeld").setExecutor(bounty);
+        this.getCommand("kopfgeld").setTabCompleter(bounty);
         this.getCommand("config").setExecutor(new ConfigCommand());
         this.getCommand("help").setExecutor(new HelpCommand());
         this.getCommand("slimechunk").setExecutor(new SlimeChunkCommand());
@@ -136,6 +143,7 @@ public final class Main extends JavaPlugin {
         PlayerTracker.startTask();
         CombatLock.tickTask().runTaskTimer(this, 20L, 20L);
         Bauamt.startTask();
+        PlayerSaves.start();
         WantedBoard.startTask();
     }
 

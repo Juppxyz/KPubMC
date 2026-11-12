@@ -6,6 +6,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.database.BankLog;
+import xyz.jupp.minecraft.jail.Bounties;
 import xyz.jupp.minecraft.database.Database;
 import xyz.jupp.minecraft.inventory.MainThread;
 import xyz.jupp.minecraft.utils.JailHandler;
@@ -54,7 +55,7 @@ public final class Bank {
     public static final int VAULT_FEE = 250;
 
     // serializes the interest payouts, so two of them never spend the same treasury money
-    static final long INTEREST_LOCK = 0x4B7075624261L;
+    public static final long INTEREST_LOCK = 0x4B7075624261L;
     private static final long PAYOUT_PERIOD_TICKS = 20L * 60 * 5;
 
 
@@ -90,17 +91,18 @@ public final class Bank {
 
     /**
      * Main thread, after a withdrawal: the notes go to the player who is online now (a Player object from before a
-     * logout is never saved again); if they left meanwhile, the cash goes straight back to the account.
+     * logout is never saved again); if they left meanwhile, the cash and the tax go back to the account (the withdrawal
+     * did not happen for them).
      */
-    public static void handOut(@NotNull UUID player, long cash) {
+    public static void handOut(@NotNull UUID player, int cash, int tax) {
         Player online = Bukkit.getPlayer(player);
         if (online != null) {
             Cash.give(online, cash);
             return;
         }
-        Tasks.async(() -> {
+        Tasks.asyncOrNow(() -> {
             try {
-                deposit(player, cash);
+                Taxes.refundWithdrawal(player, cash, tax);
             } catch (RuntimeException e) {
                 Main.getInstance().getSLF4JLogger().error("Cash of {} ({}) could not go back to the account", player, cash, e);
             }
@@ -122,7 +124,7 @@ public final class Bank {
                         FROM market_transactions WHERE player_uuid = ? AND moves_money
                     UNION ALL
                     SELECT created_at, 'TAX_' || source, -amount, NULL
-                        FROM treasury_ledger WHERE player_uuid = ? AND source IN ('DEATH_TAX', 'NETHER_TAX')
+                        FROM treasury_ledger WHERE player_uuid = ? AND source IN ('DEATH_TAX', 'NETHER_TAX', 'FEES')
                 ) bookings ORDER BY at DESC LIMIT ?""",
                 row -> new Entry(row.getTimestamp(1).toInstant(), row.getString(2), row.getLong(3), row.getString(4)),
                 player, player, player, limit);
@@ -165,9 +167,11 @@ public final class Bank {
     // ever-growing ledger per menu open; last week's income uses the index on created_at
     private static Budget budget(java.sql.Connection connection, UUID player) throws java.sql.SQLException {
         return Database.queryOne(connection, """
-                SELECT ? - (SELECT COALESCE(SUM(amount), 0) FROM bank_deposits WHERE NOT paid_out AND in_treasury),
+                SELECT ? - (SELECT COALESCE(SUM(amount), 0) FROM bank_deposits WHERE NOT paid_out AND in_treasury)
+                         - (SELECT COALESCE(SUM(payout), 0) FROM state_bonds WHERE NOT repaid),
                        (SELECT COALESCE(SUM(amount), 0) FROM treasury_ledger
-                            WHERE amount > 0 AND source NOT IN ('INTEREST', 'FIXED_DEPOSIT', 'BOND_SALE') AND created_at >= now() - make_interval(days => ?)),
+                            WHERE source NOT IN ('INTEREST', 'FIXED_DEPOSIT', 'BOND_SALE', 'BOND_REPAY', 'BUILDING_GRANT', 'LOAN_OUT', 'LOAN_BACK', 'BOUNTY')
+                            AND created_at >= now() - make_interval(days => ?)),
                        (SELECT COALESCE(SUM(amount * rate), 0) FROM bank_deposits WHERE NOT paid_out),
                        (SELECT COALESCE(SUM(amount * rate), 0) FROM bank_deposits WHERE NOT paid_out AND player_uuid = ?)""",
                 row -> {
@@ -270,9 +274,10 @@ public final class Bank {
                     row -> new Due(row.getObject(1, UUID.class), row.getInt(2), (int) Math.round(row.getInt(2) * row.getDouble(3)), row.getBoolean(4)), id);
             if (due == null) return null;
             if (due.inTreasury()) Treasury.withdraw(connection, Treasury.Source.FIXED_DEPOSIT, due.amount(), due.player());
-            // free: what is left after every deposit still owed to the players
+            // free: what is left after every deposit still owed to the players and every bond still owed to its holder
             Long free = Database.queryOne(connection, "SELECT (SELECT COALESCE(SUM(amount), 0) FROM treasury_ledger) "
-                    + "- (SELECT COALESCE(SUM(amount), 0) FROM bank_deposits WHERE NOT paid_out AND in_treasury)", row -> row.getLong(1));
+                    + "- (SELECT COALESCE(SUM(amount), 0) FROM bank_deposits WHERE NOT paid_out AND in_treasury) "
+                    + "- (SELECT COALESCE(SUM(payout), 0) FROM state_bonds WHERE NOT repaid)", row -> row.getLong(1));
             int interest = (int) Math.max(0, Math.min(due.interest(), free == null ? 0 : free));
             if (interest > 0) Treasury.withdraw(connection, Treasury.Source.INTEREST, interest, due.player());
             Database.update(connection, "UPDATE bank_deposits SET interest = ? WHERE id = ?", interest, id);
@@ -288,6 +293,12 @@ public final class Bank {
     /** Checks for due fixed deposits every few minutes, also for players who are offline. */
     public static void startTasks() {
         Bukkit.getScheduler().runTaskTimerAsynchronously(Main.getInstance(), () -> {
+            // first and on its own: a failure of the other steps must not hold the players' money back
+            try {
+                Bounties.refundStale().forEach(Bounties::announceRefund);
+            } catch (RuntimeException e) {
+                Main.getInstance().getSLF4JLogger().warn("Bounty pledges could not be refunded: {}", e.toString());
+            }
             List<Payout> payouts;
             List<Loans.Due> loans;
             try {

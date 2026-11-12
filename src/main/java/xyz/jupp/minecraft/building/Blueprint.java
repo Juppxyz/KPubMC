@@ -77,6 +77,11 @@ public final class Blueprint {
             return blocks.size() + gaps.size() + props.size();
         }
 
+        /** The pieces only (blocks and cushions), without the gaps that have to stay empty. */
+        public int pieces() {
+            return blocks.size() + props.size();
+        }
+
         /** The cells of this material, empty if the template has none. */
         public @NotNull List<Cell> cellsOf(@NotNull Material material) {
             return byMaterial.getOrDefault(material, List.of());
@@ -254,11 +259,28 @@ public final class Blueprint {
 
     /** Cells of the box at this origin that do not match; stops counting once more than stopAfter were found. */
     public static int mismatches(@NotNull World world, int ox, int oy, int oz, @NotNull Variant variant, int stopAfter) {
+        return mismatches(world, ox, oy, oz, variant, stopAfter, true);
+    }
+
+    /**
+     * The same; without gaps only the pieces count (blocks and cushions of the template, no stray cushion or block in
+     * an empty cell): what a finished copy still has of itself, which nobody can lower by filling it up.
+     */
+    public static int mismatches(@NotNull World world, int ox, int oy, int oz, @NotNull Variant variant, int stopAfter, boolean gaps) {
         int bad = 0;
         for (Cell cell : variant.blocks()) {
             if (!same(cell.data(), world.getBlockData(ox + cell.dx(), oy + cell.dy(), oz + cell.dz()))) {
                 if (++bad > stopAfter) return bad;
             }
+        }
+        if (!gaps) {
+            Map<Long, DyeColor> cushions = cushions(world, ox, oy, oz, variant.sizeX(), variant.sizeY(), variant.sizeZ());
+            for (Prop prop : variant.props()) {
+                if (cushions.get(key(prop.dx(), prop.dy(), prop.dz())) != prop.color()) {
+                    if (++bad > stopAfter) return bad;
+                }
+            }
+            return bad;
         }
         for (Gap gap : variant.gaps()) {
             if (!empty(world.getType(ox + gap.dx(), oy + gap.dy(), oz + gap.dz()))) {

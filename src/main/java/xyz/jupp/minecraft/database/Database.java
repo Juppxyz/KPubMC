@@ -320,7 +320,7 @@ public final class Database {
             "ALTER TABLE market_items ADD COLUMN IF NOT EXISTS emergency_sale BOOLEAN NOT NULL DEFAULT FALSE",
             // Basil's statement reads a player's trades and death/nether taxes
             "CREATE INDEX IF NOT EXISTS market_transactions_player_idx ON market_transactions (player_uuid, created_at)",
-            "CREATE INDEX IF NOT EXISTS treasury_ledger_player_tax_idx ON treasury_ledger (player_uuid, created_at) WHERE source IN ('DEATH_TAX', 'NETHER_TAX')",
+
             """
             CREATE TABLE IF NOT EXISTS bank_vaults (
                 player_uuid UUID  PRIMARY KEY,
@@ -522,6 +522,61 @@ public final class Database {
                 sign_y    INTEGER NOT NULL,
                 sign_z    INTEGER NOT NULL,
                 sign_line INTEGER NOT NULL DEFAULT 1 CHECK (sign_line BETWEEN 0 AND 3)
+            )""",
+            // a debt caps the bounty of the one warrant it started: an overdue bill or a defaulted loan whose warrant
+            // was served (the player went to jail) no longer caps later ones
+            "ALTER TABLE bauamt_damage ADD COLUMN IF NOT EXISTS served_at TIMESTAMPTZ",
+            "ALTER TABLE bank_loans ADD COLUMN IF NOT EXISTS caught BOOLEAN NOT NULL DEFAULT FALSE",
+            // the treasury lends the money (older loans were created money; their repayment is not booked as a return)
+            "ALTER TABLE bank_loans ADD COLUMN IF NOT EXISTS funded BOOLEAN NOT NULL DEFAULT FALSE",
+            // a bill whose warrant another reason joined (black market, an admin): paying it no longer ends that warrant
+            "ALTER TABLE bauamt_damage ADD COLUMN IF NOT EXISTS warrant_shared BOOLEAN NOT NULL DEFAULT FALSE",
+            // the AI review: a note for the admins next to the players' market report
+            "ALTER TABLE economy_snapshots ADD COLUMN IF NOT EXISTS ai_admin TEXT",
+            // the players' chest shop sales (trade between players, for the economy statistics)
+            """
+            CREATE TABLE IF NOT EXISTS chest_shop_sales (
+                id          BIGINT  GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                seller_uuid UUID    NOT NULL,
+                buyer_uuid  UUID    NOT NULL,
+                material    TEXT    NOT NULL,
+                quantity    INTEGER NOT NULL,
+                price       INTEGER NOT NULL,
+                created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+            )""",
+            "CREATE INDEX IF NOT EXISTS chest_shop_sales_created_idx ON chest_shop_sales (created_at)",
+            // per player: the fees on the statement, the state income that sizes a loan
+            // the statement's taxes and fees: the predicate is the very IN list of Bank.statement, or the index is not used
+            "CREATE INDEX IF NOT EXISTS treasury_ledger_player_statement_idx ON treasury_ledger (player_uuid, created_at) "
+                    + "WHERE source IN ('DEATH_TAX', 'NETHER_TAX', 'FEES')",
+            "DROP INDEX IF EXISTS treasury_ledger_player_fee_idx",
+            "DROP INDEX IF EXISTS treasury_ledger_player_tax_idx",
+            "CREATE INDEX IF NOT EXISTS treasury_ledger_player_income_idx ON treasury_ledger (player_uuid, created_at) "
+                    + "WHERE source IN ('BUILDING_GRANT', 'INTEREST', 'BOUNTY')",
+            // the time a wanted player spent online on the run (the state's bounty grows with it)
+            "ALTER TABLE players ADD COLUMN IF NOT EXISTS wanted_seconds INTEGER NOT NULL DEFAULT 0",
+            // money players put on a wanted player's head: held until a hunter brings the head, back if the warrant ends
+            """
+            CREATE TABLE IF NOT EXISTS bounty_pledges (
+                id           BIGINT  GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                wanted_uuid  UUID    NOT NULL,
+                sponsor_uuid UUID    NOT NULL,
+                amount       INTEGER NOT NULL CHECK (amount > 0),
+                created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+                bounty_id    UUID,
+                paid_at      TIMESTAMPTZ,
+                refunded_at  TIMESTAMPTZ
+            )""",
+            "CREATE INDEX IF NOT EXISTS bounty_pledges_open_idx ON bounty_pledges (wanted_uuid) WHERE paid_at IS NULL AND refunded_at IS NULL",
+            // the random item: one draw per player and day
+            "CREATE TABLE IF NOT EXISTS random_draws (day DATE NOT NULL, player_uuid UUID NOT NULL, PRIMARY KEY (day, player_uuid))",
+            // what every holder had at a measurement, so the growth compares the same holders on both days
+            """
+            CREATE TABLE IF NOT EXISTS economy_wealth (
+                day    DATE   NOT NULL,
+                holder TEXT   NOT NULL,
+                amount BIGINT NOT NULL,
+                PRIMARY KEY (day, holder)
             )"""
     );
 

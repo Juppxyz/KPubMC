@@ -16,8 +16,10 @@ import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.database.Database;
 import xyz.jupp.minecraft.database.PlayerRepository;
+import xyz.jupp.minecraft.economy.Bank;
 import xyz.jupp.minecraft.economy.Bankruptcy;
 import xyz.jupp.minecraft.economy.Bonds;
+import xyz.jupp.minecraft.economy.Loans;
 import xyz.jupp.minecraft.economy.Treasury;
 import xyz.jupp.minecraft.inventory.Items;
 import xyz.jupp.minecraft.inventory.MainThread;
@@ -61,9 +63,16 @@ public final class Bauamt {
     static final int INCOME_DAYS = 7;
     /** The treasury keeps at least this share of its average daily income, a grant never takes it below. */
     static final double RESERVE_SHARE = 0.5;
+    /**
+     * The grants of 24 hours take this share of the average daily income (the daily budget): one grant is never more than
+     * a whole budget, and none is paid once it is used up (the last one may go over it).
+     */
+    static final double DAILY_BUDGET_SHARE = 0.5;
+    private static final String GRANTED_DAY = "SELECT -COALESCE(SUM(amount), 0) FROM treasury_ledger "
+            + "WHERE source = 'BUILDING_GRANT' AND created_at >= now() - interval '24 hours'";
     /** Damage to state property: a flat fee per incident plus a sum per block, due within days, otherwise wanted. */
     public static final int DAMAGE_FLAT = 1000;
-    public static final int DAMAGE_PER_BLOCK = 100;
+    public static final int DAMAGE_PER_BLOCK = 250;
     public static final int DAMAGE_DUE_DAYS = 3;
     public static final String DAMAGE_REASON = "Zerstörung von Staatseigentum";
     /** Open orders a player may hold per template. */
@@ -86,7 +95,9 @@ public final class Bauamt {
     private static final List<Damage> damages = new CopyOnWriteArrayList<>();
     // the state's builds by the chunks their box touches, for the block break check
     private static volatile Map<String, Map<Long, List<Build>>> index = Map.of();
-    private static volatile Funding funding = new Funding(0, 0, 1.0, false, 0);
+    private static volatile Funding funding = new Funding(0, 0, 1.0, false, 0, 0, 0, 0);
+    // when the treasury booked for the first time (the average income of a young season divides by its real age)
+    private static volatile @Nullable Instant firstIncome;
     private static final Object PAY_LOCK = new Object();
     private static final Map<UUID, Long> orderHints = new ConcurrentHashMap<>();
     private static int cursor;
@@ -112,7 +123,7 @@ public final class Bauamt {
         damages.addAll(Database.query("SELECT * FROM bauamt_damage WHERE paid_at IS NULL ORDER BY id", row -> new Damage(
                 row.getLong("id"), row.getLong("build_id"), row.getObject("player_uuid", UUID.class), row.getString("player_name"),
                 row.getInt("blocks"), row.getInt("amount"), row.getTimestamp("created_at").toInstant(), row.getTimestamp("due_at").toInstant(),
-                row.getTimestamp("wanted_at") != null)));
+                row.getTimestamp("wanted_at") != null, row.getTimestamp("served_at") != null, row.getBoolean("warrant_shared"))));
         rebuildIndex();
         refreshFunding();
     }
@@ -200,9 +211,11 @@ public final class Bauamt {
 
     /**
      * The treasury's state for the grants: its balance, its average daily income, the share of a reward it pays right
-     * now, the reserve it keeps, and what is really free (not owed to savers and bond holders).
+     * now, the reserve it keeps, and what is really free (not owed to savers and bond holders). Share and reserve look at
+     * the free money: deposits and bonds in the balance belong to the players.
      */
-    public record Funding(long balance, long averageIncome, double share, boolean broke, long free) {
+    public record Funding(long balance, long averageIncome, double share, boolean broke, long free, long brokeBelow, long promised,
+                          long grantedDay) {
         public boolean reduced() {
             return share < 1.0;
         }
@@ -211,9 +224,17 @@ public final class Bauamt {
             return (int) Math.round(share * 100);
         }
 
-        /** What stays in the treasury whatever happens. */
+        /**
+         * What stays free in the treasury whatever happens: half a day's income, never so little that a grant makes the
+         * state broke, plus the interest Basil promised to the savers.
+         */
         public long reserve() {
-            return Math.round(averageIncome * RESERVE_SHARE);
+            return reserveOf(averageIncome, brokeBelow, promised);
+        }
+
+        /** What the daily budget still allows within these 24 hours. */
+        public long budgetLeft() {
+            return budgetLeftOf(averageIncome, grantedDay);
         }
     }
 
@@ -226,17 +247,45 @@ public final class Bauamt {
     public static @NotNull Funding refreshFunding() {
         long balance = Treasury.balance();
         long income = Treasury.income(Treasury.inflowSince(Instant.now().minus(Duration.ofDays(INCOME_DAYS))));
-        long average = income / INCOME_DAYS;
-        long free = Bankruptcy.level().free() - Bonds.owed();
-        Funding current = new Funding(balance, average, share(balance, average), Bankruptcy.isBroke(), free);
+        long average = Math.round(income / incomeDays());
+        Bankruptcy.Level level = Bankruptcy.level();
+        long free = level.free() - Bonds.owed();
+        Long promised = Database.queryOne(PROMISED_INTEREST, row -> row.getLong(1));
+        Long granted = Database.queryOne(GRANTED_DAY, row -> row.getLong(1));
+        Funding current = new Funding(balance, average, share(free, average), Bankruptcy.isBroke(), free, level.brokeBelow(),
+                promised == null ? 0 : promised, granted == null ? 0 : granted);
         funding = current;
         return current;
     }
 
-    /** The full reward while the treasury holds its average daily income, below that the same share less. */
-    static double share(long balance, long averageIncome) {
+    // the interest Basil promised on the running fixed deposits (paid from the free treasury when they end)
+    private static final String PROMISED_INTEREST = "SELECT COALESCE(ROUND(SUM(amount * rate)), 0) FROM bank_deposits WHERE NOT paid_out";
+
+    static long reserveOf(long averageIncome, long brokeBelow, long promised) {
+        return Math.max(Math.round(averageIncome * RESERVE_SHARE), brokeBelow) + promised;
+    }
+
+    static long budgetLeftOf(long averageIncome, long grantedDay) {
+        return Math.max(0, dailyBudget(averageIncome) - grantedDay);
+    }
+
+    // the days the average income is taken over: INCOME_DAYS, the real age while the season is younger (at least one)
+    private static double incomeDays() {
+        Instant first = firstIncome;
+        if (first == null) {
+            Timestamp stored = Database.queryOne("SELECT MIN(created_at) FROM treasury_ledger", row -> row.getTimestamp(1));
+            if (stored == null) return 1;
+            first = stored.toInstant();
+            firstIncome = first;
+        }
+        double days = Duration.between(first, Instant.now()).toMillis() / 86_400_000.0;
+        return Math.max(1.0, Math.min(INCOME_DAYS, days));
+    }
+
+    /** The full reward while the free treasury holds its average daily income, below that the same share less. */
+    static double share(long free, long averageIncome) {
         if (averageIncome <= 0) return 1.0;
-        return Math.max(0.0, Math.min(1.0, (double) balance / averageIncome));
+        return Math.max(0.0, Math.min(1.0, (double) free / averageIncome));
     }
 
     /** What a copy of the template pays right now (0 while the state is broke). */
@@ -244,13 +293,19 @@ public final class Bauamt {
         return payout(template, funding);
     }
 
+    // the guide value times the share, never more than one day's budget: a big template is paid less, not never
     static int payout(@NotNull Blueprint template, @NotNull Funding funding) {
-        return funding.broke() ? 0 : (int) Math.round(template.reward() * funding.share());
+        if (funding.broke()) return 0;
+        return (int) Math.min(Math.round(template.reward() * funding.share()), dailyBudget(funding.averageIncome()));
     }
 
-    /** Whether the treasury can pay this right now: it keeps its reserve and never spends what it owes. */
+    public static long dailyBudget(long averageIncome) {
+        return Math.round(averageIncome * DAILY_BUDGET_SHARE);
+    }
+
+    /** Whether the treasury can pay this right now: it keeps its reserve, never spends what it owes, stays in the daily budget. */
     public static boolean affordable(int payout, @NotNull Funding funding) {
-        return !funding.broke() && payout > 0 && payout <= funding.free() && funding.balance() - payout >= funding.reserve();
+        return !funding.broke() && payout > 0 && funding.free() - payout >= funding.reserve() && funding.budgetLeft() > 0;
     }
 
 
@@ -282,9 +337,13 @@ public final class Bauamt {
 
     public enum OrderOutcome { OK, LIMIT, DISABLED, UNAFFORDABLE }
 
-    /** Whether the Bauamt hands out orders for the template right now: only while the treasury could pay the copy. */
+    /**
+     * Whether the Bauamt hands out orders for the template right now: only while the treasury could pay the copy (a
+     * daily budget used up today does not count, the copy is claimed later anyway).
+     */
     public static boolean orderable(@NotNull Blueprint template, @NotNull Funding funding) {
-        return template.enabled() && affordable(payout(template, funding), funding);
+        int payout = payout(template, funding);
+        return template.enabled() && !funding.broke() && payout > 0 && funding.free() - payout >= funding.reserve();
     }
 
     /** Worker: the player takes an order for one copy of the template. */
@@ -534,7 +593,7 @@ public final class Bauamt {
 
     /* the grant, claimed at the villager */
 
-    public enum Outcome { OK, BROKE, EMPTY, NOT_INTACT, UNLOADED, NOT_PENDING, ERROR }
+    public enum Outcome { OK, BROKE, EMPTY, BUDGET, NOT_INTACT, UNLOADED, NOT_PENDING, ERROR }
 
     /** Main thread: loads the chunks of the copy, checks it again and pays; the outcome comes back on the main thread. */
     public static void claim(@NotNull Player player, @NotNull Build build, @NotNull Consumer<Outcome> onMain) {
@@ -589,8 +648,21 @@ public final class Bauamt {
             Funding current = refreshFunding();
             if (current.broke()) return Outcome.BROKE;
             int payout = payout(template, current);
+            // a claim passes while the budget is not used up (one grant may go over it, so big copies are not starved)
+            if (payout > 0 && current.budgetLeft() <= 0) return Outcome.BUDGET;
             if (!affordable(payout, current)) return Outcome.EMPTY;
             Outcome outcome = Database.inTransaction(connection -> {
+                // the same lock as Basil's interest and the bond repayments, and the free money read again under it:
+                // two payouts never spend the same money
+                Database.queryOne(connection, "SELECT pg_advisory_xact_lock(?)", row -> 1, Bank.INTEREST_LOCK);
+                Bankruptcy.Level level = Bankruptcy.level(connection);
+                Long owed = Database.queryOne(connection, "SELECT COALESCE(SUM(payout), 0) FROM state_bonds WHERE NOT repaid", row -> row.getLong(1));
+                long free = level.free() - (owed == null ? 0 : owed);
+                Long promised = Database.queryOne(connection, PROMISED_INTEREST, row -> row.getLong(1));
+                long reserve = reserveOf(current.averageIncome(), level.brokeBelow(), promised == null ? 0 : promised);
+                if (free - payout < reserve) return Outcome.EMPTY;
+                Long granted = Database.queryOne(connection, GRANTED_DAY, row -> row.getLong(1));
+                if (budgetLeftOf(current.averageIncome(), granted == null ? 0 : granted) <= 0) return Outcome.BUDGET;
                 if (Database.update(connection, "UPDATE bauamt_builds SET state = 'INTACT', paid_at = now(), reward = ?, checked_at = now()"
                         + " WHERE id = ? AND state = 'PENDING'", payout, build.id()) == 0) return Outcome.NOT_PENDING;
                 Database.update(connection, "UPDATE players SET money = money + ? WHERE uuid = ?", payout, player);
@@ -674,13 +746,24 @@ public final class Bauamt {
         return null;
     }
 
-    /** Main thread, from the block break event: charges the player if the block was a piece of a state build. */
+    /**
+     * Main thread, from the block break event: charges the player if the block was a piece of a state build, or the
+     * ground a bottom piece rests on and that piece fell with it (checked a tick later).
+     */
     static void blockBroken(@NotNull Player player, @NotNull Block block) {
         Build build = buildAt(block.getWorld().getName(), block.getX(), block.getY(), block.getZ());
-        if (build == null) return;
-        Blueprint template = template(build.templateId());
-        if (template == null || !isPiece(build, block)) return;
-        charge(player, build, template, 1);
+        if (build != null) {
+            Blueprint template = template(build.templateId());
+            if (template != null && isPiece(build, block)) charge(player, build, template, 1);
+            return;
+        }
+        Build carried = supportsPiece(block);
+        if (carried == null) return;
+        Block above = block.getRelative(BlockFace.UP);
+        Tasks.syncLater(1L, () -> {
+            Blueprint template = template(carried.templateId());
+            if (template != null && player.isOnline() && !isPiece(carried, above)) charge(player, carried, template, 1);
+        });
     }
 
     /** Main thread, a tick after a cushion was hit and vanished. */
@@ -696,25 +779,56 @@ public final class Bauamt {
     }
 
     /**
-     * Main thread, from the explode events (the blocks are still there): a player's TNT or fireball that breaks pieces
-     * of state builds is charged like breaking them by hand. Explosions nobody caused are left to the inspection.
+     * Main thread, from the explode events (the blocks are still there): pieces of state builds stay. A blown-up copy
+     * could otherwise be rebuilt from its own drops and paid a second time, and most explosions have nobody to charge.
      */
-    static void exploded(@Nullable Player player, @NotNull World world, @NotNull List<Block> blocks) {
-        if (player == null || blocks.isEmpty()) return;
-        String worldName = world.getName();
-        if (!index.containsKey(worldName)) return;
-        Map<Build, Integer> hits = null;
-        for (Block block : blocks) {
-            Build build = buildAt(worldName, block.getX(), block.getY(), block.getZ());
-            if (build == null || !isPiece(build, block)) continue;
-            if (hits == null) hits = new HashMap<>();
-            hits.merge(build, 1, Integer::sum);
-        }
-        if (hits == null) return;
-        hits.forEach((build, count) -> {
-            Blueprint template = template(build.templateId());
-            if (template != null) charge(player, build, template, count);
-        });
+    static void spareFromExplosion(@NotNull World world, @NotNull List<Block> blocks) {
+        if (blocks.isEmpty() || !index.containsKey(world.getName())) return;
+        blocks.removeIf(block -> isStatePiece(block) || supportsPiece(block) != null);
+    }
+
+    /**
+     * The build whose bottom piece rests on this block (a door, rail, carpet, torch ... that would pop off without it),
+     * null for almost every block. The ground under a copy is outside its box, yet the copy needs it.
+     */
+    private static @Nullable Build supportsPiece(@NotNull Block block) {
+        Block above = block.getRelative(BlockFace.UP);
+        Build build = buildAt(above.getWorld().getName(), above.getX(), above.getY(), above.getZ());
+        if (build == null || above.getY() != build.y() || above.getType().isOccluding()) return null;
+        return isPiece(build, above) ? build : null;
+    }
+
+    /** Main thread: a block placed or a bucket used here would replace a piece of a state build (grass, snow, water ...). */
+    static boolean replacesStatePiece(@NotNull Block block, @NotNull BlockData before) {
+        Build build = buildAt(block.getWorld().getName(), block.getX(), block.getY(), block.getZ());
+        if (build == null) return false;
+        Blueprint template = template(build.templateId());
+        Blueprint.Variant variant = template == null ? null : template.variant(build.rotation(), build.mirrored());
+        if (variant == null) return false;
+        BlockData expected = variant.data(block.getX() - build.x(), block.getY() - build.y(), block.getZ() - build.z());
+        return expected != null && Blueprint.same(expected, before);
+    }
+
+    /** Main thread: the cell lies in the box of a paid build (a piece or a gap that has to stay empty). */
+    static boolean inStateBox(@NotNull Block block) {
+        return buildAt(block.getWorld().getName(), block.getX(), block.getY(), block.getZ()) != null;
+    }
+
+    /** Main thread: the block is a piece of a paid build (state property); a single map lookup for any other block. */
+    static boolean isStatePiece(@NotNull Block block) {
+        Build build = buildAt(block.getWorld().getName(), block.getX(), block.getY(), block.getZ());
+        return build != null && isPiece(build, block);
+    }
+
+    /** Main thread: a cushion at this spot belongs to a paid build. */
+    static boolean isStateProp(@NotNull Location at) {
+        World world = at.getWorld();
+        if (world == null) return false;
+        Build build = buildAt(world.getName(), at.getBlockX(), at.getBlockY(), at.getBlockZ());
+        if (build == null) return false;
+        Blueprint template = template(build.templateId());
+        Blueprint.Variant variant = template == null ? null : template.variant(build.rotation(), build.mirrored());
+        return variant != null && variant.prop(at.getBlockX() - build.x(), at.getBlockY() - build.y(), at.getBlockZ() - build.z());
     }
 
     /**
@@ -753,7 +867,8 @@ public final class Bauamt {
         UUID uuid = player.getUniqueId();
         Damage open = null;
         for (Damage damage : damages) {
-            if (damage.player().equals(uuid) && damage.buildId() == build.id()) {
+            // damage after a served warrant gets a bill of its own (with its own due date and warrant)
+            if (damage.player().equals(uuid) && damage.buildId() == build.id() && !damage.served()) {
                 open = damage;
                 break;
             }
@@ -772,7 +887,7 @@ public final class Bauamt {
         }
         Instant now = Instant.now();
         Damage created = new Damage(0, build.id(), uuid, player.getName(), blocks, DAMAGE_FLAT + DAMAGE_PER_BLOCK * blocks, now,
-                now.plus(Duration.ofDays(DAMAGE_DUE_DAYS)), false);
+                now.plus(Duration.ofDays(DAMAGE_DUE_DAYS)), false, false, false);
         created.shouldNotice(NOTICE_COOLDOWN_MILLIS);
         damages.add(created);
         Tasks.async(() -> {
@@ -829,7 +944,8 @@ public final class Bauamt {
                 + "§7, zahlbar beim Bauamt.");
     }
 
-    public record Settlement(int paid, int missing) {}
+    // warrantEnded: the paid bills were the last reason the player was wanted, the caller lifts the warrant
+    public record Settlement(int paid, int missing, boolean warrantEnded) {}
 
     /** Worker: takes every open damage bill of the player (into the treasury), or tells how much is missing. */
     public static @NotNull Settlement payDamages(@NotNull UUID player) {
@@ -842,24 +958,33 @@ public final class Bauamt {
                         row -> new long[]{row.getLong(1), row.getLong(2)}, player);
                 long total = 0;
                 for (long[] row : rows) total += row[1];
-                if (total <= 0) return new Settlement(0, 0);
+                if (total <= 0) return new Settlement(0, 0, false);
                 Long money = Database.queryOne(connection, "SELECT money FROM players WHERE uuid = ? FOR UPDATE", row -> row.getLong(1), player);
                 long have = money == null ? 0 : money;
-                if (have < total) return new Settlement(0, (int) (total - have));
+                if (have < total) return new Settlement(0, (int) (total - have), false);
                 Database.update(connection, "UPDATE players SET money = money - ? WHERE uuid = ?", total, player);
                 // exactly the rows that were summed
                 for (long[] row : rows) Database.update(connection, "UPDATE bauamt_damage SET paid_at = now() WHERE id = ?", row[0]);
                 Treasury.deposit(connection, Treasury.Source.DAMAGE_FINE, total, player);
                 paidIds.clear();
                 for (long[] row : rows) paidIds.add(row[0]);
-                return new Settlement((int) total, 0);
+                return new Settlement((int) total, 0, false);
             });
             if (result.paid() > 0) {
+                // a paid bill that started the running warrant ends it, unless another unserved debt keeps it going
+                boolean warrantBill = false;
+                for (Damage damage : damages) {
+                    if (damage.player().equals(player) && paidIds.contains(damage.id()) && damage.wanted() && !damage.served()
+                            && !damage.shared()) warrantBill = true;
+                }
                 // only the bills that were paid; one still being written (no id yet) stays open
                 damages.removeIf(damage -> damage.player().equals(player) && paidIds.contains(damage.id()));
                 Main.getInstance().getSLF4JLogger().info("Bauamt damage paid {} by {}", result.paid(), player);
                 Treasury.committed(result.paid());
                 refreshFunding();
+                if (warrantBill && wantedBill(player) == 0 && !Loans.defaultUnserved(player)) {
+                    return new Settlement(result.paid(), 0, true);
+                }
             }
             return result;
         }
@@ -876,7 +1001,8 @@ public final class Bauamt {
         due.forEach((uuid, bills) -> {
             Player player = Bukkit.getPlayer(uuid);
             if (player != null) {
-                if (!JailHandler.markWantedUntilCaught(player, DAMAGE_REASON)) return;
+                // a prisoner or a player wanted already: the bill waits and starts its own warrant afterwards
+                if (!JailHandler.markWantedUntilCaughtIfFree(player, DAMAGE_REASON)) return;
                 markWanted(bills);
                 player.sendMessage(Main.getChatPrefix() + "§cDu hast den Schaden am Staatseigentum nicht bezahlt, jetzt wirst du gesucht. §7Die Rechnung bleibt offen.");
                 return;
@@ -907,13 +1033,37 @@ public final class Bauamt {
         }
     }
 
-    /** What the player's overdue bills (those that made them wanted) still come to; caps the bounty. */
+    /** What the overdue bills behind the running warrant (wanted, not served yet) still come to; caps the bounty. */
     public static int wantedBill(@NotNull UUID player) {
         int total = 0;
         for (Damage damage : damages) {
-            if (damage.player().equals(player) && damage.wanted()) total += damage.amount();
+            if (damage.player().equals(player) && damage.wanted() && !damage.served()) total += damage.amount();
         }
         return total;
+    }
+
+    /**
+     * Any thread (blocking): the warrant the overdue bills started was served, they stay owed but cap no later bounty
+     * (see Loans.warrantServed). A bill still being written (no id yet) is only marked in memory.
+     */
+    public static void serveBills(@NotNull UUID player) {
+        for (Damage damage : damages) {
+            if (!damage.player().equals(player) || !damage.wanted() || damage.served()) continue;
+            if (damage.id() > 0) Database.update("UPDATE bauamt_damage SET served_at = now() WHERE id = ?", damage.id());
+            damage.markServed();
+        }
+    }
+
+    /**
+     * Any thread (blocking): another reason joined the running warrant (black market, an admin): the bills that started
+     * it still cap the bounty, but paying them no longer ends it.
+     */
+    public static void warrantShared(@NotNull UUID player) {
+        for (Damage damage : damages) {
+            if (!damage.player().equals(player) || !damage.wanted() || damage.served() || damage.shared()) continue;
+            if (damage.id() > 0) Database.update("UPDATE bauamt_damage SET warrant_shared = TRUE WHERE id = ?", damage.id());
+            damage.markShared();
+        }
     }
 
 
@@ -932,11 +1082,8 @@ public final class Bauamt {
                 case PENDING -> {
                     if (build.createdAt().isBefore(now.minus(Duration.ofDays(PENDING_EXPIRES_DAYS)))) expire(build);
                 }
-                case DAMAGED -> {
-                    Instant damagedAt = build.damagedAt();
-                    if (damagedAt != null && damagedAt.isBefore(now.minus(Duration.ofDays(GONE_AFTER_DAYS)))) gone(build);
-                    else active.add(build);
-                }
+                // written off only after a last look at it (check), never on its age alone
+                case DAMAGED -> active.add(build);
                 case INTACT -> active.add(build);
                 case GONE -> builds.remove(build);
             }
@@ -978,14 +1125,22 @@ public final class Bauamt {
         Blueprint template = template(build.templateId());
         Blueprint.Variant variant = template == null ? null : template.variant(build.rotation(), build.mirrored());
         if (variant == null) return false;
-        int total = variant.cells();
+        // only the pieces count: filling the gaps of a paid copy must not get it written off (and paid again)
+        int total = variant.pieces();
+        if (total == 0) return true;
         // counting stops where the decision cannot change any more (the cut-offs use the very comparison below)
         boolean intactNow = build.state() == Build.State.INTACT;
         int stopAfter = intactNow ? damageCutoff(total) : repairCutoff(total);
-        int bad = Blueprint.mismatches(world, build.x(), build.y(), build.z(), variant, stopAfter);
+        int bad = Blueprint.mismatches(world, build.x(), build.y(), build.z(), variant, stopAfter, false);
         double intact = 1.0 - (double) bad / total;
-        if (intactNow && intact < DAMAGED_BELOW) damaged(build, template);
-        else if (!intactNow && intact >= REPAIRED_AT) repaired(build, template);
+        if (intactNow && intact < DAMAGED_BELOW) {
+            damaged(build, template);
+        } else if (!intactNow && intact >= REPAIRED_AT) {
+            repaired(build, template);
+        } else if (!intactNow) {
+            Instant damagedAt = build.damagedAt();
+            if (damagedAt != null && damagedAt.isBefore(Instant.now().minus(Duration.ofDays(GONE_AFTER_DAYS)))) gone(build);
+        }
         return true;
     }
 
@@ -1076,11 +1231,24 @@ public final class Bauamt {
         for (Build build : builds) {
             if (build.templateId() == template.id()) gone.add(build.id());
         }
+        // the players whose running warrant came from these bills alone
+        Set<UUID> warrants = new HashSet<>();
+        for (Damage damage : damages) {
+            if (gone.contains(damage.buildId()) && damage.wanted() && !damage.served() && !damage.shared()) warrants.add(damage.player());
+        }
         builds.removeIf(build -> build.templateId() == template.id());
         orders.removeIf(order -> order.templateId() == template.id());
         damages.removeIf(damage -> gone.contains(damage.buildId()));
         reloadTemplates();
         rebuildIndex();
+        for (UUID uuid : warrants) {
+            if (wantedBill(uuid) > 0 || Loans.defaultUnserved(uuid)) continue;
+            PlayerRepository.clearUntilCaughtWarrant(uuid);
+            MainThread.run(() -> {
+                Player player = Bukkit.getPlayer(uuid);
+                if (player != null) JailHandler.clearWantedIfUntilCaught(player);
+            });
+        }
     }
 
 }

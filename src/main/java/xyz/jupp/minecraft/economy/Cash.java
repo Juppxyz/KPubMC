@@ -45,11 +45,15 @@ public final class Cash {
         return note;
     }
 
-    /** Value of one note of the stack, 0 if it is no (new) note. */
+    /** Value of one note of the stack, 0 if it is no (new) note; only the values Basil prints count. */
     public static int value(@Nullable ItemStack item) {
         if (item == null || item.getType() != Material.PAPER) return 0;
         Integer value = item.getPersistentDataContainer().get(KEY, PersistentDataType.INTEGER);
-        return value == null || value <= 0 ? 0 : value;
+        if (value == null) return 0;
+        for (int note : NOTES) {
+            if (note == value) return value;
+        }
+        return 0;
     }
 
     /** The old cash: an emerald with the name of 10 Schilling. */

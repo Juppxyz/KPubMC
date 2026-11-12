@@ -9,6 +9,11 @@ commands:
   money:
     aliases: [geld, schilling]
     usage: /<command>
+  zahlen:
+    aliases: [pay, ueberweisen]
+    usage: /<command> <Spieler> <Betrag>
+  kopfgeld:
+    usage: /<command> <Spieler> <Betrag>
   config:
   help:
     aliases: [hilfe]

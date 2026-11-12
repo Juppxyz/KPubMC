@@ -109,6 +109,8 @@ public final class PlayerRepository {
     /** Moves money from one player to another in one transaction. */
     public static TransferResult transferMoney(@NotNull UUID from, @NotNull UUID to, int amount) {
         TransferResult result = Database.inTransaction(connection -> {
+            // both rows locked in one fixed order: two players paying each other at once never wait for each other
+            Database.query(connection, "SELECT uuid FROM players WHERE uuid IN (?, ?) ORDER BY uuid FOR UPDATE", row -> null, from, to);
             if (Database.update(connection, "UPDATE players SET money = money - ? WHERE uuid = ? AND money >= ?",
                     amount, from, amount) == 0) {
                 return TransferResult.INSUFFICIENT_FUNDS;
@@ -140,26 +142,47 @@ public final class PlayerRepository {
 
     // wanted is written as well: a timed wanted that ran out must not stay TRUE (with jail_end 0 it means "until caught")
     public static void unsetJail(@NotNull UUID uuid, long jailEnd, boolean wanted) {
-        Database.update("UPDATE players SET jail = FALSE, jail_end = ?, is_wanted = ?, jail_cell = NULL, caught = FALSE WHERE uuid = ?",
+        // a warrant ends or (after an escape) a new one starts: the time on the run counts from 0
+        Database.update("UPDATE players SET jail = FALSE, jail_end = ?, is_wanted = ?, jail_cell = NULL, caught = FALSE, wanted_seconds = 0 WHERE uuid = ?",
                 jailEnd, wanted, uuid);
         log().info("unset jail for {}", uuid);
     }
 
     /** Wanted until the given time (the same end field the escape uses). */
     public static void setWantedUntil(@NotNull UUID uuid, long wantedEnd) {
-        Database.update("UPDATE players SET is_wanted = TRUE, jail_end = ? WHERE uuid = ?", wantedEnd, uuid);
+        Database.update("UPDATE players SET is_wanted = TRUE, jail_end = ?, wanted_seconds = CASE WHEN is_wanted AND NOT jail AND (jail_end = 0 OR jail_end > ?) THEN wanted_seconds ELSE 0 END WHERE uuid = ?", wantedEnd, System.currentTimeMillis(), uuid);
         log().info("set wanted for {} until {}", uuid, wantedEnd);
     }
 
-    /** Wanted until caught (jail_end 0) unless the player sits in jail (that sentence would never end); true if set. */
+    /**
+     * Wanted until caught (jail_end 0) unless the player sits in jail (that sentence would never end) or is wanted
+     * already (a running warrant stays as it is; an expired timed one does not count); true if set.
+     */
     public static boolean setWantedUntilCaughtIfFree(@NotNull UUID uuid) {
-        boolean set = Database.update("UPDATE players SET is_wanted = TRUE, jail_end = 0 WHERE uuid = ? AND NOT jail", uuid) > 0;
+        boolean set = Database.update("UPDATE players SET is_wanted = TRUE, jail_end = 0, wanted_seconds = 0 WHERE uuid = ? AND NOT jail"
+                + " AND NOT (is_wanted AND (jail_end = 0 OR jail_end > ?))", uuid, System.currentTimeMillis()) > 0;
         if (set) log().info("set wanted for {} until caught", uuid);
         return set;
     }
 
+    /** Blocking: a wanted player was online on the run for these seconds more. */
+    public static void addWantedSeconds(@NotNull UUID uuid, int seconds) {
+        Database.update("UPDATE players SET wanted_seconds = wanted_seconds + ? WHERE uuid = ? AND is_wanted AND NOT jail", seconds, uuid);
+    }
+
+    /** Ends a warrant until caught (not a timed one, not a sentence), for a player who is offline. Blocking. */
+    public static void clearUntilCaughtWarrant(@NotNull UUID uuid) {
+        if (Database.update("UPDATE players SET is_wanted = FALSE, wanted_seconds = 0 WHERE uuid = ? AND is_wanted AND jail_end = 0 AND NOT jail", uuid) > 0) {
+            log().info("warrant of {} ended", uuid);
+        }
+    }
+
     public static void setIsWanted(@NotNull UUID uuid, boolean isWanted) {
-        Database.update("UPDATE players SET is_wanted = ? WHERE uuid = ?", isWanted, uuid);
+        if (isWanted) {
+            Database.update("UPDATE players SET is_wanted = TRUE, wanted_seconds = CASE WHEN is_wanted AND NOT jail AND (jail_end = 0 OR jail_end > ?) THEN wanted_seconds ELSE 0 END WHERE uuid = ?", System.currentTimeMillis(), uuid);
+        } else {
+            Database.update("UPDATE players SET is_wanted = FALSE WHERE uuid = ?", uuid);
+        }
         log().info("set wanted for {} to {}", uuid, isWanted);
     }
 

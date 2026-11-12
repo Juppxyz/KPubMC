@@ -8,8 +8,10 @@ import org.jetbrains.annotations.Nullable;
  * <p>
  * Buy price: {@code basePrice * e^(elasticity * demand)}, clamped to [minPrice, maxPrice]. Every bought bundle raises
  * the demand by 1, every sold bundle lowers it by 1, and the demand decays towards 0 over time.
- * Sell price: the buy price capped at the base price, times sellRatio. Selling therefore never profits from demand
- * spikes, so buying somewhere and selling here cannot print money.
+ * Sell price: the same curve, but it may fall to {@link #SELL_FLOOR_SHARE} of the base price (a flooded good pays
+ * almost nothing, for everyone: whoever dumps a farm's output ruins its price), capped at the base price and the
+ * maximum price, times sellRatio. Selling therefore never profits from demand spikes, so buying somewhere and selling
+ * here cannot print money.
  */
 public record MarketItem(
         Material material,
@@ -31,6 +33,9 @@ public record MarketItem(
         @Nullable TaxClass taxClassOverride
 ) {
 
+    /** Selling pushes the price down to this share of the base price at most; buying stops at the minimum price (25 %). */
+    public static final double SELL_FLOOR_SHARE = 0.05;
+
     /** The item's own tax class, else the default of its category. */
     public TaxClass taxClass() {
         return taxClassOverride != null ? taxClassOverride : TaxClass.forCategory(category);
@@ -51,9 +56,12 @@ public record MarketItem(
         return (int) Math.max(1, rounded);
     }
 
-    /** Sell price of one bundle at the given demand, never above basePrice * sellRatio. */
+    /** Sell price of one bundle at the given demand, never above basePrice * sellRatio, down to SELL_FLOOR_SHARE of it. */
     public int sellPriceAt(double atDemand) {
-        return (int) Math.max(0, Math.round(Math.min(buyPriceAt(atDemand), basePrice) * sellRatio));
+        double raw = basePrice * Math.exp(elasticity * atDemand);
+        double floor = Math.max(1, Math.ceil(basePrice * SELL_FLOOR_SHARE));
+        long price = Math.round(Math.min(Math.min(Math.max(raw, floor), effectiveMaxPrice()), basePrice));
+        return (int) Math.max(0, Math.round(price * sellRatio));
     }
 
     public int buyPrice() {

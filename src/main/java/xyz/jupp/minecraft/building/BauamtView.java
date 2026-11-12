@@ -15,6 +15,8 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.BookMeta;
 import org.jetbrains.annotations.NotNull;
 import xyz.jupp.minecraft.Main;
+import xyz.jupp.minecraft.utils.JailHandler;
+import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.inventory.Items;
 import xyz.jupp.minecraft.utils.Tasks;
 import xyz.jupp.minecraft.utils.Text;
@@ -85,13 +87,14 @@ public final class BauamtView implements InventoryHolder {
                 "§7   sagt dir das Bauamt Bescheid.",
                 "§73. Hierher zurück: Abnahme und Auszahlung.",
                 "",
-                "§fStaatskasse: §a" + Items.format(funding.balance()) + " Schilling"));
+                "§fStaatskasse: §a" + Items.format(Math.max(0, funding.free())) + " Schilling §7frei"));
         if (funding.broke()) {
             info.add("§cDer Staat ist pleite, keine Förderung.");
         } else {
             info.add("§fFörderung gerade: §a" + funding.percent() + " % §7des Richtwerts");
             if (funding.reduced()) info.add("§7Die Kasse liegt unter ihren Ø Einnahmen (" + Items.format(funding.averageIncome()) + " am Tag).");
-            if (funding.reserve() > 0) info.add("§7Unter " + Items.format(funding.reserve()) + " Schilling zahlt der Staat nicht.");
+            if (funding.reserve() > 0) info.add("§7Unter " + Items.format(funding.reserve()) + " Schilling frei zahlt der Staat nicht.");
+            info.add("§7Tagesbudget noch: §f" + Items.format(funding.budgetLeft()) + " Schilling");
         }
         info.addAll(List.of(
                 "",
@@ -144,6 +147,7 @@ public final class BauamtView implements InventoryHolder {
             lore.add("§7Gemeldet " + Items.ago(build.createdAt()));
             lore.add("");
             if (funding.broke()) lore.add("§cDer Staat ist pleite.");
+            else if (payout > 0 && funding.budgetLeft() <= 0) lore.add("§7Tagesbudget ausgeschöpft, später nochmal.");
             else if (!Bauamt.affordable(payout, funding)) lore.add("§7Die Staatskasse kann das gerade nicht zahlen.");
             else lore.add("§e» Linksklick: Abnahme & Auszahlung");
             inventory.setItem(slot, Items.glow(Items.named(Material.PAPER, "§fBauantrag: §e" + template.name(), lore), true));
@@ -197,8 +201,11 @@ public final class BauamtView implements InventoryHolder {
 
     // "Förderung: 500 Schilling" or, while the treasury is short, "Förderung gerade: 300 (Richtwert 500)"
     private static String payoutLine(Blueprint template, Bauamt.Funding funding) {
-        if (funding.broke() || !funding.reduced()) return "§7Förderung: §a" + Items.format(template.reward()) + " Schilling";
-        return "§7Förderung gerade: §a" + Items.format(Bauamt.payout(template, funding)) + " §7(Richtwert " + Items.format(template.reward()) + ")";
+        int payout = Bauamt.payout(template, funding);
+        if (funding.broke() || payout >= template.reward()) return "§7Förderung: §a" + Items.format(template.reward()) + " Schilling";
+        boolean capped = payout == Bauamt.dailyBudget(funding.averageIncome());
+        return "§7Förderung gerade: §a" + Items.format(payout) + " §7(Richtwert " + Items.format(template.reward())
+                + (capped ? ", höchstens ein Tagesbudget)" : ")");
     }
 
     public void handleClick(@NotNull InventoryClickEvent event, @NotNull Player player) {
@@ -258,12 +265,16 @@ public final class BauamtView implements InventoryHolder {
             switch (outcome) {
                 case OK -> {
                     int percent = template.reward() > 0 ? (int) Math.round(100.0 * build.reward() / template.reward()) : 100;
+                    // the reason: the daily budget caps the grant, or the treasury is below its average income
+                    boolean capped = build.reward() == Bauamt.dailyBudget(Bauamt.funding().averageIncome()) && build.reward() < template.reward();
                     player.sendMessage(Main.getChatPrefix() + "§fDas Bauamt hat deinen §e" + template.name() + " §fabgenommen: §a+"
-                            + Items.format(build.reward()) + " Schilling§f." + (percent < 100 ? " §7(" + percent + " % des Richtwerts, die Kasse ist knapp)" : ""));
+                            + Items.format(build.reward()) + " Schilling§f." + (percent < 100 ? " §7(" + percent + " % des Richtwerts, "
+                            + (capped ? "höchstens ein Tagesbudget)" : "die Kasse ist knapp)") : ""));
                     player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.8f, 1.4f);
                 }
                 case BROKE -> fail(player, "§fDer Staat ist pleite, gerade gibt es keine Förderung. Der Antrag bleibt offen.");
                 case EMPTY -> fail(player, "§fDie Staatskasse kann das gerade nicht zahlen. Der Antrag bleibt offen.");
+                case BUDGET -> fail(player, "§fDas Bauamt hat sein Tagesbudget ausgeschöpft. Der Antrag bleibt offen, versuch es später.");
                 case NOT_INTACT -> fail(player, "§fDas Bauwerk bei " + build.centerX() + " / " + build.centerZ()
                         + " ist nicht mehr vollständig. Der Antrag bleibt offen.");
                 case UNLOADED -> fail(player, "§fDas Bauwerk konnte gerade nicht geprüft werden, versuch es gleich nochmal.");
@@ -292,6 +303,14 @@ public final class BauamtView implements InventoryHolder {
                     fail(player, "§fDas hat gerade nicht geklappt, versuch es gleich nochmal.");
                 } else if (result.paid() > 0) {
                     player.sendMessage(Main.getChatPrefix() + "§fDu hast §c" + Items.format(result.paid()) + " Schilling §fSchadensersatz an die Staatskasse gezahlt. Die Sache ist erledigt.");
+                    // the bills were the reason for the warrant: paying them ends it (a sentence already running stays)
+                    if (result.warrantEnded()) {
+                        if (!player.isOnline()) {
+                            Tasks.async(() -> PlayerRepository.clearUntilCaughtWarrant(uuid));
+                        } else if (JailHandler.clearWantedIfUntilCaught(player)) {
+                            player.sendMessage(Main.getChatPrefix() + "§aDie Fahndung gegen dich ist aufgehoben.");
+                        }
+                    }
                     player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1f, 1.5f);
                 } else if (result.missing() > 0) {
                     fail(player, "§fDafür fehlen dir Schilling §7(benötigt: " + Items.format(result.missing()) + " mehr)§f.");

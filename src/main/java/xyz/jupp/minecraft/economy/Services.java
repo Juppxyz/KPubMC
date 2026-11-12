@@ -181,6 +181,8 @@ public final class Services {
                 Database.update(connection, "UPDATE market_transactions SET moves_money = FALSE WHERE id = (SELECT id FROM market_transactions "
                         + "WHERE player_uuid = ? AND material = ? AND kind = 'BUY' AND moves_money ORDER BY id DESC LIMIT 1)",
                         player, "SERVICE:" + purchase.offer().key());
+                // the purchase raised the price for everyone, the refunded one must not (free price pushing)
+                Database.update(connection, "UPDATE market_services SET demand = demand - 1 WHERE key = ?", purchase.offer().key());
             }
             if (purchase.tax() > 0) {
                 Database.update(connection, "INSERT INTO treasury_ledger (source, amount, player_uuid) VALUES (?, ?, ?)",
@@ -189,6 +191,7 @@ public final class Services {
             return null;
         });
         Treasury.committed(-purchase.tax());
+        if (purchase.offer() != null) reload();
     }
 
     private static ServiceOffer withDemand(ServiceOffer offer, double demand) {

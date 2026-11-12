@@ -67,9 +67,10 @@ public class BauamtCommand implements TabExecutor {
             case "belohnung" -> reward(player, args);
             case "löschen", "loeschen" -> delete(player, args);
             case "stand" -> Tasks.supplyAsync(Bauamt::refreshFunding, funding ->
-                    player.sendMessage(Main.getChatPrefix() + "§fStaatskasse: §a" + Items.format(funding.balance()) + " §8| §fØ Einnahmen: §a"
+                    player.sendMessage(Main.getChatPrefix() + "§fStaatskasse: §a" + Items.format(funding.balance()) + " §7(frei " + Items.format(funding.free()) + ") §8| §fØ Einnahmen: §a"
                             + Items.format(funding.averageIncome()) + " §7am Tag §8| §fFörderung: §a" + funding.percent() + " % §7des Richtwerts"
-                            + (funding.broke() ? " §c(Pleite: nichts)" : " §7(Reserve " + Items.format(funding.reserve()) + ")")));
+                            + (funding.broke() ? " §c(Pleite: nichts)" : " §7(Reserve " + Items.format(funding.reserve())
+                            + ", Tagesbudget noch " + Items.format(funding.budgetLeft()) + ")")));
             default -> help(player);
         }
         return true;

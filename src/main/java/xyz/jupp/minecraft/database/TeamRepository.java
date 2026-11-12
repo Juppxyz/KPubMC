@@ -4,6 +4,7 @@ import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
+import xyz.jupp.minecraft.economy.Treasury;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.utils.AreaOptionsEnum;
 
@@ -112,8 +113,11 @@ public final class TeamRepository {
                     teamID, teamName, teamColor, title, owner.getUniqueId());
             insertMember(connection, teamID, TeamMember.of(owner, "owner"));
             Database.update(connection, "UPDATE players SET money = money - ?, team_id = ? WHERE uuid = ?", price, teamID, owner.getUniqueId());
+            // the founding fee goes to the state treasury
+            Treasury.deposit(connection, Treasury.Source.FEES, price, owner.getUniqueId());
             return new Founded(Founding.OK, teamID);
         });
+        if (founded.outcome() == Founding.OK) Treasury.committed(price);
         if (founded.outcome() == Founding.OK) log().info("create new team {} ({}), -{} for {}", teamName, teamID, price, owner.getUniqueId());
         return founded;
     }

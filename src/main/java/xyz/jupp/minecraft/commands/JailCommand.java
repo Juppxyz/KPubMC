@@ -10,6 +10,7 @@ import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import xyz.jupp.minecraft.economy.Loans;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.jail.JailCells;
@@ -151,6 +152,8 @@ public class JailCommand implements CommandExecutor, TabCompleter {
             } else {
                 // a prisoner keeps the sentence, only the wanted mark goes
                 JailHandler.clearWanted(target);
+                // the debts behind the dropped warrant cap no later bounty, as after a jail
+                Loans.warrantServed(target.getUniqueId());
                 Tasks.sync(() -> sender.sendMessage(PREFIX + "§a" + target.getName() + " §fist nicht länger §4§lGESUCHT§f."));
             }
         });

@@ -56,8 +56,9 @@ public class ConfigManager {
     private static volatile String openAiApiKey = "";
     private static volatile LocalDateTime endUnlock = null;
     // progressive nether transfer tax, sorted by 'from'; immutable list, replaced as a whole on reload
+    // (small enough that moving money away first is not worth the effort: up to 1.000 free, then 5 %, from 20.000 10 %)
     private static final List<TaxBracket> DEFAULT_NETHER_BRACKETS = List.of(
-            new TaxBracket(0, 0.0), new TaxBracket(500, 0.5), new TaxBracket(5_000, 0.65), new TaxBracket(20_000, 0.7));
+            new TaxBracket(0, 0.0), new TaxBracket(1_000, 0.05), new TaxBracket(20_000, 0.10));
     private static volatile List<TaxBracket> netherTransferTaxBrackets = DEFAULT_NETHER_BRACKETS;
     private static volatile DntLootRules dntLootRules = DntLootRules.DEFAULT;
 

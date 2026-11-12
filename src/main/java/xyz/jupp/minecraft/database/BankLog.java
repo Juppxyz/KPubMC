@@ -33,6 +33,9 @@ public final class BankLog {
     public static final String TEAM_WITHDRAW = "TEAM_WITHDRAW";
     // note: the name of the wanted player
     public static final String BOUNTY = "BOUNTY";
+    // money put on a wanted player's head, and back when nobody caught them; note: the wanted player's uuid
+    public static final String PLEDGE = "PLEDGE";
+    public static final String PLEDGE_REFUND = "PLEDGE_REFUND";
 
     /**
      * SQL for the part of the account an open loan locks (borrowed amount plus its full interest): it may be spent,

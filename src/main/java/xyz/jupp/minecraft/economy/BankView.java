@@ -15,10 +15,12 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import xyz.jupp.minecraft.utils.PlayerSaves;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.PlayerCacheObject;
 import xyz.jupp.minecraft.database.BankLog;
+import xyz.jupp.minecraft.database.ChestShopRepository;
 import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.inventory.MainThread;
 import xyz.jupp.minecraft.utils.CombatLock;
@@ -78,11 +80,15 @@ public final class BankView implements InventoryHolder {
     private long ignoreClicksUntil;
 
     private record State(int balance, List<Bank.Term> terms, List<Bank.Entry> statement, List<Bank.Payout> payouts, Bank.Offer offer,
-                         Loans.@Nullable Loan loan, double loanRate, Bonds.Holding bonds, Map<String, String> names) {}
+                         Loans.@Nullable Loan loan, double loanRate, Loans.Limit loanLimit, Bonds.Holding bonds, Map<String, String> names) {}
 
-    private BankView(Player viewer, State state) {
+    // playtime and first join, read on the main thread (the loan limit depends on them)
+    private volatile Loans.Standing standing;
+
+    private BankView(Player viewer, State state, Loans.Standing standing) {
         this.viewer = viewer;
         this.state = state;
+        this.standing = standing;
         this.inventory = Bukkit.createInventory(this, SIZE, Text.section(Main.getFinanceVillagerFredName() + " §8» §7Bank"));
     }
 
@@ -96,10 +102,11 @@ public final class BankView implements InventoryHolder {
 
     public static void open(@NotNull Player player) {
         UUID uuid = player.getUniqueId();
-        Tasks.supplyAsync(() -> load(uuid), state -> {
+        Loans.Standing standing = Loans.standing(player);
+        Tasks.supplyAsync(() -> load(uuid, standing), state -> {
             if (!player.isOnline()) return;
             state.payouts().forEach(Bank::announce);
-            BankView view = new BankView(player, state);
+            BankView view = new BankView(player, state, standing);
             view.render();
             player.openInventory(view.inventory);
             player.playSound(player.getLocation(), Sound.BLOCK_CHEST_OPEN, 0.6f, 1.4f);
@@ -107,18 +114,18 @@ public final class BankView implements InventoryHolder {
     }
 
     // worker: due fixed deposits are paid out first, so the account is up to date
-    private static State load(UUID uuid) {
+    private static State load(UUID uuid, Loans.Standing standing) {
         List<Bank.Payout> payouts = Bank.payoutDue(uuid);
         List<Bank.Entry> statement = Bank.statement(uuid, STATEMENT_LINES);
         return new State(PlayerRepository.getMoney(uuid), Bank.terms(uuid), statement, payouts, Bank.offer(uuid),
-                Loans.current(uuid), Loans.rateNow(), Bonds.holding(uuid), transferNames(statement));
+                Loans.current(uuid), Loans.rateNow(), Loans.limit(uuid, standing), Bonds.holding(uuid), transferNames(statement));
     }
 
     // worker: the names of transfer partners come from their player files (disk)
     private static Map<String, String> transferNames(List<Bank.Entry> statement) {
         Map<String, String> names = new HashMap<>();
         for (Bank.Entry entry : statement) {
-            if (entry.note() == null || !entry.kind().startsWith("TRANSFER_")) continue;
+            if (entry.note() == null || !(entry.kind().startsWith("TRANSFER_") || entry.kind().startsWith("SHOP_") || entry.kind().startsWith("PLEDGE"))) continue;
             try {
                 String name = Bukkit.getOfflinePlayer(UUID.fromString(entry.note())).getName();
                 if (name != null) names.put(entry.note(), name);
@@ -134,7 +141,7 @@ public final class BankView implements InventoryHolder {
         UUID uuid = viewer.getUniqueId();
         State fresh;
         try {
-            fresh = load(uuid);
+            fresh = load(uuid, standing);
         } catch (RuntimeException e) {
             MainThread.run(() -> busy = false);
             return;
@@ -289,13 +296,16 @@ public final class BankView implements InventoryHolder {
 
     private void renderLoan() {
         Loans.Loan loan = state.loan();
-        int max = Loans.maxFor(state.balance());
-        inventory.setItem(SLOT_LOAN_INFO, named(Material.WRITABLE_BOOK, "§cKredit", List.of(
-                "§7Geld sofort, zurück in §f" + Loans.DAYS + " Tagen§7.",
+        Loans.Limit limit = state.loanLimit();
+        int max = limit.max();
+        List<String> info = new ArrayList<>(List.of(
+                "§7Geld aus der Staatskasse, zurück in §f" + Loans.DAYS + " Tagen§7.",
                 "§7Zinsen gerade: §f" + rate(state.loanRate()) + " §7pro Woche,",
-                "§7je früher zurück, desto weniger.",
-                "§7Für dich bis zu §f" + format(max) + " Schilling §7(nach Kontostand)",
-                "§7Vor dem Kredit zeigt Basil dir alle Regeln.")));
+                "§7je früher zurück, desto weniger."));
+        info.add(max > 0 ? "§7Für dich gerade bis zu §f" + format(max) + " Schilling" : "§7Für dich gerade §ckein Kredit");
+        info.addAll(limitLines(limit));
+        info.add("§7Vor dem Kredit zeigt Basil dir alle Regeln.");
+        inventory.setItem(SLOT_LOAN_INFO, named(Material.WRITABLE_BOOK, "§cKredit", info));
         Instant now = Instant.now();
         if (loan != null && loan.state() == Loans.State.OPEN) {
             inventory.setItem(SLOT_LOAN_STATUS, named(Material.PAPER, "§6Offener Kredit: " + format(loan.principal()) + " Schilling", List.of(
@@ -326,8 +336,7 @@ public final class BankView implements InventoryHolder {
         for (int i = 0; i < Loans.AMOUNTS.length; i++) {
             int amount = Loans.AMOUNTS[i];
             if (amount > max) {
-                inventory.setItem(LOAN_START + i, named(Material.GRAY_DYE, "§7Kredit: " + format(amount) + " Schilling",
-                        List.of("§7Dafür ist dein Kontostand zu niedrig.")));
+                inventory.setItem(LOAN_START + i, named(Material.GRAY_DYE, "§7Kredit: " + format(amount) + " Schilling", limitLines(limit)));
                 continue;
             }
             inventory.setItem(LOAN_START + i, named(Material.EMERALD, "§cKredit: " + format(amount) + " Schilling", List.of(
@@ -337,6 +346,17 @@ public final class BankView implements InventoryHolder {
         }
     }
 
+    // why the loan is not bigger, and how it grows
+    private static List<String> limitLines(Loans.Limit limit) {
+        return switch (limit.reason()) {
+            case NEW -> List.of("§7Kredite erst ab §f" + Loans.MIN_HOURS + " Stunden Spielzeit", "§7und §f" + Loans.MIN_DAYS + " Tagen §7auf dem Server.");
+            case TREASURY -> List.of("§7Die Staatskasse gibt gerade", "§7nicht mehr her.");
+            case INCOME -> List.of("§7Höchstens das " + Loans.INCOME_FACTOR + "-fache deiner Einnahmen", "§7der letzten " + Loans.INCOME_DAYS
+                    + " Tage §7(Händler, Bauamt, Zinsen, Kopfgeld): §f" + format(limit.income()) + "§7.");
+            case TIER, FULL -> List.of("§7Pünktlich zurückgezahlte Kredite: §f" + limit.repaid(), "§7Jeder davon macht den nächsten größer.");
+        };
+    }
+
     private void renderLoanRules() {
         int amount = confirmLoan;
         double rate = state.loanRate();
@@ -344,7 +364,7 @@ public final class BankView implements InventoryHolder {
         int full = amount + (int) Math.ceil(amount * rate);
         inventory.setItem(4, named(Material.EMERALD, "§cKredit über " + format(amount) + " Schilling", List.of()));
         inventory.setItem(SLOT_RULES, named(Material.WRITABLE_BOOK, "§fKredit-Regeln und Folgen", List.of(
-                "§a1. §fDu bekommst §a" + format(amount) + " Schilling §fsofort.",
+                "§a1. §fDu bekommst §a" + format(amount) + " Schilling §faus der Staatskasse.",
                 "§a2. §fZurück in §f" + Loans.DAYS + " Tagen§f, je früher desto billiger:",
                 "   §7nach 1 Tag §f" + format(tomorrow) + "§7, am " + Loans.DAYS + ". Tag §f" + format(full) + " Schilling",
                 "§a3. §fDas Geld kannst du frei nutzen,",
@@ -377,11 +397,13 @@ public final class BankView implements InventoryHolder {
     private void takeLoan(Player player, int amount) {
         UUID uuid = player.getUniqueId();
         double rate = state.loanRate();
+        Loans.Standing now = Loans.standing(player);
+        standing = now;
         busy = true;
         Tasks.async(() -> {
             Loans.Outcome outcome;
             try {
-                outcome = Loans.take(uuid, amount, rate);
+                outcome = Loans.take(uuid, amount, rate, now);
             } catch (RuntimeException e) {
                 outcome = Loans.Outcome.UNAVAILABLE;
             }
@@ -395,7 +417,9 @@ public final class BankView implements InventoryHolder {
                     }
                     case HAS_LOAN -> fail(player, "§fDu hast schon einen Kredit.");
                     case NOT_ALLOWED -> fail(player, "§fErst die Entschuldigung, dann ein neuer Kredit.");
-                    case TOO_HIGH -> fail(player, "§fSo viel leiht Basil dir bei deinem Kontostand nicht.");
+                    case TOO_HIGH -> fail(player, "§fSo viel leiht Basil dir noch nicht.");
+                    case TOO_NEW -> fail(player, "§fBasil kennt dich noch nicht lange genug für einen Kredit.");
+                    case TREASURY_EMPTY -> fail(player, "§fDie Staatskasse gibt gerade so viel nicht her.");
                     case WANTED -> fail(player, "§fGesuchten und Häftlingen leiht Basil nichts.");
                     case RATE_CHANGED -> fail(player, "§fDer Zins hat sich gerade geändert, schau ihn dir nochmal an.");
                     default -> fail(player, "§fBasil kann gerade nichts buchen, versuch es gleich nochmal.");
@@ -509,8 +533,14 @@ public final class BankView implements InventoryHolder {
             case BankLog.TEAM_DEPOSIT -> "In die Team-Kasse";
             case BankLog.TEAM_WITHDRAW -> "Aus der Team-Kasse";
             case BankLog.BOUNTY -> "Kopfgeld" + (entry.note() == null ? "" : " für " + entry.note());
+            case BankLog.PLEDGE -> "Kopfgeld ausgesetzt auf " + names.getOrDefault(entry.note(), "?");
+            case BankLog.PLEDGE_REFUND -> "Kopfgeld zurück (" + names.getOrDefault(entry.note(), "?") + ")";
             case "TAX_DEATH_TAX" -> "Todessteuer";
             case "TAX_NETHER_TAX" -> "Nether-Steuer";
+            case "TAX_FEES" -> "Gebühr";
+            case ChestShopRepository.BUY -> "Kistenshop von " + names.getOrDefault(entry.note(), "?");
+            case ChestShopRepository.SALE -> "Kistenshop-Verkauf an " + names.getOrDefault(entry.note(), "?");
+            case ChestShopRepository.REFUND -> "Kistenshop erstattet";
             default -> kind;
         };
         return Component.text(text, NamedTextColor.GRAY);
@@ -590,7 +620,7 @@ public final class BankView implements InventoryHolder {
             return;
         }
         int amount = Loans.AMOUNTS[slot - LOAN_START];
-        if (amount > Loans.maxFor(state.balance())) return;
+        if (amount > state.loanLimit().max()) return;
         // the rules first, the loan only after the confirmation
         confirmLoan = amount;
         player.playSound(player.getLocation(), Sound.ITEM_BOOK_PAGE_TURN, 1f, 1f);
@@ -604,6 +634,8 @@ public final class BankView implements InventoryHolder {
             fail(player, "§fDu hast kein Bargeld dabei.");
             return;
         }
+        // the notes leave the player file soon, not at the next autosave (a hard crash would hand them back)
+        PlayerSaves.soon(player);
         UUID uuid = player.getUniqueId();
         busy = true;
         Tasks.async(() -> {
@@ -662,11 +694,13 @@ public final class BankView implements InventoryHolder {
                 return;
             }
             Logger.console("withdraw from " + uuid + " (" + withdrawal.cash() + " cash, " + withdrawal.tax() + " tax)");
-            MainThread.deliverOrRefund(uuid, withdrawal.cash() + withdrawal.tax(), () -> {
-                Bank.handOut(uuid, withdrawal.cash());
+            boolean scheduled = MainThread.run(() -> {
+                Bank.handOut(uuid, withdrawal.cash(), withdrawal.tax());
                 player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 2f, 2f);
                 player.sendMessage(Bank.PREFIX + "Hier, §a" + format(withdrawal.cash()) + " Schilling §fin Scheinen §7(Steuer: " + withdrawal.tax() + ")");
             });
+            // server stop before the hand-out: everything back, the tax leaves the treasury again
+            if (!scheduled) Taxes.refundWithdrawal(uuid, withdrawal.cash(), withdrawal.tax());
             reload();
         });
     }

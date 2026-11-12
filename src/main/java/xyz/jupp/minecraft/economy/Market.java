@@ -44,6 +44,8 @@ public final class Market {
     public static final ZoneId ZONE = ZoneId.of("Europe/Berlin");
 
     private static final long DECAY_INTERVAL_MINUTES = 10;
+    private static final String DECAYED_AT_KEY = "demand_decayed_at";
+    private static volatile java.time.@Nullable Instant lastDecay;
     // the random item costs this share of the average daily offer
     private static final double RANDOM_ITEM_SHARE = 0.8;
 
@@ -55,15 +57,26 @@ public final class Market {
     private static final int HOURLY_LIMIT_DEFAULT = 16;
     private static volatile Map<Material, Integer> hourlyLimits = Map.of();
     private static volatile List<Material> dailyOffers = List.of();
+    // the start catalog as shipped (market-catalog.json), whatever the database has made of it since
+    private static volatile Map<Material, MarketItem> seeds = Map.of();
     private static volatile LocalDate offersDay = null;
     private static final AtomicBoolean updating = new AtomicBoolean();
 
 
     /* lifecycle (blocking parts run in onEnable or on workers) */
 
+    /**
+     * What the shop pays back for farmable and renewable goods, far below a diamond per piece (2026-11-12: lapis,
+     * amethyst, resin and gold paid as much as or more than diamonds). market-catalog.json has the same values; an
+     * older database gets them once.
+     */
+    static final Map<Material, Double> SELL_RATIOS_2026_11 = Map.ofEntries(Map.entry(Material.RESIN_CLUMP, 0.03), Map.entry(Material.AMETHYST_SHARD, 0.015), Map.entry(Material.GOLD_INGOT, 0.08), Map.entry(Material.LAPIS_LAZULI, 0.06), Map.entry(Material.GHAST_TEAR, 0.2), Map.entry(Material.PITCHER_POD, 0.03), Map.entry(Material.RABBIT_FOOT, 0.1), Map.entry(Material.PHANTOM_MEMBRANE, 0.17), Map.entry(Material.ENDER_PEARL, 0.17), Map.entry(Material.BLAZE_ROD, 0.2), Map.entry(Material.PUFFERFISH, 0.1), Map.entry(Material.GLOW_INK_SAC, 0.15), Map.entry(Material.TROPICAL_FISH, 0.13), Map.entry(Material.SLIME_BALL, 0.2), Map.entry(Material.HONEY_BOTTLE, 0.27), Map.entry(Material.HONEYCOMB, 0.24), Map.entry(Material.IRON_INGOT, 0.15), Map.entry(Material.GUNPOWDER, 0.2));
+
     public static void load() {
         int eased = MarketRepository.easeElasticityOnce(0.75);
         if (eased > 0) Main.getInstance().getSLF4JLogger().info("price reaction of {} goods eased (elasticity x0.75)", eased);
+        int lowered = MarketRepository.setSellRatiosOnce("sell_ratios_2026_11", SELL_RATIOS_2026_11);
+        if (lowered > 0) Main.getInstance().getSLF4JLogger().info("shop buy-back of {} farmable goods lowered", lowered);
         seedCatalog();
         reload();
         LocalDate today = LocalDate.now(ZONE);
@@ -111,9 +124,20 @@ public final class Market {
         Bukkit.getScheduler().runTaskTimerAsynchronously(Main.getInstance(), Market::dailyUpdate, 20L * 30, 20L * 60);
     }
 
+    // the demand halves every half-life of real time: the timer counts ticks, which run slow while the server lags
     private static void decay() {
         double halfLifeHours = ConfigManager.getManager().getDemandHalfLifeHours();
-        double factor = Math.pow(0.5, DECAY_INTERVAL_MINUTES / (60.0 * halfLifeHours));
+        java.time.Instant now = java.time.Instant.now();
+        java.time.Instant last = lastDecay;
+        if (last == null) {
+            String stored = MarketRepository.meta(DECAYED_AT_KEY);
+            last = stored == null ? now.minus(java.time.Duration.ofMinutes(DECAY_INTERVAL_MINUTES)) : java.time.Instant.parse(stored);
+        }
+        // a stop of more than a week counts as a week, the market has calmed down by then anyway
+        double minutes = Math.min(7 * 24 * 60, Math.max(0, java.time.Duration.between(last, now).toMillis() / 60_000.0));
+        lastDecay = now;
+        MarketRepository.setMeta(DECAYED_AT_KEY, now.toString());
+        double factor = Math.pow(0.5, minutes / (60.0 * halfLifeHours));
         MarketRepository.decayDemand(factor);
         Services.decayDemand(factor);
         reload();
@@ -145,18 +169,25 @@ public final class Market {
     }
 
     /**
-     * The daily update (worker thread, checked every minute): measure the economy and set the tax factor, let the AI
-     * review the catalog, then draw the new daily offers. Each step runs once per day, also after a restart.
+     * The daily update (worker thread, checked every minute): measure the economy and set the tax factor, draw the new
+     * daily offers and announce them, then let the AI review the catalog (it can name the offers, and nothing waits for
+     * it; a failed review is tried again later the same day). Each step runs once per day, also after a restart.
      */
     private static void dailyUpdate() {
         LocalDate today = LocalDate.now(ZONE);
-        if (today.equals(offersDay) && Economy.isMeasured(today) && Nomad.isUpToDate(today) && Hondo.isUpToDate(today)) return;
+        if (today.equals(offersDay) && Economy.isMeasured(today) && Nomad.isUpToDate(today) && Hondo.isUpToDate(today)
+                && !MarketReview.due(today)) return;
         if (!updating.compareAndSet(false, true)) return;
         try {
+            Economy.Snapshot snapshot = null;
             if (!Economy.isMeasured(today)) {
-                Economy.Snapshot snapshot = Economy.measure(today);
-                reload();
-                MarketReview.run(today, snapshot);
+                try {
+                    snapshot = Economy.measure(today);
+                    reload();
+                } catch (RuntimeException e) {
+                    // the offers, Nomad and Hondo do not wait for it; the measurement is tried again in a minute
+                    Main.getInstance().getSLF4JLogger().error("Economy measurement failed, next try in a minute", e);
+                }
             }
             boolean newOffers = !today.equals(offersDay);
             List<Material> offers = newOffers ? rotate() : List.of();
@@ -176,6 +207,15 @@ public final class Market {
                 ShopView.refreshAll();
                 TabListUtil.updateTabForAll();
             });
+            // the AI review last: its request can take minutes and holds nothing else back
+            try {
+                if (MarketReview.due(today)) {
+                    if (snapshot == null) snapshot = Economy.snapshot(today);
+                    if (snapshot != null && MarketReview.run(today, snapshot)) Tasks.sync(ShopView::refreshAll);
+                }
+            } catch (RuntimeException e) {
+                Main.getInstance().getSLF4JLogger().warn("AI market review could not start: {}", e.toString());
+            }
         } finally {
             updating.set(false);
         }
@@ -231,6 +271,11 @@ public final class Market {
 
     public static @Nullable MarketItem get(@NotNull Material material) {
         return items.get(material);
+    }
+
+    /** The item as the start catalog ships it, null for items an admin added. */
+    public static @Nullable MarketItem seed(@NotNull Material material) {
+        return seeds.get(material);
     }
 
     public static Collection<MarketItem> all() {
@@ -307,14 +352,17 @@ public final class Market {
             JsonArray entries = JsonParser.parseReader(new InputStreamReader(stream, StandardCharsets.UTF_8)).getAsJsonArray();
             int latest = known;
             int inserted = 0;
+            Map<Material, MarketItem> shipped = new java.util.EnumMap<>(Material.class);
             for (JsonElement element : entries) {
                 JsonObject json = element.getAsJsonObject();
                 int since = json.has("since") ? json.get("since").getAsInt() : 1;
                 latest = Math.max(latest, since);
-                if (since <= known) continue;
                 MarketItem item = parseSeed(json);
+                if (item != null) shipped.put(item.material(), item);
+                if (since <= known) continue;
                 if (item != null && MarketRepository.insert(item)) inserted++;
             }
+            seeds = Map.copyOf(shipped);
             MarketRepository.setCatalogVersion(latest);
             if (inserted > 0) Main.getInstance().getSLF4JLogger().info("added {} items to the market catalog (version {})", inserted, latest);
         } catch (Exception e) {

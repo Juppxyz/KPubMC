@@ -41,6 +41,9 @@ public final class Bankruptcy {
     private static final String STATE_KEY = "state_broke";
     // a young state that never reached the recovery line yet cannot go broke (it simply has not taken much in so far)
     private static final String FOUNDED_KEY = "state_founded";
+    // a state that never reached the recovery line counts as founded anyway this long after its first booking, or a
+    // treasury that is spent as fast as it fills (Bauamt grants) would never get the bankruptcy rules
+    private static final int FOUNDED_AFTER_DAYS = 7;
     private static final String DEFAULTS_KEY = "emergency_sale_defaults";
     // what the state may sell in an emergency until an admin changes it (/shopadmin set <item> notverkauf ja/nein)
     private static final List<String> DEFAULT_SALE = List.of("DIAMOND", "GOLD_INGOT", "EMERALD", "EXPERIENCE_BOTTLE", "ENDER_PEARL",
@@ -66,7 +69,7 @@ public final class Bankruptcy {
 
     public record Level(long free, long brokeBelow, long recoveredAt) {}
 
-    static Level level(Connection connection) throws SQLException {
+    public static Level level(Connection connection) throws SQLException {
         Level level = Database.queryOne(connection, """
                 SELECT (SELECT COALESCE(SUM(amount), 0) FROM treasury_ledger)
                            - (SELECT COALESCE(SUM(amount), 0) FROM bank_deposits WHERE NOT paid_out AND in_treasury),
@@ -80,6 +83,16 @@ public final class Bankruptcy {
 
     public static Level level() {
         return Database.withConnection(Bankruptcy::level);
+    }
+
+    /** Only the lines (free left 0): one count of the active players, no sum over the whole ledger. */
+    public static Level lines(Connection connection) throws SQLException {
+        Level level = Database.queryOne(connection, "SELECT COUNT(*) FROM players WHERE last_seen >= now() - make_interval(days => ?)",
+                row -> {
+                    long target = (long) ConfigManager.getManager().getTreasuryTargetPerPlayer() * Math.max(1, row.getLong(1));
+                    return new Level(0, Math.round(target * BROKE_SHARE), Math.round(target * RECOVERED_SHARE));
+                }, ACTIVE_DAYS);
+        return Objects.requireNonNull(level);
     }
 
     /** Blocking, in onEnable after the market: the state from before the restart, the default sale items once. */
@@ -103,7 +116,7 @@ public final class Bankruptcy {
     public static @Nullable Component check() {
         Level level = level();
         if (!founded) {
-            if (level.free() < level.recoveredAt()) return null;
+            if (level.free() < level.recoveredAt() && !weekOld()) return null;
             founded = true;
             setMeta(FOUNDED_KEY, "1");
         }
@@ -122,6 +135,13 @@ public final class Bankruptcy {
                     + "§7Notverkauf im Shop, Staatsanleihen bei Basil, mehr Rabatt beim Händler.");
         }
         return Text.section(Main.getChatPrefix() + "§a§lDer Staat hat sich erholt! §7Die Steuern sinken wieder.");
+    }
+
+    // the first booking of the treasury lies FOUNDED_AFTER_DAYS back (only asked while the state is not founded)
+    private static boolean weekOld() {
+        Boolean old = Database.queryOne("SELECT COALESCE(MIN(created_at) < now() - make_interval(days => ?), FALSE) FROM treasury_ledger",
+                row -> row.getBoolean(1), FOUNDED_AFTER_DAYS);
+        return old != null && old;
     }
 
     // today's items: drawn once per day while broke, stored so a restart keeps them

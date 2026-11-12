@@ -5,12 +5,15 @@ import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import xyz.jupp.minecraft.building.Bauamt;
 import xyz.jupp.minecraft.economy.Loans;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.PlayerCacheObject;
 import xyz.jupp.minecraft.cache.TeamCacheObject;
+import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.jail.JailCells;
+import xyz.jupp.minecraft.team.Relations;
 
 import java.util.Set;
 import java.util.UUID;
@@ -68,6 +71,8 @@ public final class JailHandler {
             synchronized (LOCK) {
                 pco.setWanted(wanted);
             }
+            // an admin's warrant: paying Bauamt bills must not end it
+            if (wanted) Bauamt.warrantShared(player.getUniqueId());
             refreshPlayerName(player, pco);
         });
     }
@@ -79,11 +84,15 @@ public final class JailHandler {
         wantedPlayers.add(player.getUniqueId());
         long wantedEnd = System.currentTimeMillis() + hours * 60L * 60L * 1000L;
         offMainThread(() -> {
+            boolean joined;
             synchronized (LOCK) {
                 // "until caught" (jail_end 0, e.g. an unpaid loan) and a longer wanted (after an escape) stay as they are
                 boolean keep = pco.isJail() || (pco.isWanted() && (pco.getJailEnd() == 0 || pco.getJailEnd() >= wantedEnd));
                 if (!keep) pco.setWantedUntil(wantedEnd);
+                joined = !pco.isJail() && pco.isWanted() && pco.getJailEnd() == 0;
             }
+            // joined a running warrant until caught: paying the Bauamt bills behind it no longer ends it
+            if (joined) Bauamt.warrantShared(player.getUniqueId());
             refreshPlayerName(player, pco);
         });
         playerWantedBroadcast(player, reason);
@@ -106,6 +115,24 @@ public final class JailHandler {
             refreshPlayerName(player, pco);
         });
         playerWantedBroadcast(player, reason);
+        return true;
+    }
+
+    /**
+     * Like {@link #markWantedUntilCaught}, but only for a player who is neither in jail nor wanted already (a running
+     * warrant stays as it is, the caller tries again later); false if nothing was set.
+     */
+    public static boolean markWantedUntilCaughtIfFree(@NotNull Player player, @NotNull String reason) {
+        PlayerCacheObject pco = cache(player);
+        if (pco.isWanted() && (pco.getJailEnd() == 0 || pco.getJailEnd() > System.currentTimeMillis())) return false;
+        return markWantedUntilCaught(player, reason);
+    }
+
+    /** Main thread: ends a warrant until caught (not a timed one, not a sentence); true if one was ended. */
+    public static boolean clearWantedIfUntilCaught(@NotNull Player player) {
+        PlayerCacheObject pco = cache(player);
+        if (!pco.isWanted() || pco.isJail() || pco.getJailEnd() != 0) return false;
+        clearWanted(player);
         return true;
     }
 
@@ -184,8 +211,8 @@ public final class JailHandler {
         boolean loanDefault = false;
         if (pco.isWanted() && pco.getJailEnd() == 0) {
             try {
-                Loans.Loan loan = Loans.current(player.getUniqueId());
-                loanDefault = loan != null && loan.state() == Loans.State.DEFAULTED;
+                // a default whose warrant was served already is not the reason for this one
+                loanDefault = Loans.defaultUnserved(player.getUniqueId());
             } catch (RuntimeException ignored) {
                 // only picks the message
             }
@@ -246,12 +273,22 @@ public final class JailHandler {
 
     public static void jailPlayer(@NotNull Player player, int hours, @NotNull String reason) {
         PlayerCacheObject pco = cache(player);
+        boolean wasWanted = pco.isWanted();
         pendingPlayers.add(player.getUniqueId());
         wantedPlayers.remove(player.getUniqueId());
 
         changeJailState(player, () -> {
             pco.setJail(hours, JailCells.pickCell(), false);
             pco.setWanted(false);
+            // a wanted player jailed by an admin: once the jail is written, the debts behind the warrant cap no later
+            // bounty and the money players put on the head goes back (as after a catch)
+            if (wasWanted) {
+                try {
+                    Loans.warrantServed(player.getUniqueId());
+                } catch (RuntimeException e) {
+                    Main.getInstance().getSLF4JLogger().warn("Warrant of {} could not be closed: {}", player.getName(), e.toString());
+                }
+            }
             return true;
         }, () -> {
             // the respawn point stays the player's own: a death in jail respawns in the cell anyway (DeathListener)
@@ -360,6 +397,8 @@ public final class JailHandler {
     }
 
 
+    private static final int WATCH_SECONDS = 30;
+
     public static void startJailWatcherTask() {
         Bukkit.getScheduler().runTaskTimerAsynchronously(Main.getInstance(), () -> {
             long now = System.currentTimeMillis();
@@ -393,7 +432,39 @@ public final class JailHandler {
                 }
             }
 
-        }, 20L, 20L * 30);
+        }, 20L, 20L * WATCH_SECONDS);
+        Bukkit.getScheduler().runTaskTimer(Main.getInstance(), JailHandler::countTimeOnTheRun, 20L * WATCH_SECONDS, 20L * WATCH_SECONDS);
+    }
+
+    // main thread: the state's bounty grows with the time a wanted player is online where a hunter could get them
+    private static void countTimeOnTheRun() {
+        java.util.List<UUID> running = new java.util.ArrayList<>();
+        for (UUID uuid : wantedPlayers) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player == null) continue;
+            PlayerCacheObject pco = cache(player);
+            if (pco.isWanted() && !pco.isJail() && reachable(player, pco)) running.add(uuid);
+        }
+        if (running.isEmpty()) return;
+        Tasks.async(() -> {
+            for (UUID uuid : running) {
+                try {
+                    PlayerRepository.addWantedSeconds(uuid, WATCH_SECONDS);
+                } catch (RuntimeException e) {
+                    Main.getInstance().getSLF4JLogger().warn("Time on the run of {} not counted: {}", uuid, e.toString());
+                }
+            }
+        });
+    }
+
+    // not in the arena, at the spawn or in a claim of the own or a partner team (there nobody can catch them)
+    private static boolean reachable(Player player, PlayerCacheObject pco) {
+        Location at = player.getLocation();
+        if (Locations.isInArena(at) || Locations.isLocationASpawn(at)) return false;
+        TeamCacheObject claim = ClaimedAreaHelper.getClaimingTeam(at);
+        if (claim == null) return true;
+        String own = pco.getTeamID();
+        return own == null || !(own.equals(claim.getTeamID()) || Relations.partners(own, claim.getTeamID()));
     }
 
 

@@ -20,10 +20,14 @@ public final class Damage {
     private final Instant createdAt;
     private final Instant dueAt;
     private volatile boolean wanted;
+    // the warrant this bill started was served (the player went to jail): it stays owed, but caps no later bounty
+    private volatile boolean served;
+    // another reason joined the warrant this bill started: paying the bill does not end that warrant
+    private volatile boolean shared;
     private volatile long noticedAt;
 
     Damage(long id, long buildId, @NotNull UUID player, @NotNull String playerName, int blocks, int amount,
-           @NotNull Instant createdAt, @NotNull Instant dueAt, boolean wanted) {
+           @NotNull Instant createdAt, @NotNull Instant dueAt, boolean wanted, boolean served, boolean shared) {
         this.id = id;
         this.buildId = buildId;
         this.player = player;
@@ -33,6 +37,8 @@ public final class Damage {
         this.createdAt = createdAt;
         this.dueAt = dueAt;
         this.wanted = wanted;
+        this.served = served;
+        this.shared = shared;
     }
 
     public long id() {
@@ -81,6 +87,22 @@ public final class Damage {
 
     void unmarkWanted() {
         wanted = false;
+    }
+
+    public boolean served() {
+        return served;
+    }
+
+    void markServed() {
+        served = true;
+    }
+
+    public boolean shared() {
+        return shared;
+    }
+
+    void markShared() {
+        shared = true;
     }
 
     void addBlocks(int count) {

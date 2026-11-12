@@ -9,6 +9,7 @@ import xyz.jupp.minecraft.economy.Bank;
 import xyz.jupp.minecraft.economy.Bankruptcy;
 import xyz.jupp.minecraft.economy.Bonds;
 import xyz.jupp.minecraft.economy.Economy;
+import xyz.jupp.minecraft.economy.Loans;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.economy.Taxes;
 import xyz.jupp.minecraft.economy.Treasury;
@@ -16,12 +17,15 @@ import xyz.jupp.minecraft.utils.Tasks;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 // /staatskasse: balance and inflows of the state treasury
 public class TreasuryCommand implements CommandExecutor {
+
+    private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("dd.MM.");
 
     private static String percent(double rate) {
         return Math.round(rate * 100) + "%";
@@ -49,6 +53,10 @@ public class TreasuryCommand implements CommandExecutor {
             if (interest > 0) lines.add("§fZinsen an Sparer: §c" + interest + " §7diese Woche");
             long grants = -week.getOrDefault(Treasury.Source.BUILDING_GRANT, 0L);
             if (grants > 0) lines.add("§fBauförderung: §c" + grants + " §7diese Woche");
+            long bounties = -week.getOrDefault(Treasury.Source.BOUNTY, 0L);
+            if (bounties > 0) lines.add("§fKopfgelder: §c" + bounties + " §7diese Woche");
+            long lent = Loans.lentOut();
+            if (lent > 0) lines.add("§fAn Spieler verliehen: §e" + lent + " Schilling §7(Kredite)");
             long bonds = Bonds.owed();
             if (bonds > 0) lines.add("§fStaatsanleihen offen: §c" + bonds + " Schilling");
             lines.add("§fSteuern gerade: " + Economy.levelWord());
@@ -56,8 +64,8 @@ public class TreasuryCommand implements CommandExecutor {
                     + " §8| §7Normale Waren: §a" + percent(Taxes.rate(TaxClass.STANDARD))
                     + " §8| §7Seltenes: §a" + percent(Taxes.rate(TaxClass.LUXURY)));
             lines.add("§8» §7Sterben: §a" + percent(Taxes.deathRate()) + " §8| §7Nether-Portal: §abis " + percent(Taxes.topNetherRate()));
-            String report = Economy.latestAiSummary();
-            if (report != null) lines.add("§fMarktbericht: §7§o" + report);
+            Economy.Review report = Economy.latestReport();
+            if (report != null) lines.add("§fMarktbericht §7(" + DATE.format(report.day()) + ")§f: §7§o" + report.text());
             return lines;
         }, lines -> lines.forEach(sender::sendMessage));
         return true;

@@ -16,6 +16,7 @@ import org.bukkit.plugin.IllegalPluginAccessException;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
+import xyz.jupp.minecraft.economy.Taxes;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.TeamCacheObject;
 import xyz.jupp.minecraft.cache.WarpCache;
@@ -290,12 +291,23 @@ public final class WarpView implements InventoryHolder {
     // pays the teleport on a worker, then teleports after the usual 5 s; moving or leaving gives the money back
     private void teleport(Supplier<Location> target, String what) {
         if (CombatLock.denies(viewer)) return;
+        // refused before anything is paid (checked again after the payment, the warp may change meanwhile)
+        Location before = target.get();
+        if (before == null) {
+            fail("§cDiesen Warp gibt es nicht mehr.");
+            return;
+        }
+        TeamCacheObject lockedBefore = ClaimedAreaHelper.foreignTeam(before, viewer);
+        if (lockedBefore != null && ClaimedAreaHelper.isLocked(lockedBefore)) {
+            fail("§cDer Warp liegt in einem gesperrten Team-Gebiet.");
+            return;
+        }
         busy = true;
         UUID uuid = viewer.getUniqueId();
         Tasks.async(() -> {
             boolean paid;
             try {
-                paid = PlayerRepository.tryWithdrawMoney(uuid, TELEPORT_COST);
+                paid = Taxes.payFee(uuid, TELEPORT_COST);
             } catch (RuntimeException e) {
                 MainThread.run(() -> {
                     busy = false;
@@ -310,7 +322,7 @@ public final class WarpView implements InventoryHolder {
                 });
                 return;
             }
-            MainThread.deliverOrRefund(uuid, TELEPORT_COST, () -> {
+            boolean scheduled = MainThread.run(() -> {
                 busy = false;
                 Location location = viewer.isOnline() ? target.get() : null;
                 if (location == null) {
@@ -338,6 +350,8 @@ public final class WarpView implements InventoryHolder {
                     // server stop: refundPending gives it back
                 }
             });
+            // server stop before the teleport could start: the fee back
+            if (!scheduled) Taxes.refundFee(uuid, TELEPORT_COST);
         });
     }
 
@@ -345,7 +359,7 @@ public final class WarpView implements InventoryHolder {
     public static void refundPending() {
         for (UUID uuid : List.copyOf(PAID.values())) {
             try {
-                PlayerRepository.addMoney(uuid, TELEPORT_COST);
+                Taxes.refundFee(uuid, TELEPORT_COST);
             } catch (RuntimeException e) {
                 Main.getInstance().getSLF4JLogger().error("Teleport price of {} could not be refunded at shutdown", uuid, e);
             }
@@ -354,7 +368,7 @@ public final class WarpView implements InventoryHolder {
     }
 
     private void refund(UUID uuid) {
-        Tasks.async(() -> PlayerRepository.addMoney(uuid, TELEPORT_COST));
+        Tasks.asyncOrNow(() -> Taxes.refundFee(uuid, TELEPORT_COST));
         if (viewer.isOnline()) viewer.sendMessage(Main.getChatPrefix() + "§fDu bekommst die " + Main.getCurrencyName(TELEPORT_COST) + " §fzurück.");
     }
 
@@ -368,16 +382,16 @@ public final class WarpView implements InventoryHolder {
 
     private String createOwn(Location here) {
         UUID uuid = viewer.getUniqueId();
-        if (!PlayerRepository.tryWithdrawMoney(uuid, CREATE_COST)) return "Ein eigener Warp kostet " + Main.getCurrencyName(CREATE_COST) + "§f.";
+        if (!Taxes.payFee(uuid, CREATE_COST)) return "Ein eigener Warp kostet " + Main.getCurrencyName(CREATE_COST) + "§f.";
         boolean created;
         try {
             created = WarpCache.getInstance().create(uuid, here);
         } catch (RuntimeException e) {
-            PlayerRepository.addMoney(uuid, CREATE_COST);
+            Taxes.refundFee(uuid, CREATE_COST);
             throw e;
         }
         if (!created) {
-            PlayerRepository.addMoney(uuid, CREATE_COST);
+            Taxes.refundFee(uuid, CREATE_COST);
             return "Du hast schon einen Warp.";
         }
         return "§aDein Warp ist gesetzt. §c-" + Items.format(CREATE_COST) + " Schilling §7(jeder kann ihn nutzen)";
@@ -385,16 +399,16 @@ public final class WarpView implements InventoryHolder {
 
     private String moveOwn(Location here) {
         UUID uuid = viewer.getUniqueId();
-        if (!PlayerRepository.tryWithdrawMoney(uuid, MOVE_COST)) return "Das Verschieben kostet " + Main.getCurrencyName(MOVE_COST) + "§f.";
+        if (!Taxes.payFee(uuid, MOVE_COST)) return "Das Verschieben kostet " + Main.getCurrencyName(MOVE_COST) + "§f.";
         boolean moved;
         try {
             moved = WarpCache.getInstance().move(uuid, here);
         } catch (RuntimeException e) {
-            PlayerRepository.addMoney(uuid, MOVE_COST);
+            Taxes.refundFee(uuid, MOVE_COST);
             throw e;
         }
         if (!moved) {
-            PlayerRepository.addMoney(uuid, MOVE_COST);
+            Taxes.refundFee(uuid, MOVE_COST);
             return "Du hast gerade keinen Warp.";
         }
         return "§aDein Warp ist verschoben. §c-" + MOVE_COST + " Schilling";

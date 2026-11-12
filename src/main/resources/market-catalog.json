@@ -137,21 +137,24 @@
   "category": "FARMING",
   "amount": 16,
   "price": 160,
-  "sellable": true
+  "sellable": true,
+  "sellRatio": 0.2
  },
  {
   "material": "SLIME_BALL",
   "category": "FARMING",
   "amount": 16,
   "price": 240,
-  "sellable": true
+  "sellable": true,
+  "sellRatio": 0.2
  },
  {
   "material": "HONEY_BOTTLE",
   "category": "FARMING",
   "amount": 8,
   "price": 120,
-  "sellable": true
+  "sellable": true,
+  "sellRatio": 0.27
  },
  {
   "material": "WHEAT_SEEDS",
@@ -416,7 +419,7 @@
   "amount": 16,
   "price": 320,
   "sellable": true,
-  "sellRatio": 0.3
+  "sellRatio": 0.15
  },
  {
   "material": "COPPER_INGOT",
@@ -458,14 +461,16 @@
   "category": "ORES",
   "amount": 4,
   "price": 240,
-  "sellable": true
+  "sellable": true,
+  "sellRatio": 0.17
  },
  {
   "material": "BLAZE_ROD",
   "category": "ORES",
   "amount": 8,
   "price": 320,
-  "sellable": true
+  "sellable": true,
+  "sellRatio": 0.2
  },
  {
   "material": "GOLD_INGOT",
@@ -474,7 +479,8 @@
   "price": 400,
   "sellable": true,
   "buyable": false,
-  "description": "Kaufen beim Juwelier"
+  "description": "Kaufen beim Juwelier",
+  "sellRatio": 0.08
  },
  {
   "material": "DIAMOND",
@@ -502,7 +508,8 @@
   "price": 800,
   "sellable": true,
   "buyable": false,
-  "description": "Kaufen beim Juwelier"
+  "description": "Kaufen beim Juwelier",
+  "sellRatio": 0.015
  },
  {
   "material": "RESIN_CLUMP",
@@ -511,7 +518,8 @@
   "price": 1200,
   "sellable": true,
   "buyable": false,
-  "description": "Kaufen beim Juwelier"
+  "description": "Kaufen beim Juwelier",
+  "sellRatio": 0.03
  },
  {
   "material": "LAPIS_LAZULI",
@@ -520,7 +528,8 @@
   "price": 800,
   "sellable": true,
   "buyable": false,
-  "description": "Kaufen beim Juwelier"
+  "description": "Kaufen beim Juwelier",
+  "sellRatio": 0.06
  },
  {
   "material": "MUSHROOM_STEW",
@@ -610,7 +619,8 @@
   "material": "GOLDEN_APPLE",
   "category": "FOOD",
   "amount": 1,
-  "price": 900
+  "price": 900,
+  "taxClass": "LUXURY"
  },
  {
   "material": "TORCH",
@@ -751,7 +761,8 @@
   "price": 200,
   "sellable": true,
   "core": false,
-  "weight": 3
+  "weight": 3,
+  "sellRatio": 0.24
  },
  {
   "material": "RABBIT_HIDE",
@@ -778,7 +789,8 @@
   "price": 320,
   "sellable": true,
   "core": false,
-  "weight": 2
+  "weight": 2,
+  "sellRatio": 0.15
  },
  {
   "material": "PRISMARINE_SHARD",
@@ -796,7 +808,8 @@
   "price": 400,
   "sellable": true,
   "core": false,
-  "weight": 1
+  "weight": 1,
+  "sellRatio": 0.03
  },
  {
   "material": "PUFFERFISH",
@@ -805,7 +818,8 @@
   "price": 500,
   "sellable": true,
   "core": false,
-  "weight": 2
+  "weight": 2,
+  "sellRatio": 0.1
  },
  {
   "material": "TROPICAL_FISH",
@@ -814,7 +828,8 @@
   "price": 240,
   "sellable": true,
   "core": false,
-  "weight": 2
+  "weight": 2,
+  "sellRatio": 0.13
  },
  {
   "material": "COOKIE",
@@ -879,7 +894,8 @@
   "price": 480,
   "sellable": true,
   "core": false,
-  "weight": 3
+  "weight": 3,
+  "sellRatio": 0.17
  },
  {
   "material": "RABBIT_FOOT",
@@ -888,7 +904,8 @@
   "price": 320,
   "sellable": true,
   "core": false,
-  "weight": 3
+  "weight": 3,
+  "sellRatio": 0.1
  },
  {
   "material": "GHAST_TEAR",
@@ -897,7 +914,8 @@
   "price": 600,
   "sellable": true,
   "core": false,
-  "weight": 3
+  "weight": 3,
+  "sellRatio": 0.2
  },
  {
   "material": "GLISTERING_MELON_SLICE",
