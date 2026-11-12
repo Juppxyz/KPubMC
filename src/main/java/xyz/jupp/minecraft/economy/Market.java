@@ -72,11 +72,22 @@ public final class Market {
      */
     static final Map<Material, Double> SELL_RATIOS_2026_11 = Map.ofEntries(Map.entry(Material.RESIN_CLUMP, 0.03), Map.entry(Material.AMETHYST_SHARD, 0.015), Map.entry(Material.GOLD_INGOT, 0.08), Map.entry(Material.LAPIS_LAZULI, 0.06), Map.entry(Material.GHAST_TEAR, 0.2), Map.entry(Material.PITCHER_POD, 0.03), Map.entry(Material.RABBIT_FOOT, 0.1), Map.entry(Material.PHANTOM_MEMBRANE, 0.17), Map.entry(Material.ENDER_PEARL, 0.17), Map.entry(Material.BLAZE_ROD, 0.2), Map.entry(Material.PUFFERFISH, 0.1), Map.entry(Material.GLOW_INK_SAC, 0.15), Map.entry(Material.TROPICAL_FISH, 0.13), Map.entry(Material.SLIME_BALL, 0.2), Map.entry(Material.HONEY_BOTTLE, 0.27), Map.entry(Material.HONEYCOMB, 0.24), Map.entry(Material.IRON_INGOT, 0.15), Map.entry(Material.GUNPOWDER, 0.2));
 
+    /** Hondo's jewels at sensible prices (2026-11-12), base price and sell ratio in thousandths, once for older databases. */
+    // the shop's buy-back per piece stays the same: gold 8, amethyst 3, resin 9, lapis 3, netherite 495
+    static final Map<Material, int[]> HONDO_PRICES_2026_11 = Map.ofEntries(
+            Map.entry(Material.GOLD_INGOT, new int[]{120, 270}),
+            Map.entry(Material.AMETHYST_SHARD, new int[]{60, 200}),
+            Map.entry(Material.RESIN_CLUMP, new int[]{120, 300}),
+            Map.entry(Material.LAPIS_LAZULI, new int[]{160, 300}),
+            Map.entry(Material.NETHERITE_INGOT, new int[]{3000, 165}));
+
     public static void load() {
         int eased = MarketRepository.easeElasticityOnce(0.75);
         if (eased > 0) Main.getInstance().getSLF4JLogger().info("price reaction of {} goods eased (elasticity x0.75)", eased);
         int lowered = MarketRepository.setSellRatiosOnce("sell_ratios_2026_11", SELL_RATIOS_2026_11);
         if (lowered > 0) Main.getInstance().getSLF4JLogger().info("shop buy-back of {} farmable goods lowered", lowered);
+        int repriced = MarketRepository.setPricesOnce("hondo_prices_2026_11", HONDO_PRICES_2026_11);
+        if (repriced > 0) Main.getInstance().getSLF4JLogger().info("Hondo's jewels repriced: {}", repriced);
         seedCatalog();
         reload();
         LocalDate today = LocalDate.now(ZONE);

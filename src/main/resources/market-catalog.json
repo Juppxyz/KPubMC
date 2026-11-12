@@ -476,11 +476,11 @@
   "material": "GOLD_INGOT",
   "category": "ORES",
   "amount": 4,
-  "price": 400,
+  "price": 120,
   "sellable": true,
   "buyable": false,
   "description": "Kaufen beim Juwelier",
-  "sellRatio": 0.08
+  "sellRatio": 0.27
  },
  {
   "material": "DIAMOND",
@@ -495,8 +495,8 @@
   "material": "NETHERITE_INGOT",
   "category": "ORES",
   "amount": 1,
-  "price": 1500,
-  "sellRatio": 0.33,
+  "price": 3000,
+  "sellRatio": 0.165,
   "sellable": true,
   "buyable": false,
   "description": "Kaufen beim Juwelier"
@@ -505,31 +505,31 @@
   "material": "AMETHYST_SHARD",
   "category": "ORES",
   "amount": 4,
-  "price": 800,
+  "price": 60,
   "sellable": true,
   "buyable": false,
   "description": "Kaufen beim Juwelier",
-  "sellRatio": 0.015
+  "sellRatio": 0.2
  },
  {
   "material": "RESIN_CLUMP",
   "category": "ORES",
   "amount": 4,
-  "price": 1200,
+  "price": 120,
   "sellable": true,
   "buyable": false,
   "description": "Kaufen beim Juwelier",
-  "sellRatio": 0.03
+  "sellRatio": 0.3
  },
  {
   "material": "LAPIS_LAZULI",
   "category": "ORES",
   "amount": 16,
-  "price": 800,
+  "price": 160,
   "sellable": true,
   "buyable": false,
   "description": "Kaufen beim Juwelier",
-  "sellRatio": 0.06
+  "sellRatio": 0.3
  },
  {
   "material": "MUSHROOM_STEW",

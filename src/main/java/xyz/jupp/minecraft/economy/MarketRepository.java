@@ -138,6 +138,32 @@ public final class MarketRepository {
         });
     }
 
+    /**
+     * Once per database (the key in market_meta): base price and sell ratio (in thousandths) of these goods, each change
+     * logged like any other; returns the goods changed, 0 if already done.
+     */
+    public static int setPricesOnce(@NotNull String key, @NotNull java.util.Map<Material, int[]> prices) {
+        return Database.inTransaction(connection -> {
+            if (Database.update(connection, "INSERT INTO market_meta (key, value) VALUES (?, '1') ON CONFLICT (key) DO NOTHING", key) == 0) return 0;
+            int changed = 0;
+            for (java.util.Map.Entry<Material, int[]> entry : prices.entrySet()) {
+                String material = entry.getKey().name();
+                double ratio = entry.getValue()[1] / 1000.0;
+                Object[] old = Database.queryOne(connection, "SELECT base_price, sell_ratio FROM market_items WHERE material = ? FOR UPDATE",
+                        row -> new Object[]{row.getInt(1), row.getDouble(2)}, material);
+                if (old == null) continue;
+                Database.update(connection, "UPDATE market_items SET base_price = ?, sell_ratio = ? WHERE material = ?", entry.getValue()[0], ratio, material);
+                for (Object[] change : new Object[][]{{"base_price", old[0], entry.getValue()[0]}, {"sell_ratio", old[1], ratio}}) {
+                    Database.update(connection, "INSERT INTO market_adjustments (day, material, field, old_value, new_value, reason, source) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                            Date.valueOf(LocalDate.now(Market.ZONE)), material, change[0], MarketReview.exact(change[1]), MarketReview.exact(change[2]),
+                            "Hondos Preise neu (2026-11)", "Katalog");
+                }
+                changed++;
+            }
+            return changed;
+        });
+    }
+
     public static int count() {
         Integer count = Database.queryOne("SELECT COUNT(*) FROM market_items", row -> row.getInt(1));
         return count == null ? 0 : count;

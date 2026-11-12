@@ -41,8 +41,8 @@ public final class Bankruptcy {
     private static final String STATE_KEY = "state_broke";
     // a young state that never reached the recovery line yet cannot go broke (it simply has not taken much in so far)
     private static final String FOUNDED_KEY = "state_founded";
-    // a state that never reached the recovery line counts as founded anyway this long after its first booking, or a
-    // treasury that is spent as fast as it fills (Bauamt grants) would never get the bankruptcy rules
+    // a state that never reached the recovery line counts as founded anyway this long after its first booking, as
+    // long as it is above the broke line then: founding must never start with a bankruptcy
     private static final int FOUNDED_AFTER_DAYS = 7;
     private static final String DEFAULTS_KEY = "emergency_sale_defaults";
     // what the state may sell in an emergency until an admin changes it (/shopadmin set <item> notverkauf ja/nein)
@@ -52,6 +52,8 @@ public final class Bankruptcy {
 
     private static volatile boolean broke;
     private static volatile boolean founded;
+    // the lines of the last check, for the displays (null before the first check)
+    private static volatile @Nullable Level lastLevel;
     private static volatile List<Material> sale = List.of();
     private static volatile @Nullable LocalDate saleDay;
 
@@ -115,8 +117,10 @@ public final class Bankruptcy {
     /** Worker, every few minutes: switches the state when the treasury crossed a line; the announcement or null. */
     public static @Nullable Component check() {
         Level level = level();
+        lastLevel = level;
         if (!founded) {
-            if (level.free() < level.recoveredAt() && !weekOld()) return null;
+            boolean ready = level.free() >= level.recoveredAt() || (level.free() >= level.brokeBelow() && weekOld());
+            if (!ready) return null;
             founded = true;
             setMeta(FOUNDED_KEY, "1");
         }
@@ -135,6 +139,22 @@ public final class Bankruptcy {
                     + "§7Notverkauf im Shop, Staatsanleihen bei Basil, mehr Rabatt beim Händler.");
         }
         return Text.section(Main.getChatPrefix() + "§a§lDer Staat hat sich erholt! §7Die Steuern sinken wieder.");
+    }
+
+    /** The free treasury and its lines at the last check, null before the first one. */
+    public static @Nullable Level lastLevel() {
+        return lastLevel;
+    }
+
+    /**
+     * Blocking, admins: the state starts over as not founded and not broke (a test server, or after an admin fixed the
+     * treasury); it is founded again by the usual rules.
+     */
+    public static void reset() {
+        Database.update("DELETE FROM market_meta WHERE key IN (?, ?)", STATE_KEY, FOUNDED_KEY);
+        broke = false;
+        founded = false;
+        Main.getInstance().getSLF4JLogger().info("state reset by an admin: not founded, not broke");
     }
 
     // the first booking of the treasury lies FOUNDED_AFTER_DAYS back (only asked while the state is not founded)

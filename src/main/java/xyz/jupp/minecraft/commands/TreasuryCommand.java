@@ -13,7 +13,10 @@ import xyz.jupp.minecraft.economy.Loans;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.economy.Taxes;
 import xyz.jupp.minecraft.economy.Treasury;
+import xyz.jupp.minecraft.utils.PermissionsUtil;
+import xyz.jupp.minecraft.utils.TabListUtil;
 import xyz.jupp.minecraft.utils.Tasks;
+import org.bukkit.entity.Player;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -33,6 +36,19 @@ public class TreasuryCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
+        // admins: the state starts over (not founded, not broke), e.g. on a test server
+        if (args.length == 1 && "neustart".equalsIgnoreCase(args[0])
+                && (!(sender instanceof Player player) || PermissionsUtil.isPlayerAdmin(player))) {
+            Tasks.supplyAsync(() -> {
+                Bankruptcy.reset();
+                return Main.getChatPrefix() + "§aDer Staat startet neu: nicht gegründet, nicht pleite. §7Gegründet wird er wieder ab "
+                        + "der Erholungsgrenze, oder 7 Tage nach der ersten Buchung, wenn die Kasse dann über der Pleite-Grenze liegt.";
+            }, message -> {
+                sender.sendMessage(message);
+                TabListUtil.updateTabForAll();
+            });
+            return true;
+        }
         Instant now = Instant.now();
         Tasks.supplyAsync(() -> {
             Map<Treasury.Source, Long> day = Treasury.inflowSince(now.minus(Duration.ofDays(1)));
@@ -40,7 +56,10 @@ public class TreasuryCommand implements CommandExecutor {
             List<String> lines = new ArrayList<>();
             lines.add("§8=-- §6§lStaatskasse §8--=");
             if (Bankruptcy.isBroke()) {
+                Bankruptcy.Level level = Bankruptcy.level();
                 lines.add("§4§lDer Staat ist pleite! §cSteuern erhöht.");
+                lines.add("§7Erholt sich ab §f" + level.recoveredAt() + " Schilling §7frei, jetzt §f" + Math.max(0, level.free())
+                        + " §7(Pleite-Grenze " + level.brokeBelow() + ")");
                 lines.add("§7Hilf mit: Notverkauf im Shop, Staatsanleihen bei Basil.");
             }
             long owed = Bank.owedDeposits();

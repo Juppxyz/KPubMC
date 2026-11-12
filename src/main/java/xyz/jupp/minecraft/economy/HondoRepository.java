@@ -27,7 +27,7 @@ public final class HondoRepository {
 
     private HondoRepository() {}
 
-    public enum Outcome { OK, INSUFFICIENT_FUNDS, PRICE_CHANGED, UNAVAILABLE, ALREADY_CLAIMED, LEVEL_TOO_LOW, LIMIT }
+    public enum Outcome { OK, INSUFFICIENT_FUNDS, PRICE_CHANGED, UNAVAILABLE, ALREADY_CLAIMED, LEVEL_TOO_LOW, LIMIT, DAILY_LIMIT }
 
     /**
      * The friendship as the GUI shows it; the trades of today decide whether the points shrink over night,
@@ -116,6 +116,14 @@ public final class HondoRepository {
         return friendship(connection, player, new Friend(friend.points() + points, friend.trades() + 1, friend.volume() + value));
     }
 
+    // pieces of the material the player got from Hondo today by these kinds of trade
+    private static int receivedToday(Connection connection, UUID player, Material material, String... kinds) throws SQLException {
+        Long received = Database.queryOne(connection, "SELECT COALESCE(SUM(quantity), 0) FROM hondo_trades "
+                        + "WHERE player_uuid = ? AND material = ? AND kind = ANY(?) AND created_at >= ?",
+                row -> row.getLong(1), player, material.name(), connection.createArrayOf("text", kinds), startOfToday());
+        return received == null ? 0 : (int) Math.min(Integer.MAX_VALUE, received);
+    }
+
     private static boolean withdraw(Connection connection, UUID player, int amount) throws SQLException {
         return Database.update(connection, "UPDATE players SET money = money - ? WHERE uuid = ? AND money >= ?", amount, player, amount) > 0;
     }
@@ -137,6 +145,10 @@ public final class HondoRepository {
             // the same hourly limit as in the shop (the catalog row is locked)
             if (MarketRepository.boughtLastHour(connection, player, material) + units > Market.hourlyLimitItems(item)) return Result.of(Outcome.LIMIT);
             Friend friend = lockFriend(connection, player);
+            // the friendship row is locked: the count of today cannot change meanwhile
+            if (material == Material.NETHERITE_INGOT && receivedToday(connection, player, material, "BUY", "OFFER") + units > Hondo.NETHERITE_PER_DAY) {
+                return Result.of(Outcome.DAILY_LIMIT);
+            }
             int level = Hondo.level(friend.points());
 
             int net = Hondo.salePrice(item, units, Hondo.discount(level));
@@ -166,7 +178,6 @@ public final class HondoRepository {
     public static Result exchange(@NotNull UUID player, int index, int expectedInput) {
         if (index < 0 || index >= Hondo.EXCHANGES.size()) return Result.of(Outcome.UNAVAILABLE);
         Hondo.Exchange exchange = Hondo.EXCHANGES.get(index);
-        List<MarketItem> changed = new ArrayList<>();
         Result result = Database.inTransaction(connection -> {
             // both rows in material order (like MarketRepository.decayDemand), so nothing waits for each other in a circle
             boolean giveFirst = exchange.give().name().compareTo(exchange.get().name()) < 0;
@@ -181,22 +192,19 @@ public final class HondoRepository {
             int input = Hondo.exchangeInput(give, get, exchange.amount(), Hondo.fee(level));
             if (input == 0) return Result.of(Outcome.UNAVAILABLE);
             if (input != expectedInput) return new Result(Outcome.PRICE_CHANGED, 0, 0, input, level, null);
+            if (receivedToday(connection, player, get.material(), "EXCHANGE") + exchange.amount() > Hondo.EMERALDS_PER_DAY) {
+                return new Result(Outcome.DAILY_LIMIT, 0, 0, input, level, null);
+            }
 
-            int value = Hondo.salePrice(get, exchange.amount(), 0);
-            int buyBack = Hondo.buyBackValue(give, input);
-            double giveDemand = give.demand() - (double) input / give.amount();
-            double getDemand = get.demand() + (double) exchange.amount() / get.amount();
-            setDemand(connection, give, giveDemand);
-            setDemand(connection, get, getDemand);
-            MarketRepository.logTrade(connection, player, give.material(), "SELL", input, buyBack, 0, false);
+            // fixed rates: an exchange moves no market (it neither floods the given good nor makes emeralds dearer)
+            int value = (int) Math.round((double) get.basePrice() / get.amount() * exchange.amount());
+            int given = (int) Math.floor(Hondo.exchangeValue(give) * input);
+            MarketRepository.logTrade(connection, player, give.material(), "SELL", input, given, 0, false);
             MarketRepository.logTrade(connection, player, get.material(), "BUY", exchange.amount(), value, 0, false);
             Friendship after = recordTrade(connection, player, friend, "EXCHANGE", get.material(), exchange.amount(),
                     give.material(), input, value);
-            changed.add(give.withDemand(giveDemand));
-            changed.add(get.withDemand(getDemand));
             return new Result(Outcome.OK, value, 0, input, level, after);
         });
-        if (result.outcome() == Outcome.OK) changed.forEach(Market::update);
         return result;
     }
 
@@ -216,6 +224,10 @@ public final class HondoRepository {
                 return new Result(Outcome.ALREADY_CLAIMED, 0, 0, 0, level, null);
             }
 
+            if (offer.material() == Material.NETHERITE_INGOT
+                    && receivedToday(connection, player, offer.material(), "BUY", "OFFER") + offer.amount() > Hondo.NETHERITE_PER_DAY) {
+                return new Result(Outcome.DAILY_LIMIT, 0, 0, 0, level, null);
+            }
             int net = Hondo.offerPrice(item, offer);
             if (net != expectedNet) return new Result(Outcome.PRICE_CHANGED, net, 0, 0, level, null);
             if (!withdraw(connection, player, net)) return new Result(Outcome.INSUFFICIENT_FUNDS, net, 0, 0, level, null);

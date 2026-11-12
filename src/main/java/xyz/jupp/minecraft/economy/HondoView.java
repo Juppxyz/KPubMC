@@ -163,14 +163,15 @@ public final class HondoView implements InventoryHolder {
         if (item == null || !item.enabled()) return named(Material.GRAY_DYE, "§7Gerade nicht vorrätig", List.of());
         double discount = Hondo.discount(level);
         int one = Hondo.salePrice(item, 1, discount);
-        int bulk = Hondo.salePrice(item, Hondo.BULK, discount);
+        int bulk = Hondo.salePrice(item, Hondo.bulk(material), discount);
         List<String> lore = new ArrayList<>();
         lore.add("§7Preis: §f" + one + " Schilling §7pro Stück");
         if (discount > 0) lore.add("§7Freundschaftsrabatt: §a-" + ShopView.percent(discount));
         lore.add("§7zzgl. " + ShopView.percent(Taxes.rate(Hondo.TAX_CLASS)) + " Steuer");
+        if (material == Material.NETHERITE_INGOT) lore.add("§7Höchstens " + Hondo.NETHERITE_PER_DAY + " Stück am Tag");
         lore.add("");
         lore.add("§e» Linksklick: §f1 Stück §7(" + gross(one) + " inkl. Steuer)");
-        lore.add("§e» Rechtsklick: §f" + Hondo.BULK + " Stück §7(" + gross(bulk) + " inkl. Steuer)");
+        lore.add("§e» Rechtsklick: §f" + Hondo.bulk(material) + " Stück §7(" + gross(bulk) + " inkl. Steuer)");
         return named(material, Hondo.label(material), lore);
     }
 
@@ -186,7 +187,8 @@ public final class HondoView implements InventoryHolder {
         lore.add("§7Du gibst: §f" + input + "× " + Hondo.label(exchange.give()));
         lore.add("§7Du bekommst: §f" + exchange.amount() + "× " + Hondo.label(exchange.get()));
         lore.add("§7Du hast: §f" + countPlain(viewer, exchange.give()));
-        lore.add("§7Der Kurs folgt dem Shop, Hondos Anteil: " + ShopView.percent(Hondo.fee(level)));
+        lore.add("§7Fester Kurs, Hondos Anteil: " + ShopView.percent(Hondo.fee(level)) + " §7(weniger mit mehr Freundschaft)");
+        lore.add("§7Höchstens " + Hondo.EMERALDS_PER_DAY + " Smaragde am Tag");
         lore.add("");
         lore.add("§e» Linksklick: tauschen");
         ItemStack stack = named(exchange.get(), "§f" + input + "× " + Hondo.label(exchange.give()) + " §7→ §f"
@@ -235,7 +237,8 @@ public final class HondoView implements InventoryHolder {
         if (slot == SLOT_CLOSE) {
             Tasks.sync(player::closeInventory);
         } else if (slot >= GOODS_START && slot < GOODS_START + Hondo.GOODS.size()) {
-            buy(player, Hondo.GOODS.get(slot - GOODS_START), click == ClickType.RIGHT ? Hondo.BULK : 1);
+            Material good = Hondo.GOODS.get(slot - GOODS_START);
+            buy(player, good, click == ClickType.RIGHT ? Hondo.bulk(good) : 1);
         } else if (slot >= EXCHANGE_START && slot < EXCHANGE_START + Hondo.EXCHANGES.size() && click == ClickType.LEFT) {
             exchange(player, slot - EXCHANGE_START);
         } else if (slot >= OFFER_START && slot < OFFER_START + Hondo.OFFERS.size() && click == ClickType.LEFT) {
@@ -279,6 +282,7 @@ public final class HondoView implements InventoryHolder {
                     }
                     case INSUFFICIENT_FUNDS -> fail(player, "§fDafür fehlen dir Schilling §7(benötigt: " + (result.net() + result.tax()) + ")§f.");
                     case LIMIT -> fail(player, limit);
+                    case DAILY_LIMIT -> fail(player, "§fNetherit gibt Hondo dir höchstens §e" + Hondo.NETHERITE_PER_DAY + " Stück am Tag§f. Morgen wieder.");
                     case PRICE_CHANGED -> fail(player, "§fDer Preis hat sich gerade geändert, bitte prüfe den neuen Preis.");
                     default -> fail(player, "§fDas hat Hondo gerade nicht.");
                 }
@@ -330,9 +334,12 @@ public final class HondoView implements InventoryHolder {
                     player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_RESONATE, 1f, 1.2f);
                     traded(player, result);
                 } else {
-                    fail(player, result.outcome() == HondoRepository.Outcome.PRICE_CHANGED
-                            ? "§fDer Kurs hat sich gerade geändert, bitte prüfe den neuen Kurs."
-                            : "§fDieser Tausch geht gerade nicht.");
+                    fail(player, switch (result.outcome()) {
+                        case PRICE_CHANGED -> "§fDer Kurs hat sich gerade geändert, bitte prüfe den neuen Kurs.";
+                        case DAILY_LIMIT -> "§fHeute tauscht Hondo dir keine weiteren Smaragde mehr §7(höchstens "
+                                + Hondo.EMERALDS_PER_DAY + " am Tag)§f.";
+                        default -> "§fDieser Tausch geht gerade nicht.";
+                    });
                 }
                 ShopView.refreshAll();
             };
@@ -384,6 +391,7 @@ public final class HondoView implements InventoryHolder {
                     case PRICE_CHANGED -> fail(player, "§fDer Preis hat sich gerade geändert, bitte prüfe den neuen Preis.");
                     case ALREADY_CLAIMED -> fail(player, "§fDieses Angebot hast du schon eingelöst.");
                     case LEVEL_TOO_LOW -> fail(player, "§fDafür ist eure Freundschaft gerade nicht eng genug.");
+                    case DAILY_LIMIT -> fail(player, "§fNetherit gibt Hondo dir höchstens §e" + Hondo.NETHERITE_PER_DAY + " Stück am Tag§f. Morgen wieder.");
                     default -> fail(player, "§fDas hat Hondo gerade nicht.");
                 }
                 render();
