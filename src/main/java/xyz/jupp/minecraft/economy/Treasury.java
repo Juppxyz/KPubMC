@@ -1,6 +1,8 @@
 package xyz.jupp.minecraft.economy;
 
 import org.jetbrains.annotations.Nullable;
+import xyz.jupp.minecraft.Main;
+import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.database.Database;
 import xyz.jupp.minecraft.inventory.MainThread;
 import xyz.jupp.minecraft.utils.TabListUtil;
@@ -50,7 +52,9 @@ public final class Treasury {
         // paid out: the Sheriff's bounties
         BOUNTY("Kopfgeld"),
         // warps, teleports and team foundings
-        FEES("Gebühren");
+        FEES("Gebühren"),
+        // the state's money at the start of a season (no income: it does not raise the Bauamt's budget)
+        START_CAPITAL("Startkapital");
 
         private final String label;
 
@@ -66,8 +70,18 @@ public final class Treasury {
     private static final AtomicLong balance = new AtomicLong();
     private static final AtomicBoolean tabRefreshPending = new AtomicBoolean();
 
-    /** Blocking, called in onEnable. */
+    /**
+     * Blocking, called in onEnable (after a season reset could have run): a new season (an empty ledger) starts with
+     * the start capital from the config, then the balance is summed.
+     */
     public static void load() {
+        int capital = ConfigManager.getManager().getTreasuryStartCapital();
+        if (capital > 0) {
+            // only into an empty ledger: the first booking of the season, never a second time
+            int booked = Database.update("INSERT INTO treasury_ledger (source, amount) SELECT ?, ? "
+                    + "WHERE NOT EXISTS (SELECT 1 FROM treasury_ledger)", Source.START_CAPITAL.name(), capital);
+            if (booked > 0) Main.getInstance().getSLF4JLogger().info("new season: treasury starts with {} Schilling", capital);
+        }
         Long sum = Database.queryOne("SELECT COALESCE(SUM(amount), 0) FROM treasury_ledger", row -> row.getLong(1));
         balance.set(sum == null ? 0 : sum);
     }
@@ -105,11 +119,11 @@ public final class Treasury {
         Market.requestStateCheck();
     }
 
-    /** What the state took in: every source except the money it owes or paid out (deposits, bonds, interest, grants). */
+    /** What the state took in: every source except the money it owes or paid out (deposits, bonds, interest, grants) and the start capital. */
     public static long income(Map<Source, Long> inflow) {
         return inflow.entrySet().stream()
                 .filter(entry -> switch (entry.getKey()) {
-                    case INTEREST, FIXED_DEPOSIT, BOND_SALE, BOND_REPAY, BUILDING_GRANT, LOAN_OUT, LOAN_BACK, BOUNTY -> false;
+                    case INTEREST, FIXED_DEPOSIT, BOND_SALE, BOND_REPAY, BUILDING_GRANT, LOAN_OUT, LOAN_BACK, BOUNTY, START_CAPITAL -> false;
                     default -> true;
                 })
                 .mapToLong(Map.Entry::getValue).sum();

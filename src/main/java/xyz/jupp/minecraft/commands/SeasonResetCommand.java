@@ -66,6 +66,8 @@ public class SeasonResetCommand implements CommandExecutor, TabCompleter {
                 lines.add("§7Gefängniszellen, Gesucht-Tafel, Spawn und Kartenbereiche, Befehlsprotokoll.");
                 lines.add("§7Die Welt und die Inventare fasst er nicht an, aber Geldscheine der alten Saison");
                 lines.add("§7sind danach nichts mehr wert. Vorher werden alle Tabellen des Plugins gesichert.");
+                int capital = xyz.jupp.minecraft.config.ConfigManager.getManager().getTreasuryStartCapital();
+                if (capital > 0) lines.add("§7Die Staatskasse startet danach mit §f" + capital + " Schilling §7Startkapital.");
                 lines.forEach(sender::sendMessage);
             });
             default -> sender.sendMessage(prefix + "§c\"" + args[0] + "\" kenne ich nicht, es wurde nichts vorgemerkt. §7Nutze §f/"

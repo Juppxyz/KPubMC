@@ -51,6 +51,8 @@ public class ConfigManager {
     private static volatile double economyFactorMax = 1.3;
     private static volatile double economyTargetGrowth = 0.02;
     private static volatile int treasuryTargetPerPlayer = 20_000;
+    // the treasury's money at the start of a season (booked once when the ledger is empty), 0: none
+    private static volatile int treasuryStartCapital = 25_000;
     private static volatile boolean aiReview = true;
     private static volatile String openAiModel = "gpt-5-mini";
     private static volatile String openAiApiKey = "";
@@ -91,6 +93,7 @@ public class ConfigManager {
             economyFactorMax = Math.max(economyFactorMin, optDouble(config, "economyFactorMax", 1.3));
             economyTargetGrowth = optDouble(config, "economyTargetGrowth", 0.02);
             treasuryTargetPerPlayer = Math.max(0, optInt(config, "treasuryTargetPerPlayer", 20_000));
+            treasuryStartCapital = Math.max(0, optInt(config, "treasuryStartCapital", 25_000));
             aiReview = !"false".equalsIgnoreCase(optString(config, "aiReview", "true"));
             openAiModel = optString(config, "openAiModel", "gpt-5-mini");
             openAiApiKey = optString(config, "openAiApiKey", "").trim();
@@ -147,6 +150,7 @@ public class ConfigManager {
     public double getEconomyFactorMax() { return economyFactorMax; }
     public double getEconomyTargetGrowth() { return economyTargetGrowth; }
     public int getTreasuryTargetPerPlayer() { return treasuryTargetPerPlayer; }
+    public int getTreasuryStartCapital() { return treasuryStartCapital; }
     public boolean isAiReview() { return aiReview; }
     public String getOpenAiModel() { return openAiModel; }
     public String getOpenAiApiKey() { return openAiApiKey; }

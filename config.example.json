@@ -28,6 +28,7 @@
   "economyFactorMax": 1.3,
   "economyTargetGrowth": 0.02,
   "treasuryTargetPerPlayer": 20000,
+  "treasuryStartCapital": 25000,
   "dntLoot": {
     "enabled": true,
     "namespaces": ["nova_structures"],
