@@ -101,6 +101,8 @@ public final class Treasury {
                 TabListUtil.updateTabForAll();
             });
         }
+        // broke or recovered right after the booking that crossed the line, not only at the next market tick
+        Market.requestStateCheck();
     }
 
     /** What the state took in: every source except the money it owes or paid out (deposits, bonds, interest, grants). */

@@ -114,8 +114,11 @@ public final class Bankruptcy {
         if (broke) ensureSale();
     }
 
-    /** Worker, every few minutes: switches the state when the treasury crossed a line; the announcement or null. */
-    public static @Nullable Component check() {
+    /**
+     * Worker, at every market tick and right after treasury bookings: switches the state when the treasury crossed a
+     * line; the announcement or null. One check at a time, so a change of state is announced once.
+     */
+    public static synchronized @Nullable Component check() {
         Level level = level();
         lastLevel = level;
         if (!founded) {
@@ -138,7 +141,13 @@ public final class Bankruptcy {
             return Text.section(Main.getChatPrefix() + "§4§lDer Staat ist pleite! §cDie Steuern steigen. "
                     + "§7Notverkauf im Shop, Staatsanleihen bei Basil, mehr Rabatt beim Händler.");
         }
-        return Text.section(Main.getChatPrefix() + "§a§lDer Staat hat sich erholt! §7Die Steuern sinken wieder.");
+        try {
+            // the taxes start from the highest factor again and sink day by day, not all at once
+            Economy.recovered();
+        } catch (RuntimeException e) {
+            Main.getInstance().getSLF4JLogger().warn("Taxes after the recovery not stored: {}", e.toString());
+        }
+        return Text.section(Main.getChatPrefix() + "§a§lDer Staat hat sich erholt! §7Die Steuern sinken schrittweise, sobald die Kasse wieder eigenes Geld hat.");
     }
 
     /** The free treasury and its lines at the last check, null before the first one. */
@@ -150,7 +159,7 @@ public final class Bankruptcy {
      * Blocking, admins: the state starts over as not founded and not broke (a test server, or after an admin fixed the
      * treasury); it is founded again by the usual rules.
      */
-    public static void reset() {
+    public static synchronized void reset() {
         Database.update("DELETE FROM market_meta WHERE key IN (?, ?)", STATE_KEY, FOUNDED_KEY);
         broke = false;
         founded = false;

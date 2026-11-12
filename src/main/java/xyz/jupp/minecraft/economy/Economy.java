@@ -50,7 +50,8 @@ public final class Economy {
         if (latest == null) return;
         Snapshot before = latestBefore(latest.day());
         factor = latest.factor();
-        previousFactor = before == null ? latest.factor() : before.factor();
+        // a factor set by the recovery is no daily step: no trend after a restart either
+        previousFactor = before == null || RECOVERED_NOTE.equals(latest.note()) ? latest.factor() : before.factor();
         note = latest.note();
         lastDay = latest.day();
     }
@@ -108,7 +109,7 @@ public final class Economy {
     }
 
     /** Blocking: measures the economy for the day, stores the snapshot and applies the new factor. */
-    public static Snapshot measure(@NotNull LocalDate day) {
+    public static synchronized Snapshot measure(@NotNull LocalDate day) {
         // money in running fixed deposits, bonds and team treasuries still belongs to the players, borrowed money not yet
         long moneySupply = Database.queryOne("SELECT COALESCE(SUM(money), 0) + (SELECT COALESCE(SUM(amount), 0) FROM bank_deposits WHERE NOT paid_out)"
                         + " + (SELECT COALESCE(SUM(amount), 0) FROM state_bonds WHERE NOT repaid)"
@@ -130,6 +131,8 @@ public final class Economy {
         ConfigManager config = ConfigManager.getManager();
         Step step = nextFactor(previous, growth, treasury / activePlayers, config.getEconomyTargetGrowth(),
                 config.getTreasuryTargetPerPlayer(), config.getEconomyFactorMin(), config.getEconomyFactorMax());
+        // while broke the highest factor applies; stored as such, the taxes sink from there after the recovery
+        if (Bankruptcy.isBroke()) step = new Step(config.getEconomyFactorMax(), BROKE_NOTE);
 
         Snapshot snapshot = new Snapshot(day, moneySupply, activePlayers, treasury, volume == null ? 0 : volume, step.factor(), step.note());
         Database.update("""
@@ -149,6 +152,25 @@ public final class Economy {
     }
 
     public record Step(double factor, String note) {}
+
+    private static final String BROKE_NOTE = "Staat pleite: Steuern am Höchstwert, bis er sich erholt hat";
+    private static final String RECOVERED_NOTE = "Staat erholt: Steuern starten beim Höchstwert und sinken schrittweise";
+
+    /**
+     * Blocking, when the state has recovered: the taxes start again from the highest factor and sink from there with
+     * the daily measurement (at most MAX_DAILY_STEP a day, not while the treasury is almost empty), instead of falling
+     * back at once to where they were before the bankruptcy. The latest measurement stores it, the next one builds on it.
+     */
+    static synchronized void recovered() {
+        double max = ConfigManager.getManager().getEconomyFactorMax();
+        // also when the latest measurement already stored max (it ran while broke): the note and the trend change anyway,
+        // players must not see "erhöht ▲" right after the recovery
+        Database.update("UPDATE economy_snapshots SET factor = GREATEST(factor, ?), note = ? WHERE day = (SELECT MAX(day) FROM economy_snapshots)",
+                max, RECOVERED_NOTE);
+        factor = Math.max(factor, max);
+        previousFactor = factor;
+        note = RECOVERED_NOTE;
+    }
 
     /**
      * Blocking: stores what every holder has today (active players: account, running deposits and bonds minus the
@@ -201,6 +223,11 @@ public final class Economy {
         if (treasuryTarget > 0 && treasuryPerPlayer > treasuryTarget && growth <= targetGrowth) {
             step -= TREASURY_STEP;
             reason += ", Staatskasse gut gefüllt";
+        } else if (treasuryTarget > 0 && treasuryPerPlayer < treasuryTarget * Bankruptcy.RECOVERED_SHARE) {
+            // an almost empty treasury (own money under the recovery line: deposits and bonds counted off) never lowers
+            // the taxes, it raises them a little every day until the state has money of its own again
+            step = Math.min(MAX_DAILY_STEP, Math.max(step, 0) + TREASURY_STEP);
+            reason += ", Staatskasse fast leer";
         }
         double next = clamp(previous.factor() + step, min, max);
         String direction = next > previous.factor() + 1e-9 ? "Steuern steigen"

@@ -7,6 +7,7 @@ import com.google.gson.JsonParser;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.plugin.IllegalPluginAccessException;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.utils.EndAccess;
@@ -44,6 +45,10 @@ public final class Market {
     public static final ZoneId ZONE = ZoneId.of("Europe/Berlin");
 
     private static final long DECAY_INTERVAL_MINUTES = 10;
+    // a state check after treasury bookings waits this long, so bookings close together share one check
+    private static final long STATE_CHECK_DELAY_TICKS = 20;
+    private static final AtomicBoolean stateCheckPending = new AtomicBoolean();
+    private static volatile boolean tasksStarted;
     private static final String DECAYED_AT_KEY = "demand_decayed_at";
     private static volatile java.time.@Nullable Instant lastDecay;
     // the random item costs this share of the average daily offer
@@ -130,6 +135,7 @@ public final class Market {
     }
 
     public static void startTasks() {
+        tasksStarted = true;
         long period = 20L * 60 * DECAY_INTERVAL_MINUTES;
         Bukkit.getScheduler().runTaskTimerAsynchronously(Main.getInstance(), Market::decay, period, period);
         Bukkit.getScheduler().runTaskTimerAsynchronously(Main.getInstance(), Market::dailyUpdate, 20L * 30, 20L * 60);
@@ -157,24 +163,46 @@ public final class Market {
         checkState();
     }
 
-    // is the state broke or has it recovered, and can it pay bonds back
+    /**
+     * Any thread, after a treasury booking: checks right away (on a worker, a second later) whether the state went broke
+     * or recovered and can pay bonds back, instead of waiting for the next market tick. Bookings within that second
+     * share one check; a booking during a check asks for the next one.
+     */
+    public static void requestStateCheck() {
+        if (!tasksStarted || !Main.getInstance().isEnabled() || !stateCheckPending.compareAndSet(false, true)) return;
+        try {
+            Bukkit.getScheduler().runTaskLaterAsynchronously(Main.getInstance(), () -> {
+                stateCheckPending.set(false);
+                checkState();
+            }, STATE_CHECK_DELAY_TICKS);
+        } catch (IllegalPluginAccessException e) {
+            // the plugin is shutting down, the state is checked again after the start
+            stateCheckPending.set(false);
+        }
+    }
+
+    // is the state broke or has it recovered, and can it pay bonds back (the market tick and the checks after bookings)
     private static void checkState() {
         Component announcement;
         List<Bonds.Repaid> repaid;
+        boolean progress;
         try {
+            Bankruptcy.Level before = Bankruptcy.lastLevel();
             announcement = Bankruptcy.check();
             repaid = Bonds.repayDue();
+            // while broke the tab list shows how far the treasury is from the recovery: redraw it when that moved
+            progress = Bankruptcy.isBroke() && !java.util.Objects.equals(before, Bankruptcy.lastLevel());
         } catch (RuntimeException e) {
             Main.getInstance().getSLF4JLogger().warn("State check failed: {}", e.toString());
             return;
         }
-        if (announcement == null && repaid.isEmpty()) return;
+        if (announcement == null && repaid.isEmpty() && !progress) return;
         Tasks.sync(() -> {
             if (announcement != null) {
                 Bukkit.broadcast(announcement);
-                TabListUtil.updateTabForAll();
                 ShopView.refreshAll();
             }
+            if (announcement != null || progress) TabListUtil.updateTabForAll();
             repaid.forEach(Bank::announceBond);
         });
     }

@@ -58,8 +58,11 @@ public class TreasuryCommand implements CommandExecutor {
             if (Bankruptcy.isBroke()) {
                 Bankruptcy.Level level = Bankruptcy.level();
                 lines.add("§4§lDer Staat ist pleite! §cSteuern erhöht.");
-                lines.add("§7Erholt sich ab §f" + level.recoveredAt() + " Schilling §7frei, jetzt §f" + Math.max(0, level.free())
-                        + " §7(Pleite-Grenze " + level.brokeBelow() + ")");
+                lines.add(level.free() >= level.recoveredAt()
+                        ? "§aDie Kasse hat die Erholungsgrenze erreicht §7(" + level.free() + " von " + level.recoveredAt()
+                                + " Schilling frei)§a, der Staat erholt sich gleich."
+                        : "§7Erholt sich ab §f" + level.recoveredAt() + " Schilling §7frei, jetzt §f" + Math.max(0, level.free())
+                                + " §7(Pleite-Grenze " + level.brokeBelow() + ")");
                 lines.add("§7Hilf mit: Notverkauf im Shop, Staatsanleihen bei Basil.");
             }
             long owed = Bank.owedDeposits();
