@@ -5,6 +5,7 @@ import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.economy.Market;
 
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -20,14 +21,17 @@ import java.util.Set;
  * no cache holds old data. Every table is copied into a backup schema first, all in one transaction: a failure
  * leaves the data as it was and the mark stays for the next start.
  * <p>
- * Every table of the plugin must be in {@link #WIPE} or {@link #KEEP}; a table in neither (a new one nobody sorted
- * in yet) stops the reset, it would otherwise survive the season by accident.
+ * Every table of the plugin's schema must be in {@link #WIPE} or {@link #KEEP}; a table in neither (a new one nobody
+ * sorted in yet) stops the reset, it would otherwise survive the season by accident. Tables of other software in the
+ * same database are neither copied nor touched. Why a reset failed is shown by /saisonreset until the next try.
  */
 public final class SeasonReset {
 
     private SeasonReset() {}
 
     static final String PENDING_KEY = "season_reset_pending";
+    // why the last try at a start failed, shown by /saisonreset; removed by a successful reset, a new mark or a cancel
+    static final String ERROR_KEY = "season_reset_error";
     // the number of the season, counted up by every reset (kept, not in SEASON_META): cash of an older season is void
     static final String SEASON_KEY = "season";
 
@@ -65,58 +69,84 @@ public final class SeasonReset {
     /** market_meta keys that belong to the season; the others (one-time migrations, catalog version) stay. */
     static final List<String> SEASON_META = List.of(
             "state_broke", "state_founded", "demand_decayed_at", "hondo_evaluated_day", "ai_reviewed_day", "ai_review_error",
-            PENDING_KEY);
+            PENDING_KEY, ERROR_KEY);
 
     /** Who marked the reset and when, null if none is marked. */
     public static @Nullable String pending() {
         return Database.queryOne("SELECT value FROM market_meta WHERE key = ?", row -> row.getString(1), PENDING_KEY);
     }
 
+    /** Why the last try failed (time and reason), null if it did not fail. */
+    public static @Nullable String lastError() {
+        return Database.queryOne("SELECT value FROM market_meta WHERE key = ?", row -> row.getString(1), ERROR_KEY);
+    }
+
     public static void mark(@NotNull String by) {
         String value = LocalDateTime.now(Market.ZONE).format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")) + " von " + by;
         Database.update("INSERT INTO market_meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
                 PENDING_KEY, value);
+        Database.update("DELETE FROM market_meta WHERE key = ?", ERROR_KEY);
         Main.getInstance().getSLF4JLogger().warn("season reset marked for the next start ({})", value);
     }
 
     /** True if a mark was removed. */
     public static boolean cancel() {
+        Database.update("DELETE FROM market_meta WHERE key = ?", ERROR_KEY);
         return Database.update("DELETE FROM market_meta WHERE key = ?", PENDING_KEY) > 0;
     }
 
     /**
-     * Blocking, in onEnable right after Database.connect and before anything loads: runs a marked reset. Returns the
-     * backup schema, null if nothing was marked or the reset failed (then nothing changed, see the log).
+     * Blocking, in onEnable right after Database.connect and before anything loads: runs a marked reset. Returns where
+     * the backup is, null if nothing was marked or the reset failed (then nothing changed, see the log and /saisonreset).
      */
     public static @Nullable String runIfPending() {
         String marked = pending();
         if (marked == null) return null;
         String backup = "backup_" + LocalDateTime.now(Market.ZONE).format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
-        Main.getInstance().getSLF4JLogger().warn("SEASON RESET starting (marked {}), backup into schema {}", marked, backup);
+        Main.getInstance().getSLF4JLogger().warn("SEASON RESET starting (marked {})", marked);
+        String location;
         try {
-            Database.inTransaction(connection -> {
+            location = Database.inTransaction(connection -> {
                 // copying and emptying big tables may take longer than a normal statement (the connection goes back to
                 // the pool with its defaults, the SET LOCAL values end with the transaction)
                 connection.setNetworkTimeout(Runnable::run, 0);
                 try (Statement statement = connection.createStatement()) {
                     statement.execute("SET LOCAL statement_timeout = 0");
-                    statement.execute("SET LOCAL lock_timeout = 0");
+                    // a lock held elsewhere (a database tool with an open transaction) must not hang the start forever:
+                    // after a minute the reset fails, nothing changes and /saisonreset says why
+                    statement.execute("SET LOCAL lock_timeout = '60s'");
                 }
-                List<String> tables = Database.query(connection, "SELECT table_name FROM information_schema.tables "
-                        + "WHERE table_schema = current_schema() AND table_type = 'BASE TABLE' ORDER BY table_name", row -> row.getString(1));
+                // the plugin's own tables only: other software may keep tables in the same database
                 Set<String> known = new HashSet<>(WIPE);
                 known.addAll(KEEP);
-                List<String> unknown = new ArrayList<>(tables.stream().filter(table -> !known.contains(table)).toList());
-                if (!unknown.isEmpty()) {
-                    throw new IllegalStateException("tables neither in SeasonReset.WIPE nor KEEP: " + unknown);
-                }
-                List<String> missing = WIPE.stream().filter(table -> !tables.contains(table)).toList();
-                if (!missing.isEmpty()) throw new IllegalStateException("tables to empty do not exist: " + missing);
+                List<String> unsorted = Database.tables().stream().filter(table -> !known.contains(table)).toList();
+                if (!unsorted.isEmpty()) throw new IllegalStateException("Tabellen ohne Einordnung (SeasonReset.WIPE/KEEP): " + unsorted);
+                Set<String> present = new HashSet<>(Database.query(connection, "SELECT table_name FROM information_schema.tables "
+                        + "WHERE table_schema = current_schema() AND table_type = 'BASE TABLE'", row -> row.getString(1)));
+                List<String> missing = WIPE.stream().filter(table -> !present.contains(table)).toList();
+                if (!missing.isEmpty()) throw new IllegalStateException("Tabellen fehlen: " + missing);
+                List<String> ours = new ArrayList<>(WIPE);
+                ours.addAll(KEEP.stream().filter(present::contains).toList());
 
+                // the backup in a schema of its own if the database user may create one ("permission denied for
+                // database" otherwise), else next to the tables: the try runs under a savepoint, so a refusal does not
+                // abort the transaction
+                boolean ownSchema;
+                java.sql.Savepoint beforeSchema = connection.setSavepoint();
                 try (Statement statement = connection.createStatement()) {
                     statement.execute("CREATE SCHEMA " + backup);
-                    for (String table : tables) {
-                        statement.execute("CREATE TABLE " + backup + "." + quote(table) + " AS TABLE " + quote(table));
+                    ownSchema = true;
+                } catch (SQLException e) {
+                    connection.rollback(beforeSchema);
+                    ownSchema = false;
+                    Main.getInstance().getSLF4JLogger().warn("no own schema for the backup ({}), the copies go next to the tables as {}_*",
+                            e.getMessage(), backup);
+                }
+                connection.releaseSavepoint(beforeSchema);
+                try (Statement statement = connection.createStatement()) {
+                    for (String table : ours) {
+                        String copy = ownSchema ? backup + "." + quote(table) : quote(backup + "_" + table);
+                        statement.execute("CREATE TABLE " + copy + " AS TABLE " + quote(table));
                     }
                     // no CASCADE: a kept table that still points at an emptied one makes this fail instead of being
                     // emptied along without anyone noticing
@@ -129,16 +159,25 @@ public final class SeasonReset {
                 // a new season: the bank notes of the old one are worth nothing from now on (Cash)
                 Database.update(connection, "INSERT INTO market_meta (key, value) VALUES (?, '1') ON CONFLICT (key) DO UPDATE SET value = "
                         + "(CASE WHEN market_meta.value ~ '^[0-9]+$' THEN market_meta.value::int + 1 ELSE 1 END)::text", SEASON_KEY);
-                return null;
+                return ownSchema ? "Schema " + backup : "Tabellen " + backup + "_*";
             });
         } catch (RuntimeException e) {
             Main.getInstance().getSLF4JLogger().error("SEASON RESET FAILED, nothing was changed, it is tried again at the next start: {}",
                     e.getMessage(), e);
+            // outside the rolled back transaction, so /saisonreset can show it
+            String reason = String.valueOf(e.getMessage());
+            if (reason.length() > 300) reason = reason.substring(0, 300) + " ...";
+            try {
+                Database.update("INSERT INTO market_meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+                        ERROR_KEY, LocalDateTime.now(Market.ZONE).format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")) + ": " + reason);
+            } catch (RuntimeException ignored) {
+                // the log has it
+            }
             return null;
         }
-        Main.getInstance().getSLF4JLogger().warn("SEASON RESET done (marked {}): {} tables emptied, backup in schema {}",
-                marked, WIPE.size(), backup);
-        return backup;
+        Main.getInstance().getSLF4JLogger().warn("SEASON RESET done (marked {}): {} tables emptied, backup: {}",
+                marked, WIPE.size(), location);
+        return location;
     }
 
     private static String quote(String identifier) {

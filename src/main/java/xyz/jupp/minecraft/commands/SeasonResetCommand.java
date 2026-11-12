@@ -35,30 +35,41 @@ public class SeasonResetCommand implements CommandExecutor, TabCompleter {
                 SeasonReset.mark(sender.getName());
                 return SeasonReset.pending();
             }, marked -> {
-                sender.sendMessage(prefix + "§aSaisonreset vorgemerkt §7(" + marked + ")§a.");
-                sender.sendMessage("§7Er läuft beim nächsten Serverstart: erst Sicherung aller Tabellen, dann Neustart der Saison.");
+                sender.sendMessage(prefix + "§a§lSaisonreset vorgemerkt §7(" + marked + ")§a.");
+                sender.sendMessage("§7Er läuft beim nächsten Serverstart: erst Sicherung der Plugin-Tabellen, dann Neustart der Saison.");
                 sender.sendMessage("§7Starte den Server jetzt neu. Abbrechen bis dahin: §f/" + label + " abbrechen");
             });
             case "abbrechen" -> Tasks.supplyAsync(SeasonReset::cancel, removed -> sender.sendMessage(prefix + (removed
                     ? "§aSaisonreset abgebrochen, beim nächsten Start bleibt alles, wie es ist."
                     : "§7Es war kein Saisonreset vorgemerkt.")));
-            default -> Tasks.supplyAsync(SeasonReset::pending, marked -> {
+            // the status page; anything else (a typo, an umlaut lost on the way) says so, it never looks like a mark
+            case "" -> Tasks.supplyAsync(() -> new String[]{SeasonReset.pending(), SeasonReset.lastError()}, state -> {
+                String marked = state[0];
+                String error = state[1];
                 List<String> lines = new ArrayList<>();
                 lines.add("§8--- §6Saisonreset §8---");
-                lines.add("§7Beim nächsten Serverstart beginnt alles neu, was Spieler aufgebaut haben:");
+                if (marked == null) {
+                    lines.add("§e§lNicht vorgemerkt. §7Beim nächsten Start ändert sich nichts.");
+                    lines.add("§7Vormerken: §f/" + label + " bestätigen");
+                } else {
+                    lines.add("§c§lVorgemerkt §7(" + marked + ")§c: §7läuft beim nächsten Serverstart. Abbrechen: §f/" + label + " abbrechen");
+                    if (error != null) {
+                        lines.add("§c§lDer letzte Versuch beim Start ist fehlgeschlagen, es wurde nichts geändert:");
+                        lines.add("§c" + error);
+                    }
+                }
+                lines.add("§7Ein Saisonreset setzt alles zurück, was Spieler aufgebaut haben:");
                 lines.add("§fGeld, Staatskasse, Steuerhistorie, Markt-Nachfrage, Bank, Festgelder, Kredite, Anleihen, Tresore,");
                 lines.add("§fHondo, Nomad, Kopfgelder, Gefängnisstrafen, Teams, Claims, Warps, Bauamt-Aufträge und");
                 lines.add("§fSchadensrechnungen, Kistenshop-Verkäufe, Notverkauf, Zufallsitem.");
                 lines.add("§7Bleibt: Shop-Katalog, Dienste, Bauamt-Vorlagen, Baupläne und das Register der stehenden Bauten,");
                 lines.add("§7Gefängniszellen, Gesucht-Tafel, Spawn und Kartenbereiche, Befehlsprotokoll.");
-                lines.add("§7Die Welt und die Inventare fasst der Reset nicht an, aber Geldscheine der alten Saison");
-                lines.add("§7sind danach nichts mehr wert.");
-                lines.add("§7Vorher wird jede Tabelle in ein Backup-Schema in der Datenbank kopiert.");
-                lines.add(marked == null
-                        ? "§eVormerken: §f/" + label + " bestätigen"
-                        : "§c§lVorgemerkt §7(" + marked + ")§c. §7Abbrechen: §f/" + label + " abbrechen");
+                lines.add("§7Die Welt und die Inventare fasst er nicht an, aber Geldscheine der alten Saison");
+                lines.add("§7sind danach nichts mehr wert. Vorher werden alle Tabellen des Plugins gesichert.");
                 lines.forEach(sender::sendMessage);
             });
+            default -> sender.sendMessage(prefix + "§c\"" + args[0] + "\" kenne ich nicht, es wurde nichts vorgemerkt. §7Nutze §f/"
+                    + label + " bestätigen §7oder §f/" + label + " abbrechen§7.");
         }
         return true;
     }

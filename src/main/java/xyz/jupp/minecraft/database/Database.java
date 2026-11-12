@@ -25,6 +25,17 @@ public final class Database {
     public static final String URL_CONFIG_KEY = "databaseUrl";
 
     // idempotent, runs on every start; money and points can never become negative
+    /** The tables the schema creates (the season reset must know every one of them). */
+    static List<String> tables() {
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("CREATE TABLE IF NOT EXISTS (\\w+)");
+        List<String> tables = new ArrayList<>();
+        for (String sql : SCHEMA) {
+            java.util.regex.Matcher matcher = pattern.matcher(sql);
+            while (matcher.find()) tables.add(matcher.group(1));
+        }
+        return tables;
+    }
+
     private static final List<String> SCHEMA = List.of(
             """
             CREATE TABLE IF NOT EXISTS players (

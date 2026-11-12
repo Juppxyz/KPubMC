@@ -173,7 +173,7 @@ public final class Main extends JavaPlugin {
         }
         // a season reset marked with /saisonreset runs before anything is loaded
         String backup = SeasonReset.runIfPending();
-        if (backup != null) Logger.console("season reset done, backup in schema " + backup);
+        if (backup != null) Logger.console("season reset done, backup: " + backup);
         Cash.load();
         Logger.console("init warps..");
         int warps = WarpCache.getInstance().load();
