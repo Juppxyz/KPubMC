@@ -203,6 +203,11 @@ public final class Blueprint {
         return variants;
     }
 
+    /** The template as the admin built it, not turned or mirrored (the building plan shows this one). */
+    public @NotNull Variant original() {
+        return variants.getFirst();
+    }
+
     /** The variant a build was stored with, null if the template changed since. */
     public @Nullable Variant variant(@NotNull StructureRotation rotation, boolean mirrored) {
         for (Variant variant : variants) {
@@ -314,37 +319,83 @@ public final class Blueprint {
         return true;
     }
 
-    /** Diagnostic, main thread: the first cells at this origin that do not match, as readable lines (world coordinates). */
-    public static @NotNull List<String> explain(@NotNull World world, int ox, int oy, int oz, @NotNull Variant variant, int limit) {
-        List<String> lines = new ArrayList<>();
+    /** What is wrong with a cell of a copy. */
+    public enum Fault {
+        /** the cell is empty, the template has a block there */
+        MISSING,
+        /** another block */
+        WRONG,
+        /** the right block, turned the wrong way */
+        TURNED,
+        /** a block in a cell that has to stay empty */
+        EXTRA,
+        CUSHION_MISSING,
+        CUSHION_WRONG,
+        CUSHION_EXTRA
+    }
+
+    /**
+     * A cell of a copy that does not match, in world coordinates. expected: the template's block (MISSING, WRONG,
+     * TURNED); actual: what is there (WRONG, TURNED, EXTRA); the colours for the cushion faults.
+     */
+    public record Problem(@NotNull Fault fault, int x, int y, int z, @Nullable BlockData expected, @Nullable BlockData actual,
+                          @Nullable DyeColor expectedColor, @Nullable DyeColor actualColor) {
+        public boolean missing() {
+            return fault == Fault.MISSING || fault == Fault.CUSHION_MISSING;
+        }
+
+        public boolean extra() {
+            return fault == Fault.EXTRA || fault == Fault.CUSHION_EXTRA;
+        }
+    }
+
+    /**
+     * Main thread: every cell at this origin that does not match, blocks first, then the gaps, then the cushions (the
+     * order of the checks in {@link #mismatches}).
+     */
+    public static @NotNull List<Problem> problems(@NotNull World world, int ox, int oy, int oz, @NotNull Variant variant) {
+        List<Problem> problems = new ArrayList<>();
         for (Cell cell : variant.blocks()) {
             int x = ox + cell.dx(), y = oy + cell.dy(), z = oz + cell.dz();
             BlockData actual = world.getBlockData(x, y, z);
             if (same(cell.data(), actual)) continue;
-            // the full string: the short one would print what was parsed, not the state after the turn or mirror
-            lines.add(x + " / " + y + " / " + z + ": erwartet " + cell.data().getAsString() + ", gefunden " + actual.getAsString());
-            if (lines.size() >= limit) return lines;
+            Fault fault = empty(actual.getMaterial()) ? Fault.MISSING : actual.getMaterial() == cell.material() ? Fault.TURNED : Fault.WRONG;
+            problems.add(new Problem(fault, x, y, z, cell.data(), actual, null, null));
         }
         for (Gap gap : variant.gaps()) {
             int x = ox + gap.dx(), y = oy + gap.dy(), z = oz + gap.dz();
-            Material actual = world.getType(x, y, z);
-            if (empty(actual)) continue;
-            lines.add(x + " / " + y + " / " + z + ": sollte leer sein, gefunden " + actual.name().toLowerCase(java.util.Locale.ROOT));
-            if (lines.size() >= limit) return lines;
+            if (empty(world.getType(x, y, z))) continue;
+            problems.add(new Problem(Fault.EXTRA, x, y, z, null, world.getBlockData(x, y, z), null, null));
         }
         Map<Long, DyeColor> cushions = cushions(world, ox, oy, oz, variant.sizeX(), variant.sizeY(), variant.sizeZ());
         for (Prop prop : variant.props()) {
             DyeColor found = cushions.remove(key(prop.dx(), prop.dy(), prop.dz()));
             if (found == prop.color()) continue;
-            lines.add((ox + prop.dx()) + " / " + (oy + prop.dy()) + " / " + (oz + prop.dz()) + ": Kissen " + prop.color() + " erwartet, "
-                    + (found == null ? "keins" : found) + " gefunden");
-            if (lines.size() >= limit) return lines;
+            problems.add(new Problem(found == null ? Fault.CUSHION_MISSING : Fault.CUSHION_WRONG,
+                    ox + prop.dx(), oy + prop.dy(), oz + prop.dz(), null, null, prop.color(), found));
         }
         cushions.forEach((key, color) -> {
-            if (lines.size() >= limit) return;
             int dx = (int) (key >> 42), dy = (int) ((key >> 21) & 0x1FFFFF), dz = (int) (key & 0x1FFFFF);
-            lines.add((ox + dx) + " / " + (oy + dy) + " / " + (oz + dz) + ": Kissen " + color + " zu viel");
+            problems.add(new Problem(Fault.CUSHION_EXTRA, ox + dx, oy + dy, oz + dz, null, null, null, color));
         });
+        return problems;
+    }
+
+    /** Diagnostic, main thread: the first cells at this origin that do not match, as readable lines (world coordinates). */
+    public static @NotNull List<String> explain(@NotNull World world, int ox, int oy, int oz, @NotNull Variant variant, int limit) {
+        List<String> lines = new ArrayList<>();
+        for (Problem problem : problems(world, ox, oy, oz, variant)) {
+            if (lines.size() >= limit) break;
+            String at = problem.x() + " / " + problem.y() + " / " + problem.z() + ": ";
+            lines.add(at + switch (problem.fault()) {
+                // the full string: the short one would print what was parsed, not the state after the turn or mirror
+                case MISSING, WRONG, TURNED -> "erwartet " + problem.expected().getAsString() + ", gefunden " + problem.actual().getAsString();
+                case EXTRA -> "sollte leer sein, gefunden " + problem.actual().getMaterial().name().toLowerCase(java.util.Locale.ROOT);
+                case CUSHION_MISSING, CUSHION_WRONG -> "Kissen " + problem.expectedColor() + " erwartet, "
+                        + (problem.actualColor() == null ? "keins" : problem.actualColor()) + " gefunden";
+                case CUSHION_EXTRA -> "Kissen " + problem.actualColor() + " zu viel";
+            });
+        }
         return lines;
     }
 

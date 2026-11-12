@@ -83,6 +83,7 @@ public final class BauamtView implements InventoryHolder {
         Bauamt.Funding funding = Bauamt.funding();
         List<String> info = new ArrayList<>(List.of(
                 "§71. Auftrag annehmen: Linksklick auf eine Vorlage.",
+                "§7   Den Bauplan (Karte) gibt es dazu.",
                 "§72. Irgendwo nachbauen. Beim letzten Block",
                 "§7   sagt dir das Bauamt Bescheid.",
                 "§73. Hierher zurück: Abnahme und Auszahlung.",
@@ -99,8 +100,9 @@ public final class BauamtView implements InventoryHolder {
         info.addAll(List.of(
                 "",
                 "§7Ohne Auftrag gibt es kein Geld. Luft im Rahmen",
-                "§7muss frei bleiben. Fehlt der Hinweis, setz einen",
-                "§7Block neu. Bezahlte Bauwerke sind Staatseigentum:",
+                "§7muss frei bleiben. Was noch fehlt, zeigt dir ein",
+                "§7Linksklick mit dem Bauplan auf deinen Bau.",
+                "§7Bezahlte Bauwerke sind Staatseigentum:",
                 "§7wer sie beschädigt, zahlt " + Items.format(Bauamt.DAMAGE_FLAT) + " + " + Bauamt.DAMAGE_PER_BLOCK + " je Block."));
         inventory.setItem(SLOT_INFO, Items.named(Material.SCAFFOLDING, "§6§lBauamt", info));
 
@@ -126,7 +128,8 @@ public final class BauamtView implements InventoryHolder {
                     "§7Deine Aufträge: §f" + open + " §7von " + Bauamt.ORDERS_PER_TEMPLATE,
                     "",
                     action,
-                    "§e» Rechtsklick: Materialliste")), open > 0));
+                    "§e» Rechtsklick: Materialliste",
+                    "§e» Shift-Klick: Bauplan holen")), open > 0));
         }
 
         List<Build> pending = Bauamt.pending(uuid);
@@ -213,17 +216,28 @@ public final class BauamtView implements InventoryHolder {
         if (event.getClickedInventory() != inventory || busy) return;
         if (System.currentTimeMillis() < ignoreClicksUntil) return;
         ClickType click = event.getClick();
-        if (click != ClickType.LEFT && click != ClickType.RIGHT) return;
+        if (click != ClickType.LEFT && click != ClickType.RIGHT && click != ClickType.SHIFT_LEFT && click != ClickType.SHIFT_RIGHT) return;
         int slot = event.getRawSlot();
         if (slot == SLOT_CLOSE) {
             Tasks.sync(player::closeInventory);
         } else if (templateSlots.containsKey(slot)) {
-            if (click == ClickType.RIGHT) player.openBook(materialBook(templateSlots.get(slot)));
+            if (click.isShiftClick()) givePlan(player, templateSlots.get(slot));
+            else if (click == ClickType.RIGHT) player.openBook(materialBook(templateSlots.get(slot)));
             else takeOrder(player, templateSlots.get(slot));
         } else if (pendingSlots.containsKey(slot) && click == ClickType.LEFT) {
             claim(player, pendingSlots.get(slot));
         } else if (slot == SLOT_BILL && hasBill && click == ClickType.LEFT) {
             payBill(player);
+        }
+    }
+
+    private static void givePlan(Player player, Blueprint template) {
+        if (Bauplan.give(player, template)) {
+            player.sendMessage(Main.getChatPrefix() + "§fHier ist der §6Bauplan §e" + template.name()
+                    + "§f. Rechtsklick blättert durch die Ebenen, ein Linksklick auf deinen Bau zeigt, was noch fehlt.");
+            player.playSound(player.getLocation(), Sound.ITEM_BOOK_PAGE_TURN, 1f, 1f);
+        } else {
+            fail(player, "§fDen Bauplan für §e" + template.name() + " §fhast du schon dabei.");
         }
     }
 
@@ -242,7 +256,9 @@ public final class BauamtView implements InventoryHolder {
             Tasks.sync(() -> {
                 busy = false;
                 if (result == Bauamt.OrderOutcome.OK) {
-                    player.sendMessage(Main.getChatPrefix() + "§fAuftrag angenommen: §e" + template.name() + "§f. Bau ihn irgendwo nach, beim letzten Block meldet sich das Bauamt.");
+                    boolean plan = player.isOnline() && Bauplan.give(player, template);
+                    player.sendMessage(Main.getChatPrefix() + "§fAuftrag angenommen: §e" + template.name() + "§f. Bau ihn irgendwo nach, beim letzten Block meldet sich das Bauamt."
+                            + (plan ? " Den §6Bauplan §fhast du jetzt im Inventar." : ""));
                     player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_YES, 1f, 1f);
                 } else if (result == Bauamt.OrderOutcome.LIMIT) {
                     fail(player, "§fDu hast schon " + Bauamt.ORDERS_PER_TEMPLATE + " offene Aufträge dafür. Erst bauen und abnehmen lassen.");

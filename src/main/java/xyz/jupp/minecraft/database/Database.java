@@ -577,6 +577,14 @@ public final class Database {
                 holder TEXT   NOT NULL,
                 amount BIGINT NOT NULL,
                 PRIMARY KEY (day, holder)
+            )""",
+            // the Bauamt's building plans: one map per template and layer, drawn by the plugin after every start
+            """
+            CREATE TABLE IF NOT EXISTS bauamt_maps (
+                template_id INTEGER NOT NULL REFERENCES bauamt_templates (id) ON DELETE CASCADE,
+                layer       INTEGER NOT NULL,
+                map_id      INTEGER NOT NULL,
+                PRIMARY KEY (template_id, layer)
             )"""
     );
 

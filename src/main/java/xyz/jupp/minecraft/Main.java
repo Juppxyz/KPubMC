@@ -10,6 +10,7 @@ import xyz.jupp.minecraft.team.TeamViewListener;
 import xyz.jupp.minecraft.team.TeamWarps;
 import xyz.jupp.minecraft.building.Bauamt;
 import xyz.jupp.minecraft.building.BauamtListener;
+import xyz.jupp.minecraft.building.BauplanListener;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.ChunkCache;
 import xyz.jupp.minecraft.cache.WarpCache;
@@ -126,6 +127,7 @@ public final class Main extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new CombatListener(), this);
         Bukkit.getPluginManager().registerEvents(new DntLootListener(), this);
         Bukkit.getPluginManager().registerEvents(new BauamtListener(), this);
+        Bukkit.getPluginManager().registerEvents(new BauplanListener(), this);
         Bukkit.getPluginManager().registerEvents(new BountyHeadListener(), this);
         Bukkit.getPluginManager().registerEvents(new PrisonListener(), this);
 

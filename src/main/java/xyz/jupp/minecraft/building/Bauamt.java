@@ -126,6 +126,7 @@ public final class Bauamt {
                 row.getTimestamp("wanted_at") != null, row.getTimestamp("served_at") != null, row.getBoolean("warrant_shared"))));
         rebuildIndex();
         refreshFunding();
+        Bauplan.load();
     }
 
     private static @Nullable Instant instant(@Nullable Timestamp timestamp) {
@@ -461,25 +462,49 @@ public final class Bauamt {
         if (!Blueprint.rarestMatch(world, ox, oy, oz, variant)) return false;
         if (!Blueprint.chunksLoaded(world, ox, oz, variant.sizeX(), variant.sizeZ())) return false;
         if (Blueprint.mismatches(world, ox, oy, oz, variant, 0) != 0) return false;
-        String worldName = world.getName();
+        Finished finished = finish(player, world.getName(), template, variant, ox, oy, oz);
+        switch (finished.kind()) {
+            case REGISTERED, PENDING -> hint(player, template, finished.build());
+            case NO_ORDER -> orderHint(player, template);
+            // a copy on top of another build is no new one; another offset may still be free
+            case BLOCKED -> {
+                return false;
+            }
+            default -> {}
+        }
+        return true;
+    }
+
+    /** What a complete copy means: newly reported, no order for it, repaired, already reported, known, in another build's way. */
+    public enum Finish { REGISTERED, NO_ORDER, REPAIRED, PENDING, KNOWN, BLOCKED }
+
+    /** build: the new or existing build (null for NO_ORDER). */
+    public record Finished(@NotNull Finish kind, @Nullable Build build) {}
+
+    /**
+     * Main thread: the copy at this placement is complete. A new one is reported if the player holds an order, a damaged
+     * one counts as repaired; nothing is said to the player.
+     */
+    static @NotNull Finished finish(@NotNull Player player, @NotNull String worldName, @NotNull Blueprint template, @NotNull Blueprint.Variant variant,
+                                    int ox, int oy, int oz) {
         Build existing = overlapping(worldName, ox, oy, oz, variant.sizeX(), variant.sizeY(), variant.sizeZ());
         if (existing == null) {
             // money only for a copy the player took an order for
             Order order = openOrder(player.getUniqueId(), template.id());
-            if (order == null) orderHint(player, template);
-            else register(player, template, variant, worldName, ox, oy, oz, order);
-            return true;
+            if (order == null) return new Finished(Finish.NO_ORDER, null);
+            return new Finished(Finish.REGISTERED, register(player, template, variant, worldName, ox, oy, oz, order));
         }
-        if (existing.samePlace(template.id(), worldName, ox, oy, oz, variant.rotation(), variant.mirrored())) {
-            if (existing.state() == Build.State.DAMAGED) {
-                repaired(existing, template);
-            } else if (existing.state() == Build.State.PENDING && existing.player().equals(player.getUniqueId())) {
-                hint(player, template, existing);
-            }
-            return true;
+        if (!existing.samePlace(template.id(), worldName, ox, oy, oz, variant.rotation(), variant.mirrored())) {
+            return new Finished(Finish.BLOCKED, existing);
         }
-        // a copy on top of another build is no new one; another offset may still be free
-        return false;
+        if (existing.state() == Build.State.DAMAGED) {
+            repaired(existing, template);
+            return new Finished(Finish.REPAIRED, existing);
+        }
+        if (existing.state() == Build.State.PENDING && existing.player().equals(player.getUniqueId())) {
+            return new Finished(Finish.PENDING, existing);
+        }
+        return new Finished(Finish.KNOWN, existing);
     }
 
     private static @Nullable Build overlapping(String world, int x, int y, int z, int sizeX, int sizeY, int sizeZ) {
@@ -489,7 +514,7 @@ public final class Bauamt {
         return null;
     }
 
-    private static void register(Player player, Blueprint template, Blueprint.Variant variant, String world, int x, int y, int z, Order order) {
+    private static Build register(Player player, Blueprint template, Blueprint.Variant variant, String world, int x, int y, int z, Order order) {
         Build build = new Build(0, template.id(), player.getUniqueId(), player.getName(), world, x, y, z,
                 variant.sizeX(), variant.sizeY(), variant.sizeZ(), variant.rotation(), variant.mirrored(),
                 Build.State.PENDING, 0, Instant.now(), null, null);
@@ -511,10 +536,10 @@ public final class Bauamt {
                 Main.getInstance().getSLF4JLogger().error("Could not store the build of {}", player.getName(), e);
             }
         });
-        hint(player, template, build);
+        return build;
     }
 
-    private static void hint(Player player, Blueprint template, Build build) {
+    static void hint(Player player, Blueprint template, Build build) {
         if (!build.shouldHint()) return;
         player.sendMessage(Main.getChatPrefix() + "§e§lDas sieht fertig aus! §fDein §e" + template.name() + " §fbei §e"
                 + build.centerX() + " / " + build.centerZ() + " §fist gemeldet. Hol dir die Förderung beim §e§lBauamt§f ab.");
