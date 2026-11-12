@@ -38,7 +38,8 @@ public class TabListUtil {
             Bankruptcy.Level level = Bankruptcy.lastLevel();
             String progress = level == null ? "§cKasse leer"
                     : "§7Kasse §f" + Items.format(Math.max(0, level.free())) + " §7von §f" + Items.format(level.recoveredAt()) + " §7zur Erholung";
-            return Component.text("\n§4§lSTAATSPLEITE §8| " + progress + "\n§7Steuern: " + Economy.levelWord()
+            // three lines: the state, the treasury, what players can do (a colour code resets the bold of the first line)
+            return Component.text("\n§4§lSTAATSPLEITE\n" + progress + "\n§7Steuern: " + Economy.levelWord()
                     + " §8| §7Notverkauf im Shop");
         }
         return Component.text(FOOTER.formatted(Treasury.balance(), Economy.levelWord()));
