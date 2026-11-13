@@ -12,6 +12,7 @@ import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
+import xyz.jupp.minecraft.economy.Loans;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.inventory.Items;
 import xyz.jupp.minecraft.inventory.MainThread;
@@ -101,6 +102,7 @@ public class BountyCommand implements CommandExecutor, TabCompleter {
                 booking.remove(uuid);
             }
             Bounties.Pledge done = pledge;
+            String bound = done != null && done.outcome() == Bounties.PledgeOutcome.INSUFFICIENT_FUNDS ? Loans.lockedMessage(uuid) : null;
             MainThread.run(() -> {
                 if (done == null) {
                     if (player.isOnline()) fail(player, "§cDas ging gerade nicht, versuch es gleich nochmal.");
@@ -119,7 +121,7 @@ public class BountyCommand implements CommandExecutor, TabCompleter {
                                 + " Schilling §fauf §c" + name + " §faus. §7(Von Spielern insgesamt: " + Items.format(done.total()) + ")"));
                     }
                     case NOT_WANTED -> fail(player, "§f" + name + " §cwird gerade nicht gesucht. §7(Kopfgeld nur auf Gesuchte, siehe /wanted)");
-                    case INSUFFICIENT_FUNDS -> fail(player, "§cDafür reicht dein Konto nicht §7(" + Items.format(amount) + " + "
+                    case INSUFFICIENT_FUNDS -> fail(player, bound != null ? bound : "§cDafür reicht dein Konto nicht §7(" + Items.format(amount) + " + "
                             + Bounties.PLEDGE_FEE + " Gebühr)§c.");
                     case TOO_LOW -> fail(player, "§cDas ist kein gültiger Betrag.");
                     case UNKNOWN -> fail(player, "§cEinen Spieler §f" + name + " §ckennt der Server nicht.");

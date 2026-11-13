@@ -1,6 +1,5 @@
 package xyz.jupp.minecraft.listener;
 
-import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
@@ -14,15 +13,11 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.inventory.meta.SkullMeta;
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.economy.Bank;
-import xyz.jupp.minecraft.economy.TaxClass;
+import xyz.jupp.minecraft.economy.Loans;
 import xyz.jupp.minecraft.economy.Taxes;
-import xyz.jupp.minecraft.economy.Treasury;
 import xyz.jupp.minecraft.Main;
-import xyz.jupp.minecraft.cache.CacheHandler;
-import xyz.jupp.minecraft.cache.PlayerCacheObject;
 import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.inventory.MainThread;
 import xyz.jupp.minecraft.inventory.Menu;
@@ -35,19 +30,16 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static xyz.jupp.minecraft.utils.ItemStackUtil.createItemStack;
 
 public class MoneyInventoryListener implements Listener {
 
-    // send menu: the selected amount is the name of the diamond, the button slot shows "Abheben" or the selected receiver
-    private static final int AMOUNT_SLOT = 48;
-    private static final int ACTION_SLOT = 52;
+    // withdrawal menu: the selected amount is the name of the diamond
+    private static final int AMOUNT_SLOT = MoneyInventory.AMOUNT_SLOT;
 
-    // a transfer or withdrawal of the player runs, or ended a moment ago: a double click (two click events, often
+    // a withdrawal of the player runs, or ended a moment ago: a double click (two click events, often
     // after the booking is done) must not book twice. Player -> no new booking before this time.
     private static final Map<UUID, Long> BOOKED_UNTIL = new ConcurrentHashMap<>();
     private static final long BOOKING_COOLDOWN_MILLIS = 500;
@@ -91,36 +83,6 @@ public class MoneyInventoryListener implements Listener {
         // Open send inventory
         if (displayName.equals(MoneyInventory.moneySendName)) {
             MoneyInventory.openInventory(player, MoneyInventory.MoneyInventoryTypes.SEND);
-            return;
-        }
-
-        // more receivers than fit: the next page, in place
-        if (displayName.equals(MoneyInventory.nextPageName) && event.getSlot() == MoneyInventory.PAGE_SLOT) {
-            Menu menu = Menu.of(view.getTopInventory());
-            MoneyInventory.showReceivers(player, view.getTopInventory(), menu == null ? 0 : menu.getPage() + 1);
-            player.playSound(player.getLocation(), Sound.ITEM_BOOK_PAGE_TURN, 2f, 2f);
-            return;
-        }
-
-        // Select user, by the exact name (an online player; no name lookup)
-        if (displayName.startsWith("§2§o") && clickedItem.getType() == Material.PLAYER_HEAD) {
-            Player target = Bukkit.getPlayerExact(displayName.replace("§2§o", ""));
-            if (target == null) {
-                player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
-                player.sendMessage(Main.getChatPrefix() + "§fDer Spieler ist nicht mehr online.");
-                return;
-            }
-            ItemStack playerHead = new ItemStack(Material.PLAYER_HEAD);
-            SkullMeta playerHeadMeta = (SkullMeta) playerHead.getItemMeta();
-
-            // Lore for better identification of the selected person
-            playerHeadMeta.lore(Text.lore(List.of("§2§o" + target.getName())));
-
-            playerHeadMeta.setOwningPlayer(target);
-            playerHeadMeta.customName(Text.of("§aÜberweisen"));
-            playerHead.setItemMeta(playerHeadMeta);
-            view.setItem(ACTION_SLOT, playerHead);
-            player.playSound(player.getLocation(), Sound.ITEM_BOOK_PAGE_TURN, 2f, 2f);
             return;
         }
 
@@ -168,32 +130,13 @@ public class MoneyInventoryListener implements Listener {
                 return;
             }
 
-            if ((selectedAmount - Taxes.taxOn(selectedAmount, TaxClass.STANDARD)) / 10 * 10 <= 0) {
+            if ((selectedAmount - Taxes.cashWithdrawTaxOn(selectedAmount)) / 10 * 10 <= 0) {
                 player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
                 player.sendMessage(Main.getChatPrefix() + "Nach der Steuer bleibt kein ganzer Schein übrig, heb etwas mehr ab.");
                 return;
             }
 
             withdrawCash(player, selectedAmount);
-            return;
-        }
-
-
-        // Transfer money to player
-        if (displayName.equals("§aÜberweisen") && clickedItem.getType() == Material.PLAYER_HEAD) {
-            List<String> lore = Text.legacyLore(clickedMeta.lore());
-            Integer selectedAmount = selectedAmount(view.getTopInventory());
-            if (lore == null || lore.isEmpty() || selectedAmount == null) return;
-            // the exact name: getPlayer(String) matches name prefixes, the money could go to someone else
-            Player targetPlayer = Bukkit.getPlayerExact(lore.get(0).replace("§2§o", ""));
-            if (selectedAmount < 1) return;
-
-            if (targetPlayer != null) {
-                transfer(player, targetPlayer, selectedAmount, view);
-            } else {
-                player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 2f, 2f);
-                player.sendMessage(Main.getChatPrefix() + "§fDer Spieler ist nicht mehr online.");
-            }
         }
     }
 
@@ -215,11 +158,6 @@ public class MoneyInventoryListener implements Listener {
             throw e;
         }
         return true;
-    }
-
-    // the team colour without a database read for someone who left meanwhile
-    private static String colour(Player player) {
-        return player.isOnline() ? CacheHandler.getInstance().getPlayerInCache(player).getTeamColor() : "§a";
     }
 
 
@@ -265,7 +203,8 @@ public class MoneyInventoryListener implements Listener {
             // cash minus trade tax; the tax goes to the state treasury, a rest below 10 stays on the account
             Taxes.CashWithdrawal withdrawal = Taxes.withdrawCash(player.getUniqueId(), selectedAmount);
             if (!withdrawal.success()) {
-                MainThread.run(() -> player.sendMessage(Main.getChatPrefix() + "Du hast nicht genügend " + Main.getCurrencyName() + "§f."));
+                String bound = Loans.lockedMessage(player.getUniqueId());
+                MainThread.run(() -> player.sendMessage(Main.getChatPrefix() + (bound != null ? bound : "Du hast nicht genügend " + Main.getCurrencyName() + "§f.")));
                 return;
             }
             int netAmount = withdrawal.cash();
@@ -278,33 +217,6 @@ public class MoneyInventoryListener implements Listener {
             });
             // server stop before the hand-out: everything back, the tax leaves the treasury again
             if (!scheduled) Taxes.refundWithdrawal(player.getUniqueId(), netAmount, withdrawal.tax());
-        });
-    }
-
-    // withdraw from the sender first, the receiver is only credited on success
-    private static void transfer(Player player, Player targetPlayer, int selectedAmount, InventoryView view) {
-        startBooking(player.getUniqueId(), () -> {
-            PlayerRepository.TransferResult result = PlayerRepository.transferMoney(player.getUniqueId(), targetPlayer.getUniqueId(), selectedAmount);
-
-            if (result == PlayerRepository.TransferResult.INSUFFICIENT_FUNDS) {
-                MainThread.run(() -> player.sendMessage(Main.getChatPrefix() + "Du hast nicht genügend " + Main.getCurrencyName() + "§f."));
-                return;
-            }
-            if (result != PlayerRepository.TransferResult.SUCCESS) return;
-
-            MainThread.run(() -> {
-                // the balances are logged by PlayerRepository
-                Bukkit.getConsoleSender().sendMessage("Transfer from §a" + player.getName() + " §fto §a" + targetPlayer.getName() + " §c" + selectedAmount);
-
-                if (targetPlayer.isOnline()) {
-                    targetPlayer.playSound(targetPlayer.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f, 2f);
-                    targetPlayer.sendMessage(Main.getChatPrefix() + colour(player) + player.getName() + " §fhat dir " + Main.getCurrencyName(selectedAmount) + " §füberwiesen.");
-                }
-                if (!player.isOnline()) return;
-                player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f, 2f);
-                player.sendMessage(Main.getChatPrefix() + "Du hast " + Main.getCurrencyName(selectedAmount) + " §fan " + colour(targetPlayer) + targetPlayer.getName() + " §füberwiesen.");
-                view.setItem(ACTION_SLOT, createItemStack("§aÜberweisen", Material.NETHER_STAR));
-            });
         });
     }
 }

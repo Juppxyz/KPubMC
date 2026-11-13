@@ -34,6 +34,58 @@ public final class SeasonReset {
     static final String ERROR_KEY = "season_reset_error";
     // the number of the season, counted up by every reset (kept, not in SEASON_META): cash of an older season is void
     static final String SEASON_KEY = "season";
+    // the day the current season began (written by the reset): the market report knows a new season started
+    static final String STARTED_KEY = "season_started";
+
+    // the day the season began, cached in onEnable (loadStart), read on any thread
+    private static volatile @Nullable java.time.LocalDate startDay;
+
+    /**
+     * Blocking, in onEnable after the treasury was loaded: the day the season began. A reset stored it; otherwise the
+     * treasury's first booking (a new database: the start capital), otherwise today; that day is stored so it stays.
+     */
+    public static void loadStart() {
+        java.time.LocalDate day = started();
+        if (day == null) {
+            java.sql.Timestamp first = Database.queryOne("SELECT MIN(created_at) FROM treasury_ledger", row -> row.getTimestamp(1));
+            day = first == null ? java.time.LocalDate.now(Market.ZONE) : first.toInstant().atZone(Market.ZONE).toLocalDate();
+            Database.update("INSERT INTO market_meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO NOTHING", STARTED_KEY, day.toString());
+        }
+        startDay = day;
+    }
+
+    /**
+     * Blocking, admins (/wirtschaft): the season begins today, e.g. on the opening day of a server that ran a while for
+     * the setup before (a fresh database counts the season from its first start).
+     */
+    public static void startToday(@NotNull String by) {
+        java.time.LocalDate today = java.time.LocalDate.now(Market.ZONE);
+        Database.update("INSERT INTO market_meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+                STARTED_KEY, today.toString());
+        startDay = today;
+        Main.getInstance().getSLF4JLogger().warn("season start set to {} by {}", today, by);
+    }
+
+    /** The day the season began (today until loadStart ran). */
+    public static java.time.LocalDate startDay() {
+        java.time.LocalDate day = startDay;
+        return day == null ? java.time.LocalDate.now(Market.ZONE) : day;
+    }
+
+    /** The day of the season: 1 on the day it began. */
+    public static long seasonDay() {
+        return java.time.temporal.ChronoUnit.DAYS.between(startDay(), java.time.LocalDate.now(Market.ZONE)) + 1;
+    }
+
+    /** The day the current season began as stored, null if none is stored. */
+    public static @Nullable java.time.LocalDate started() {
+        String value = Database.queryOne("SELECT value FROM market_meta WHERE key = ?", row -> row.getString(1), STARTED_KEY);
+        try {
+            return value == null ? null : java.time.LocalDate.parse(value.trim());
+        } catch (java.time.format.DateTimeParseException e) {
+            return null;
+        }
+    }
 
     /** The current season, 0 before the first reset. */
     public static int season() {
@@ -69,7 +121,9 @@ public final class SeasonReset {
     /** market_meta keys that belong to the season; the others (one-time migrations, catalog version) stay. */
     static final List<String> SEASON_META = List.of(
             "state_broke", "state_founded", "demand_decayed_at", "hondo_evaluated_day", "ai_reviewed_day", "ai_review_error",
-            PENDING_KEY, ERROR_KEY);
+            PENDING_KEY, ERROR_KEY,
+            // the admins' netherite and loan decisions belong to the season (AdminSettings)
+            "setting.netherite_mode", "setting.loans_open");
 
     /** Who marked the reset and when, null if none is marked. */
     public static @Nullable String pending() {
@@ -156,6 +210,9 @@ public final class SeasonReset {
                 }
                 String placeholders = String.join(", ", java.util.Collections.nCopies(SEASON_META.size(), "?"));
                 Database.update(connection, "DELETE FROM market_meta WHERE key IN (" + placeholders + ")", SEASON_META.toArray());
+                // the market report of the old season went with economy_snapshots; the next one knows the season is new
+                Database.update(connection, "INSERT INTO market_meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+                        STARTED_KEY, java.time.LocalDate.now(Market.ZONE).toString());
                 // a new season: the bank notes of the old one are worth nothing from now on (Cash)
                 Database.update(connection, "INSERT INTO market_meta (key, value) VALUES (?, '1') ON CONFLICT (key) DO UPDATE SET value = "
                         + "(CASE WHEN market_meta.value ~ '^[0-9]+$' THEN market_meta.value::int + 1 ELSE 1 END)::text", SEASON_KEY);

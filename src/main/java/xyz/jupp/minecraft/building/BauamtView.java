@@ -92,6 +92,7 @@ public final class BauamtView implements InventoryHolder {
         if (funding.broke()) {
             info.add("§cDer Staat ist pleite, keine Förderung.");
         } else {
+            if (noIncome(funding)) info.add("§eNoch keine Einnahmen: §7Förderung gibt es ab den ersten Steuern.");
             info.add("§fFörderung gerade: §a" + funding.percent() + " % §7des Richtwerts");
             if (funding.reduced()) info.add("§7Die Kasse liegt unter ihren Ø Einnahmen (" + Items.format(funding.averageIncome()) + " am Tag).");
             if (funding.reserve() > 0) info.add("§7Unter " + Items.format(funding.reserve()) + " Schilling frei zahlt der Staat nicht.");
@@ -117,7 +118,9 @@ public final class BauamtView implements InventoryHolder {
             int open = Bauamt.openOrders(uuid, template.id());
             String action;
             if (funding.broke()) action = "§cDer Staat ist pleite, keine Aufträge.";
-            else if (!Bauamt.orderable(template, funding)) action = "§7Gerade keine Aufträge: die Kasse ist zu knapp.";
+            else if (!Bauamt.orderable(template, funding)) action = noIncome(funding)
+                    ? "§7Gerade keine Aufträge: noch keine Einnahmen."
+                    : "§7Gerade keine Aufträge: die Kasse ist zu knapp.";
             else if (open >= Bauamt.ORDERS_PER_TEMPLATE) action = "§7Mehr Aufträge gibt es erst nach der Abnahme.";
             else action = "§e» Linksklick: Auftrag annehmen";
             inventory.setItem(slot, Items.glow(Items.named(template.icon(), "§e" + template.name(), List.of(
@@ -151,7 +154,9 @@ public final class BauamtView implements InventoryHolder {
             lore.add("");
             if (funding.broke()) lore.add("§cDer Staat ist pleite.");
             else if (payout > 0 && funding.budgetLeft() <= 0) lore.add("§7Tagesbudget ausgeschöpft, später nochmal.");
-            else if (!Bauamt.affordable(payout, funding)) lore.add("§7Die Staatskasse kann das gerade nicht zahlen.");
+            else if (!Bauamt.affordable(payout, funding)) lore.add(noIncome(funding)
+                    ? "§7Noch keine Einnahmen, Auszahlung später."
+                    : "§7Die Staatskasse kann das gerade nicht zahlen.");
             else lore.add("§e» Linksklick: Abnahme & Auszahlung");
             inventory.setItem(slot, Items.glow(Items.named(Material.PAPER, "§fBauantrag: §e" + template.name(), lore), true));
         }
@@ -200,6 +205,12 @@ public final class BauamtView implements InventoryHolder {
         if (recent.isEmpty()) recent.add("§7Noch nichts gefördert.");
         inventory.setItem(SLOT_RECENT, Items.named(Material.GOLD_INGOT, "§6§lZuletzt gefördert", recent));
         inventory.setItem(SLOT_CLOSE, Items.named(Material.BARRIER, "§cSchließen", List.of()));
+    }
+
+    // the Bauamt pays from the treasury's income (the daily budget is half the average), the start capital of a season
+    // is none: right after a reset nothing comes in yet
+    private static boolean noIncome(Bauamt.Funding funding) {
+        return !funding.broke() && funding.averageIncome() <= 0;
     }
 
     // "Förderung: 500 Schilling" or, while the treasury is short, "Förderung gerade: 300 (Richtwert 500)"
@@ -263,7 +274,8 @@ public final class BauamtView implements InventoryHolder {
                 } else if (result == Bauamt.OrderOutcome.LIMIT) {
                     fail(player, "§fDu hast schon " + Bauamt.ORDERS_PER_TEMPLATE + " offene Aufträge dafür. Erst bauen und abnehmen lassen.");
                 } else if (result == Bauamt.OrderOutcome.UNAFFORDABLE) {
-                    fail(player, "§fDie Staatskasse könnte das gerade nicht bezahlen, darum vergibt das Bauamt dafür keine Aufträge.");
+                    fail(player, noIncome(Bauamt.funding()) ? "§fNoch keine Einnahmen in der Staatskasse, darum noch keine Förderung."
+                            : "§fDie Staatskasse könnte das gerade nicht bezahlen, darum vergibt das Bauamt dafür keine Aufträge.");
                 } else {
                     fail(player, "§fDas hat gerade nicht geklappt, versuch es gleich nochmal.");
                 }
@@ -289,7 +301,8 @@ public final class BauamtView implements InventoryHolder {
                     player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.8f, 1.4f);
                 }
                 case BROKE -> fail(player, "§fDer Staat ist pleite, gerade gibt es keine Förderung. Der Antrag bleibt offen.");
-                case EMPTY -> fail(player, "§fDie Staatskasse kann das gerade nicht zahlen. Der Antrag bleibt offen.");
+                case EMPTY -> fail(player, (noIncome(Bauamt.funding()) ? "§fNoch keine Einnahmen in der Staatskasse, darum noch keine Förderung."
+                        : "§fDie Staatskasse kann das gerade nicht zahlen.") + " Der Antrag bleibt offen.");
                 case BUDGET -> fail(player, "§fDas Bauamt hat sein Tagesbudget ausgeschöpft. Der Antrag bleibt offen, versuch es später.");
                 case NOT_INTACT -> fail(player, "§fDas Bauwerk bei " + build.centerX() + " / " + build.centerZ()
                         + " ist nicht mehr vollständig. Der Antrag bleibt offen.");

@@ -28,6 +28,8 @@ public final class Treasury {
     public enum Source {
         TRADE_TAX("Handelssteuer"),
         WITHDRAW_TAX("Abhebesteuer"),
+        // cash paid in at Basil
+        DEPOSIT_TAX("Einzahlsteuer"),
         DEATH_TAX("Todessteuer"),
         NETHER_TAX("Transfersteuer"),
         VAULT_FEE("Schließfach"),

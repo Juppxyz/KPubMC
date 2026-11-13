@@ -29,6 +29,8 @@
   "economyTargetGrowth": 0.02,
   "treasuryTargetPerPlayer": 20000,
   "treasuryStartCapital": 25000,
+  "cashWithdrawTax": 0.10,
+  "cashDepositTax": 0.05,
   "dntLoot": {
     "enabled": true,
     "namespaces": ["nova_structures"],

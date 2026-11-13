@@ -4,6 +4,7 @@ import org.bukkit.Material;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.database.Database;
+import xyz.jupp.minecraft.database.BankLog;
 import xyz.jupp.minecraft.utils.EndAccess;
 
 import java.sql.Connection;
@@ -27,7 +28,7 @@ public final class HondoRepository {
 
     private HondoRepository() {}
 
-    public enum Outcome { OK, INSUFFICIENT_FUNDS, PRICE_CHANGED, UNAVAILABLE, ALREADY_CLAIMED, LEVEL_TOO_LOW, LIMIT, DAILY_LIMIT }
+    public enum Outcome { OK, INSUFFICIENT_FUNDS, PRICE_CHANGED, UNAVAILABLE, ALREADY_CLAIMED, LEVEL_TOO_LOW, LIMIT, DAILY_LIMIT, LOCKED }
 
     /**
      * The friendship as the GUI shows it; the trades of today decide whether the points shrink over night,
@@ -116,16 +117,19 @@ public final class HondoRepository {
         return friendship(connection, player, new Friend(friend.points() + points, friend.trades() + 1, friend.volume() + value));
     }
 
-    // pieces of the material the player got from Hondo today by these kinds of trade
-    private static int receivedToday(Connection connection, UUID player, Material material, String... kinds) throws SQLException {
+    // pieces of the material the player got from Hondo within the last 24 hours by these kinds of trade (a rolling
+    // window: two just before and two just after midnight are not possible)
+    private static int receivedLastDay(Connection connection, UUID player, Material material, String... kinds) throws SQLException {
         Long received = Database.queryOne(connection, "SELECT COALESCE(SUM(quantity), 0) FROM hondo_trades "
-                        + "WHERE player_uuid = ? AND material = ? AND kind = ANY(?) AND created_at >= ?",
-                row -> row.getLong(1), player, material.name(), connection.createArrayOf("text", kinds), startOfToday());
+                        + "WHERE player_uuid = ? AND material = ? AND kind = ANY(?) AND created_at >= now() - interval '24 hours'",
+                row -> row.getLong(1), player, material.name(), connection.createArrayOf("text", kinds));
         return received == null ? 0 : (int) Math.min(Integer.MAX_VALUE, received);
     }
 
     private static boolean withdraw(Connection connection, UUID player, int amount) throws SQLException {
-        return Database.update(connection, "UPDATE players SET money = money - ? WHERE uuid = ? AND money >= ?", amount, player, amount) > 0;
+        // jewels not with money bound to a loan (the hard rule: no diamond gear on credit)
+        return Database.update(connection, "UPDATE players SET money = money - ? WHERE uuid = ? AND money - ? >= " + BankLog.LOAN_LOCK,
+                amount, player, amount, player) > 0;
     }
 
     private static void setDemand(Connection connection, MarketItem item, double demand) throws SQLException {
@@ -142,11 +146,13 @@ public final class HondoRepository {
         Result result = Database.inTransaction(connection -> {
             MarketItem item = MarketRepository.lock(connection, material);
             if (item == null || !item.enabled() || !EndAccess.isAvailable(material)) return Result.of(Outcome.UNAVAILABLE);
+            // netherite only from two weeks into the season on
+            if (material == Material.NETHERITE_INGOT && !Hondo.netheriteOpen()) return Result.of(Outcome.LOCKED);
             // the same hourly limit as in the shop (the catalog row is locked)
             if (MarketRepository.boughtLastHour(connection, player, material) + units > Market.hourlyLimitItems(item)) return Result.of(Outcome.LIMIT);
             Friend friend = lockFriend(connection, player);
-            // the friendship row is locked: the count of today cannot change meanwhile
-            if (material == Material.NETHERITE_INGOT && receivedToday(connection, player, material, "BUY", "OFFER") + units > Hondo.NETHERITE_PER_DAY) {
+            // the friendship row is locked: the count of the last 24 hours cannot change meanwhile
+            if (material == Material.NETHERITE_INGOT && receivedLastDay(connection, player, material, "BUY", "OFFER") + units > Hondo.netheritePerDay()) {
                 return Result.of(Outcome.DAILY_LIMIT);
             }
             int level = Hondo.level(friend.points());
@@ -187,8 +193,9 @@ public final class HondoRepository {
                 return new Result(Outcome.ALREADY_CLAIMED, 0, 0, 0, level, null);
             }
 
+            if (offer.material() == Material.NETHERITE_INGOT && !Hondo.netheriteOpen()) return new Result(Outcome.LOCKED, 0, 0, 0, level, null);
             if (offer.material() == Material.NETHERITE_INGOT
-                    && receivedToday(connection, player, offer.material(), "BUY", "OFFER") + offer.amount() > Hondo.NETHERITE_PER_DAY) {
+                    && receivedLastDay(connection, player, offer.material(), "BUY", "OFFER") + offer.amount() > Hondo.netheritePerDay()) {
                 return new Result(Outcome.DAILY_LIMIT, 0, 0, 0, level, null);
             }
             int net = Hondo.offerPrice(item, offer);

@@ -16,6 +16,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.utils.PlayerSaves;
 import xyz.jupp.minecraft.Main;
+import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.inventory.MainThread;
 import xyz.jupp.minecraft.utils.Tasks;
@@ -322,7 +323,9 @@ public final class ShopView implements InventoryHolder {
         } else {
             lore.add("§7Kaufen: §7nicht hier" + (item.description() != null ? " §7(" + item.description() + ")" : ""));
         }
-        lore.add(item.sellable() ? "§7Verkaufen: " + Main.getCurrencyName(item.sellPrice()) : "§7Verkaufen: §7wird nicht angekauft");
+        lore.add(!item.sellable() || item.sellPriceAt(0) == 0 ? "§7Verkaufen: §7wird nicht angekauft"
+                : item.saturated() ? "§7Verkaufen: §cgesättigt §7" + saturatedText(item)
+                : "§7Verkaufen: " + Main.getCurrencyName(item.sellPrice()));
         String trend = trendLine(item);
         if (trend != null) lore.add(trend);
         if (daily && item.buyable()) lore.add("§6★ Tagesangebot §a-" + percent(Market.dailyDiscount()));
@@ -447,16 +450,45 @@ public final class ShopView implements InventoryHolder {
                     List.of("§7Mindestens " + item.amount() + " Stück nötig.")));
             return;
         }
-        // 1 Paket and Alles (one button if both are the same)
-        List<Integer> sellOptions = ownedBundles > 1 ? List.of(1, ownedBundles) : List.of(1);
+        // saturated: the shop takes none of it until the market has recovered
+        if (item.saturated()) {
+            inventory.setItem(CENTER_SELL_SLOT, named(Material.GRAY_STAINED_GLASS_PANE, "§7Gesättigt",
+                    List.of("§7Der Händler kauft gerade nichts davon an,", "§7es wurde zu viel verkauft.", "§7Wieder " + saturatedText(item) + ".")));
+            return;
+        }
+        // 1 Paket and Alles (one button if both are the same); "Alles" only as far as the shop still pays
+        int paying = item.payingBundles(ownedBundles);
+        if (paying == 0) {
+            inventory.setItem(CENTER_SELL_SLOT, named(Material.GRAY_STAINED_GLASS_PANE, "§7Wird gerade nicht angekauft", List.of()));
+            return;
+        }
+        List<Integer> sellOptions = paying > 1 ? List.of(1, paying) : List.of(1);
         int[] slots = sellOptions.size() == 1 ? new int[]{CENTER_SELL_SLOT} : SELL_SLOTS;
         for (int i = 0; i < sellOptions.size(); i++) {
             int bundles = sellOptions.get(i);
-            String name = (i == 1 ? "§c§lAlles verkaufen §8» §f" : "§c§lVerkaufen §8» §f") + bundles * item.amount() + "×";
-            inventory.setItem(slots[i], named(Material.RED_STAINED_GLASS_PANE, name,
-                    List.of("§7Du erhältst: " + Main.getCurrencyName(item.sellTotal(bundles)), "", "§e» Linksklick zum Verkaufen")));
+            String name = (i == 1 ? (paying < ownedBundles ? "§c§lVerkaufen §8» §f" : "§c§lAlles verkaufen §8» §f")
+                    : "§c§lVerkaufen §8» §f") + bundles * item.amount() + "×";
+            List<String> sellLore = new ArrayList<>(List.of("§7Du erhältst: " + Main.getCurrencyName(item.sellTotal(bundles))));
+            if (item.sellPriceAt(item.demand() - bundles) == 0) {
+                sellLore.add("§cDanach ist der Markt " + Math.round(AdminSettings.saturatedHours()) + " Stunden gesättigt.");
+                if (bundles < ownedBundles) sellLore.add("§7Mehr nimmt der Händler gerade nicht.");
+            }
+            sellLore.add("");
+            sellLore.add("§e» Linksklick zum Verkaufen");
+            inventory.setItem(slots[i], named(Material.RED_STAINED_GLASS_PANE, name, sellLore));
             actions.put(slots[i], new Action(false, bundles));
         }
+    }
+
+    // "ab ca. 21:40", "ab morgen ca. 07:10", "ab übermorgen ca. 07:10" or "ab 16.11. ca. 15:00"
+    static String saturatedText(MarketItem item) {
+        java.time.Instant until = item.saturatedUntil(ConfigManager.getManager().getDemandHalfLifeHours());
+        if (until == null) return "jetzt";
+        java.time.ZonedDateTime at = until.atZone(Market.ZONE);
+        long days = java.time.temporal.ChronoUnit.DAYS.between(java.time.LocalDate.now(Market.ZONE), at.toLocalDate());
+        String day = days <= 0 ? "" : days == 1 ? "morgen " : days == 2 ? "übermorgen "
+                : java.time.format.DateTimeFormatter.ofPattern("dd.MM. ").format(at);
+        return "ab " + day + "ca. " + java.time.format.DateTimeFormatter.ofPattern("HH:mm").format(at);
     }
 
     private record BuyOption(String label, int bundles) {}
@@ -816,11 +848,18 @@ public final class ShopView implements InventoryHolder {
                 if (trade.outcome() == MarketRepository.Outcome.OK) {
                     player.sendMessage(receipt("§fVerkauft: §e" + quantity + "× ", item, " §ffür " + Main.getCurrencyName(trade.net())));
                     player.playSound(player.getLocation(), Sound.BLOCK_LAVA_POP, 2f, 2f);
+                    if (trade.item() != null && trade.item().saturated()) {
+                        player.sendMessage(Main.getChatPrefix() + "§fDamit ist der Markt gesättigt: der Händler kauft es erst wieder "
+                                + saturatedText(trade.item()) + ".");
+                    }
                 } else {
                     HondoView.deliver(player.getUniqueId(), item.material(), quantity);
-                    fail(player, trade.outcome() == MarketRepository.Outcome.PRICE_CHANGED
-                            ? "§fDer Ankaufpreis hat sich gerade geändert, bitte prüfe den neuen Preis."
-                            : "§fDieses Item wird gerade nicht angekauft.");
+                    fail(player, switch (trade.outcome()) {
+                        case PRICE_CHANGED -> "§fDer Ankaufpreis hat sich gerade geändert, bitte prüfe den neuen Preis.";
+                        case SATURATED -> "§fGesättigt: der Händler kauft gerade nichts davon an, wieder "
+                                + (trade.item() == null ? "später" : saturatedText(trade.item())) + ".";
+                        default -> "§fDieses Item wird gerade nicht angekauft.";
+                    });
                 }
                 refreshAll();
             });

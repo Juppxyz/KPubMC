@@ -46,6 +46,26 @@ public final class Taxes {
         return (int) Math.round(net * rate(taxClass));
     }
 
+    /**
+     * Cash: withdrawing (the money menu, Basil) and paying in at Basil. The admins' rates (config defaults) times the daily tax factor,
+     * so they follow the economy like every other tax (higher while the treasury is low or money grows too fast).
+     */
+    public static double cashWithdrawRate() {
+        return Math.min(MAX_RATE, AdminSettings.cashWithdrawTax() * Economy.factor());
+    }
+
+    public static double cashDepositRate() {
+        return Math.min(MAX_RATE, AdminSettings.cashDepositTax() * Economy.factor());
+    }
+
+    public static int cashWithdrawTaxOn(int amount) {
+        return (int) Math.round(amount * cashWithdrawRate());
+    }
+
+    public static long cashDepositTaxOn(long amount) {
+        return Math.round(amount * cashDepositRate());
+    }
+
     public static double deathRate() {
         return Math.min(MAX_RATE, ConfigManager.getManager().getDeathTax() * Economy.factor());
     }
@@ -168,16 +188,17 @@ public final class Taxes {
     }
 
     /**
-     * Cash withdrawal: the requested amount minus the standard tax is paid out in cash notes (a multiple of 10);
+     * Cash withdrawal: the requested amount minus the cash withdrawal tax is paid out in cash notes (a multiple of 10);
      * only the paid-out cash and the tax leave the account (the rest below 10 stays on it).
      */
     public static CashWithdrawal withdrawCash(@NotNull UUID player, int requested) {
-        int tax = taxOn(requested, TaxClass.STANDARD);
+        int tax = cashWithdrawTaxOn(requested);
         int cash = Math.max(0, requested - tax) / 10 * 10;
         if (cash == 0) return new CashWithdrawal(false, 0, 0);
         boolean success = Database.inTransaction(connection -> {
-            if (Database.update(connection, "UPDATE players SET money = money - ? WHERE uuid = ? AND money >= ?",
-                    cash + tax, player, requested) == 0) return false;
+            // money bound to a loan does not become cash (BankLog.LOAN_LOCK)
+            if (Database.update(connection, "UPDATE players SET money = money - ? WHERE uuid = ? AND money - ? >= " + BankLog.LOAN_LOCK,
+                    cash + tax, player, requested, player) == 0) return false;
             Treasury.deposit(connection, Treasury.Source.WITHDRAW_TAX, tax, player);
             BankLog.add(connection, player, BankLog.WITHDRAW, -(cash + tax), null);
             return true;

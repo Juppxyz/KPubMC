@@ -5,6 +5,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.database.Database;
+import xyz.jupp.minecraft.config.ConfigManager;
 
 import java.sql.Connection;
 import java.sql.Date;
@@ -25,7 +26,7 @@ public final class MarketRepository {
 
     private MarketRepository() {}
 
-    public enum Outcome { OK, INSUFFICIENT_FUNDS, PRICE_CHANGED, UNAVAILABLE, LIMIT, ALREADY }
+    public enum Outcome { OK, INSUFFICIENT_FUNDS, PRICE_CHANGED, UNAVAILABLE, LIMIT, ALREADY, SATURATED }
 
     /** Result of a trade; item is the catalog entry with the new demand (null if the item does not exist). */
     public record Trade(Outcome outcome, int net, int tax, @Nullable MarketItem item) {}
@@ -272,6 +273,10 @@ public final class MarketRepository {
             MarketItem item = lock(connection, material);
             if (item == null || !item.enabled() || !item.sellable()) return new Trade(Outcome.UNAVAILABLE, 0, 0, item);
 
+            // saturated: nothing is taken; bundles that would pay nothing (others sold meanwhile) are never taken either
+            int paying = item.payingBundles(bundles);
+            if (paying == 0) return new Trade(item.saturated() ? Outcome.SATURATED : Outcome.UNAVAILABLE, 0, 0, item);
+            if (paying < bundles) return new Trade(Outcome.PRICE_CHANGED, item.sellTotal(paying), 0, item);
             int payout = item.sellTotal(bundles);
             if (expectedNet != null && expectedNet != payout) return new Trade(Outcome.PRICE_CHANGED, payout, 0, item);
 
@@ -279,6 +284,10 @@ public final class MarketRepository {
                 return new Trade(Outcome.UNAVAILABLE, payout, 0, item);
             }
             double demand = item.demand() - bundles;
+            // the next bundle would pay nothing: the good is saturated and stays so for the admins' saturation hours
+            if (item.sellPriceAt(demand) == 0) {
+                demand = item.withDemand(demand).saturatedDemand(ConfigManager.getManager().getDemandHalfLifeHours(), AdminSettings.saturatedHours());
+            }
             Database.update(connection, "UPDATE market_items SET demand = ? WHERE material = ?", demand, material.name());
             logTrade(connection, player, material, "SELL", bundles * item.amount(), payout, 0);
             return new Trade(Outcome.OK, payout, 0, item.withDemand(demand));

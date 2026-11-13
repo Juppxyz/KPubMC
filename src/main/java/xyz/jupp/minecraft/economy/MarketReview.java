@@ -62,7 +62,7 @@ public final class MarketReview {
     private static final int HISTORY_DAYS = 14;
     private static final int REPORT_MAX = 240;
     private static final int ADMIN_NOTE_MAX = 800;
-    // min_price only sets the buy floor (selling has its own, MarketItem.SELL_FLOOR_SHARE): not the AI's to lower
+    // min_price only sets the buy floor (selling falls to 0 and saturates, AdminSettings.saturatedHours): not the AI's to lower
     private static final Set<String> FIELDS = Set.of("base_price", "max_price", "sell_ratio");
     // a failed review is tried again after these minutes
     private static final long[] RETRY_MINUTES = {5, 20};
@@ -79,7 +79,8 @@ public final class MarketReview {
             lebendig wie ein Marktschreier, aber sachlich richtig. Nutze nur die Fakten aus 'facts': was heute im Angebot ist,
             was teurer oder günstiger geworden ist (mit Prozent), wofür der Händler gerade wenig zahlt, wie die Steuern stehen
             und ob sie steigen oder sinken (sind Stufe und Richtung gegensätzlich, sag beides, z. B. "Steuern noch niedrig,
-            ziehen aber an"), ob der Staat pleite ist. Nenne Items mit ihrem deutschen Minecraft-Namen. Keine Ratschläge an
+            ziehen aber an"), ob der Staat pleite ist. Ist 'seasonDay' 1, hat heute eine neue Saison begonnen: sag das zuerst
+            und sprich nicht von Veränderungen gegenüber früher. Nenne Items mit ihrem deutschen Minecraft-Namen. Keine Ratschläge an
             Admins oder an den Server, nicht die Wörter sollte, empfehlen, Inflation, Geldmenge, Katalog, Basispreis,
             Ankaufquote, Preisfehler; keine Spielernamen, keine Befehle, keine Farbcodes, keine Emojis, nichts über morgen.
 
@@ -91,8 +92,9 @@ public final class MarketReview {
 
             3. 'changes': Korrekturen am Shop-Katalog, nur wenn klar begründet, lieber keine, höchstens 10. Preise gelten pro
             Paket ('amount' Stück). Preismodell: Kaufpreis = basePrice * e^(elasticity * demand), begrenzt auf
-            [minPrice, maxPrice] (null: 25 % bzw. 400 % des Basispreises). Verkaufspreis = dieselbe Kurve, aber bis hinunter auf
-            5 % des Basispreises (minPrice gilt nur für den Kauf), höchstens basePrice, mal sellRatio.
+            [minPrice, maxPrice] (null: 25 % bzw. 400 % des Basispreises). Verkaufspreis = dieselbe Kurve bis hinunter auf 0
+            (minPrice gilt nur für den Kauf), höchstens basePrice, mal sellRatio; fällt er auf 0, ist das Item gesättigt und
+            der Händler kauft es einige Stunden lang nicht an.
             'demand' steigt mit jedem gekauften Paket, sinkt mit jedem verkauften und zerfällt mit der Zeit.
             Deine Änderungen dürfen den Shop nur weniger auszahlen lassen: sell_ratio nur senken (bis 0,2, höchstens 0,1 am
             Tag), base_price höchstens ±20 % am Tag und zwischen 70 % und
@@ -120,7 +122,7 @@ public final class MarketReview {
 
     /** Worker (blocking the first time): the review of the day is still to do and an attempt is due now. */
     static boolean due(@NotNull LocalDate day) {
-        if (!ConfigManager.getManager().isAiReview() || apiKey() == null) return false;
+        if (!AdminSettings.aiReview() || apiKey() == null) return false;
         if (!reviewedLoaded) {
             String stored = meta(REVIEWED_KEY);
             reviewedDay = stored == null ? null : LocalDate.parse(stored);
@@ -290,6 +292,8 @@ public final class MarketReview {
         facts.addProperty("taxLevel", Economy.levelPlain());
         facts.addProperty("taxDirection", Economy.directionWord());
         facts.addProperty("stateBroke", Bankruptcy.isBroke());
+        // the day of the season (1 on the day it began)
+        facts.addProperty("seasonDay", xyz.jupp.minecraft.database.SeasonReset.seasonDay());
         return facts;
     }
 

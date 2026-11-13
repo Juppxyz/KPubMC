@@ -18,6 +18,7 @@ import xyz.jupp.minecraft.commands.*;
 import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.database.Database;
 import xyz.jupp.minecraft.database.SeasonReset;
+import xyz.jupp.minecraft.economy.AdminSettings;
 import xyz.jupp.minecraft.economy.Bank;
 import xyz.jupp.minecraft.economy.Cash;
 import xyz.jupp.minecraft.economy.Bankruptcy;
@@ -64,9 +65,6 @@ public final class Main extends JavaPlugin {
     private void registerCommands() {
         Logger.console("register commands..");
         this.getCommand("money").setExecutor(new MoneyCommand());
-        PayCommand pay = new PayCommand();
-        this.getCommand("zahlen").setExecutor(pay);
-        this.getCommand("zahlen").setTabCompleter(pay);
         BountyCommand bounty = new BountyCommand();
         this.getCommand("kopfgeld").setExecutor(bounty);
         this.getCommand("kopfgeld").setTabCompleter(bounty);
@@ -95,6 +93,7 @@ public final class Main extends JavaPlugin {
         this.getCommand("wanted").setExecutor(new WantedCommand());
         this.getCommand("removechunk").setExecutor(new RemoveChunkCommand());
         this.getCommand("staatskasse").setExecutor(new TreasuryCommand());
+        this.getCommand("wirtschaft").setExecutor(new EconomyCommand());
         SeasonResetCommand seasonReset = new SeasonResetCommand();
         this.getCommand("saisonreset").setExecutor(seasonReset);
         this.getCommand("saisonreset").setTabCompleter(seasonReset);
@@ -175,6 +174,8 @@ public final class Main extends JavaPlugin {
         String backup = SeasonReset.runIfPending();
         if (backup != null) Logger.console("season reset done, backup: " + backup);
         Cash.load();
+        // the admins' economy switches (/wirtschaft), before anything that reads them
+        AdminSettings.load();
         Logger.console("init warps..");
         int warps = WarpCache.getInstance().load();
         int claimedChunks = ChunkCache.getInstance().load();
@@ -186,6 +187,8 @@ public final class Main extends JavaPlugin {
         Logger.console("init market..");
         Bank.load();
         Treasury.load();
+        // the season's first day (Hondo's netherite, early diamonds, the market report)
+        SeasonReset.loadStart();
         Economy.load();
         Bankruptcy.loadState();
         Market.load();

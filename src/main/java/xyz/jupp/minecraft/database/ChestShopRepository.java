@@ -19,13 +19,24 @@ public final class ChestShopRepository {
     public static final String REFUND = "SHOP_REFUND";
 
     /** The buyer pays; false (nothing booked) if the money is not there. note: the seller. */
-    public static boolean pay(@NotNull UUID buyer, @NotNull UUID seller, int price) {
+    public enum Payment { OK, INSUFFICIENT_FUNDS, SAME_TEAM }
+
+    /**
+     * The buyer pays (the seller is credited by {@link #sold} after the hand-over). Not between members of one team: a
+     * team's shops are no way to move money between its members.
+     */
+    public static Payment pay(@NotNull UUID buyer, @NotNull UUID seller, int price) {
         return Database.inTransaction(connection -> {
-            if (Database.update(connection, "UPDATE players SET money = money - ? WHERE uuid = ? AND money >= ?", price, buyer, price) == 0) {
-                return false;
+            Boolean sameTeam = Database.queryOne(connection, "SELECT EXISTS (SELECT 1 FROM team_members a JOIN team_members b "
+                    + "ON a.team_id = b.team_id WHERE a.uuid = ? AND b.uuid = ?)", row -> row.getBoolean(1), buyer, seller);
+            if (Boolean.TRUE.equals(sameTeam)) return Payment.SAME_TEAM;
+            // money bound to a loan does not go to other players
+            if (Database.update(connection, "UPDATE players SET money = money - ? WHERE uuid = ? AND money - ? >= " + BankLog.LOAN_LOCK,
+                    price, buyer, price, buyer) == 0) {
+                return Payment.INSUFFICIENT_FUNDS;
             }
             BankLog.add(connection, buyer, BUY, -price, seller.toString());
-            return true;
+            return Payment.OK;
         });
     }
 

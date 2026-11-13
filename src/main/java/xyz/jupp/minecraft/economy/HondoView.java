@@ -154,6 +154,9 @@ public final class HondoView implements InventoryHolder {
     private ItemStack goodItem(Material material, int level) {
         MarketItem item = Market.get(material);
         if (item == null || !item.enabled()) return named(Material.GRAY_DYE, "§7Gerade nicht vorrätig", List.of());
+        if (material == Material.NETHERITE_INGOT && !Hondo.netheriteOpen()) {
+            return named(Material.GRAY_DYE, "§7" + Text.strip(Hondo.label(material)) + ": gerade nicht vorrätig", List.of());
+        }
         double discount = Hondo.discount(level);
         int one = Hondo.salePrice(item, 1, discount);
         int bulk = Hondo.salePrice(item, Hondo.bulk(material), discount);
@@ -161,7 +164,10 @@ public final class HondoView implements InventoryHolder {
         lore.add("§7Preis: §f" + one + " Schilling §7pro Stück");
         if (discount > 0) lore.add("§7Freundschaftsrabatt: §a-" + ShopView.percent(discount));
         lore.add("§7zzgl. " + ShopView.percent(Taxes.rate(Hondo.TAX_CLASS)) + " Steuer");
-        if (material == Material.NETHERITE_INGOT) lore.add("§7Höchstens " + Hondo.NETHERITE_PER_DAY + " Stück am Tag");
+        if (material == Material.NETHERITE_INGOT) lore.add("§7Höchstens " + Hondo.netheritePerDay() + " Stück in 24 Stunden");
+        if (Hondo.earlyFactor(material) > 1) {
+            lore.add("§7Saisonstart: die ersten " + Hondo.DIAMOND_EARLY_DAYS + " Tage " + ShopView.percent(Hondo.DIAMOND_EARLY_FACTOR - 1) + " teurer");
+        }
         lore.add("");
         lore.add("§e» Linksklick: §f1 Stück §7(" + gross(one) + " inkl. Steuer)");
         lore.add("§e» Rechtsklick: §f" + Hondo.bulk(material) + " Stück §7(" + gross(bulk) + " inkl. Steuer)");
@@ -181,12 +187,20 @@ public final class HondoView implements InventoryHolder {
         lore.add("§aSteuerfrei §7(Hondos Freundschaftsgeschenk)");
         lore.add("§7Nur einmal zu haben!");
         lore.add("");
+        if (offer.material() == Material.NETHERITE_INGOT && !Hondo.netheriteOpen()) {
+            lore.add("§7Gerade nicht vorrätig.");
+            return named(offer.material(), "§7Stufe " + offer.level() + ": §f" + what, lore);
+        }
         if (level >= offer.level()) {
             lore.add("§e» Linksklick: kaufen");
             return named(offer.material(), "§dStufe " + offer.level() + ": §f" + what, lore);
         }
         lore.add("§cAb Stufe " + offer.level() + " (" + Hondo.levelName(offer.level()) + ")");
         return named(offer.material(), "§7Stufe " + offer.level() + ": §f" + what, lore);
+    }
+
+    private static String netheriteLocked() {
+        return "§fNetherit hat Hondo gerade nicht.";
     }
 
     private static int gross(int net) {
@@ -218,6 +232,10 @@ public final class HondoView implements InventoryHolder {
     private void buy(Player player, Material material, int units) {
         MarketItem item = Market.get(material);
         if (item == null || !item.enabled()) return;
+        if (material == Material.NETHERITE_INGOT && !Hondo.netheriteOpen()) {
+            fail(player, netheriteLocked());
+            return;
+        }
         if (freeSpace(player, material) < units) {
             fail(player, "§fDafür ist in deinem Inventar nicht genug Platz.");
             return;
@@ -235,6 +253,7 @@ public final class HondoView implements InventoryHolder {
             }
             boolean ok = result.outcome() == HondoRepository.Outcome.OK;
             String limit = result.outcome() == HondoRepository.Outcome.LIMIT ? ShopView.limitMessage(uuid, item) : null;
+            String bound = result.outcome() == HondoRepository.Outcome.INSUFFICIENT_FUNDS ? Loans.lockedMessage(uuid) : null;
             Integer money = moneyOrNull(uuid);
             HondoRepository.Friendship fresh = ok ? result.friendship() : friendshipOrNull(uuid);
             Runnable onMain = () -> {
@@ -249,9 +268,11 @@ public final class HondoView implements InventoryHolder {
                         player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1f, 2f);
                         traded(player, result);
                     }
-                    case INSUFFICIENT_FUNDS -> fail(player, "§fDafür fehlen dir Schilling §7(benötigt: " + (result.net() + result.tax()) + ")§f.");
+                    case INSUFFICIENT_FUNDS -> fail(player, bound != null ? bound
+                            : "§fDafür fehlen dir Schilling §7(benötigt: " + (result.net() + result.tax()) + ")§f.");
                     case LIMIT -> fail(player, limit);
-                    case DAILY_LIMIT -> fail(player, "§fNetherit gibt Hondo dir höchstens §e" + Hondo.NETHERITE_PER_DAY + " Stück am Tag§f. Morgen wieder.");
+                    case DAILY_LIMIT -> fail(player, "§fNetherit gibt Hondo dir höchstens §e" + Hondo.netheritePerDay() + " Stück in 24 Stunden§f.");
+                    case LOCKED -> fail(player, netheriteLocked());
                     case PRICE_CHANGED -> fail(player, "§fDer Preis hat sich gerade geändert, bitte prüfe den neuen Preis.");
                     default -> fail(player, "§fDas hat Hondo gerade nicht.");
                 }
@@ -263,6 +284,10 @@ public final class HondoView implements InventoryHolder {
 
     private void claim(Player player, Hondo.FriendOffer offer) {
         if (friendship.claimed().contains(offer.level())) return;
+        if (offer.material() == Material.NETHERITE_INGOT && !Hondo.netheriteOpen()) {
+            fail(player, netheriteLocked());
+            return;
+        }
         if (friendship.level() < offer.level()) {
             player.sendMessage(Hondo.PREFIX + "Das hebe ich für gute Freunde auf. Komm wieder, wenn wir uns besser kennen.");
             player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 1f, 1f);
@@ -287,6 +312,7 @@ public final class HondoView implements InventoryHolder {
             }
             boolean ok = result.outcome() == HondoRepository.Outcome.OK;
             Integer money = moneyOrNull(uuid);
+            String bound = result.outcome() == HondoRepository.Outcome.INSUFFICIENT_FUNDS ? Loans.lockedMessage(uuid) : null;
             HondoRepository.Friendship fresh = ok ? result.friendship() : friendshipOrNull(uuid);
             Runnable onMain = () -> {
                 done();
@@ -301,11 +327,12 @@ public final class HondoView implements InventoryHolder {
                         player.playSound(player.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 0.6f, 1.4f);
                         traded(player, result);
                     }
-                    case INSUFFICIENT_FUNDS -> fail(player, "§fDafür fehlen dir Schilling §7(benötigt: " + result.net() + ")§f.");
+                    case INSUFFICIENT_FUNDS -> fail(player, bound != null ? bound : "§fDafür fehlen dir Schilling §7(benötigt: " + result.net() + ")§f.");
                     case PRICE_CHANGED -> fail(player, "§fDer Preis hat sich gerade geändert, bitte prüfe den neuen Preis.");
                     case ALREADY_CLAIMED -> fail(player, "§fDieses Angebot hast du schon eingelöst.");
                     case LEVEL_TOO_LOW -> fail(player, "§fDafür ist eure Freundschaft gerade nicht eng genug.");
-                    case DAILY_LIMIT -> fail(player, "§fNetherit gibt Hondo dir höchstens §e" + Hondo.NETHERITE_PER_DAY + " Stück am Tag§f. Morgen wieder.");
+                    case DAILY_LIMIT -> fail(player, "§fNetherit gibt Hondo dir höchstens §e" + Hondo.netheritePerDay() + " Stück in 24 Stunden§f.");
+                    case LOCKED -> fail(player, netheriteLocked());
                     default -> fail(player, "§fDas hat Hondo gerade nicht.");
                 }
                 render();
@@ -323,7 +350,8 @@ public final class HondoView implements InventoryHolder {
         if (level > result.levelBefore()) {
             player.sendMessage(Hondo.PREFIX + "Schön, dich so oft zu sehen! Du bist jetzt mein §d" + Hondo.levelName(level) + "§f.");
             Hondo.FriendOffer offer = Hondo.offer(level);
-            if (offer != null && !after.claimed().contains(level)) {
+            if (offer != null && !after.claimed().contains(level)
+                    && (offer.material() != Material.NETHERITE_INGOT || Hondo.netheriteOpen())) {
                 player.sendMessage(Hondo.PREFIX + "Ich habe da etwas für dich zurückgelegt: §e" + offer.amount() + "× "
                         + Hondo.label(offer.material()) + " §fzum Freundschaftspreis.");
             }

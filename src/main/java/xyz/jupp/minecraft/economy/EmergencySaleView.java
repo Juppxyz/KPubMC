@@ -164,6 +164,7 @@ public final class EmergencySaleView implements InventoryHolder {
             }
             List<Material> known = fresh;
             Bankruptcy.Outcome result = outcome;
+            String bound = outcome == Bankruptcy.Outcome.INSUFFICIENT_FUNDS ? Loans.lockedMessage(uuid) : null;
             Runnable onMain = () -> {
                 busy = false;
                 bought = known;
@@ -175,7 +176,7 @@ public final class EmergencySaleView implements InventoryHolder {
                         player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.8f, 1.4f);
                     }
                     case ALREADY_BOUGHT -> fail(player, "§fDas hast du heute schon gekauft.");
-                    case INSUFFICIENT_FUNDS -> fail(player, "§fDafür fehlen dir Schilling §7(benötigt: " + expected + ")§f.");
+                    case INSUFFICIENT_FUNDS -> fail(player, bound != null ? bound : "§fDafür fehlen dir Schilling §7(benötigt: " + expected + ")§f.");
                     case PRICE_CHANGED -> fail(player, "§fDer Preis hat sich gerade geändert, bitte prüfe den neuen Preis.");
                     default -> fail(player, "§fDer Notverkauf ist vorbei.");
                 }

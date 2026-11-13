@@ -86,6 +86,7 @@ public class TreasuryCommand implements CommandExecutor {
                     + " §8| §7Normale Waren: §a" + percent(Taxes.rate(TaxClass.STANDARD))
                     + " §8| §7Seltenes: §a" + percent(Taxes.rate(TaxClass.LUXURY)));
             lines.add("§8» §7Sterben: §a" + percent(Taxes.deathRate()) + " §8| §7Nether-Portal: §abis " + percent(Taxes.topNetherRate()));
+            lines.add("§8» §7Bargeld abheben: §a" + percent(Taxes.cashWithdrawRate()) + " §8| §7Bargeld einzahlen: §a" + percent(Taxes.cashDepositRate()));
             Economy.Review report = Economy.latestReport();
             if (report != null) lines.add("§fMarktbericht §7(" + DATE.format(report.day()) + ")§f: §7§o" + report.text());
             return lines;

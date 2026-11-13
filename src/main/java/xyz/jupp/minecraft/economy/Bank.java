@@ -80,12 +80,21 @@ public final class Bank {
     /* cash */
 
     /** Credits deposited cash (already taken from the player); false if the player row is missing. */
-    public static boolean deposit(@NotNull UUID player, long amount) {
-        return Database.inTransaction(connection -> {
-            if (Database.update(connection, "UPDATE players SET money = money + ? WHERE uuid = ?", amount, player) == 0) return false;
-            BankLog.add(connection, player, BankLog.DEPOSIT, amount, null);
-            return true;
+    /** What a cash deposit booked: the amount credited to the account and the deposit tax (into the treasury). */
+    public record Deposit(long credited, long tax) {}
+
+    /** Books cash paid in at Basil, minus the deposit tax; null if the account does not exist (nothing booked). */
+    public static @Nullable Deposit deposit(@NotNull UUID player, long amount) {
+        long tax = Math.min(amount, Taxes.cashDepositTaxOn(amount));
+        long credited = amount - tax;
+        Deposit booked = Database.inTransaction(connection -> {
+            if (Database.update(connection, "UPDATE players SET money = money + ? WHERE uuid = ?", credited, player) == 0) return null;
+            BankLog.add(connection, player, BankLog.DEPOSIT, credited, tax > 0 ? "Steuer " + tax : null);
+            Treasury.deposit(connection, Treasury.Source.DEPOSIT_TAX, tax, player);
+            return new Deposit(credited, tax);
         });
+        if (booked != null) Treasury.committed(booked.tax());
+        return booked;
     }
 
 
@@ -170,7 +179,8 @@ public final class Bank {
                 SELECT ? - (SELECT COALESCE(SUM(amount), 0) FROM bank_deposits WHERE NOT paid_out AND in_treasury)
                          - (SELECT COALESCE(SUM(payout), 0) FROM state_bonds WHERE NOT repaid),
                        (SELECT COALESCE(SUM(amount), 0) FROM treasury_ledger
-                            WHERE source NOT IN ('INTEREST', 'FIXED_DEPOSIT', 'BOND_SALE', 'BOND_REPAY', 'BUILDING_GRANT', 'LOAN_OUT', 'LOAN_BACK', 'BOUNTY')
+                            WHERE source NOT IN ('INTEREST', 'FIXED_DEPOSIT', 'BOND_SALE', 'BOND_REPAY', 'BUILDING_GRANT', 'LOAN_OUT', 'LOAN_BACK', 'BOUNTY',
+                                                 'START_CAPITAL')
                             AND created_at >= now() - make_interval(days => ?)),
                        (SELECT COALESCE(SUM(amount * rate), 0) FROM bank_deposits WHERE NOT paid_out),
                        (SELECT COALESCE(SUM(amount * rate), 0) FROM bank_deposits WHERE NOT paid_out AND player_uuid = ?)""",
@@ -290,6 +300,14 @@ public final class Bank {
         return new Payout(paid.player(), paid.amount(), paid.interest());
     }
 
+    // main thread: the defaulter learns what Basil took (offline players see it in their statement)
+    private static void announceGarnish(Loans.Garnished garnished) {
+        Player online = Bukkit.getPlayer(garnished.player());
+        if (online == null) return;
+        online.sendMessage(PREFIX + "§fIch habe §c" + garnished.taken() + " Schilling §fvon deinem Konto gepfändet. "
+                + (garnished.left() > 0 ? "§7Deine Schulden: noch §f" + garnished.left() + " Schilling§7." : "§aDeine Schulden sind bezahlt."));
+    }
+
     /** Checks for due fixed deposits every few minutes, also for players who are offline. */
     public static void startTasks() {
         Bukkit.getScheduler().runTaskTimerAsynchronously(Main.getInstance(), () -> {
@@ -301,6 +319,7 @@ public final class Bank {
             }
             List<Payout> payouts;
             List<Loans.Due> loans;
+            List<Loans.Garnished> garnished;
             try {
                 payouts = payoutDue(null);
                 loans = Loans.processDue();
@@ -308,11 +327,20 @@ public final class Bank {
                 Main.getInstance().getSLF4JLogger().warn("Fixed deposit or loan processing failed: {}", e.toString());
                 return;
             }
+            List<Loans.Garnished> taken;
+            try {
+                taken = Loans.garnish();
+            } catch (RuntimeException e) {
+                Main.getInstance().getSLF4JLogger().warn("Garnishing failed: {}", e.toString());
+                taken = List.of();
+            }
+            garnished = taken;
             List<Loans.DueSoon> dueSoon = dueSoon();
-            if (!payouts.isEmpty() || !loans.isEmpty() || !dueSoon.isEmpty()) MainThread.run(() -> {
+            if (!payouts.isEmpty() || !loans.isEmpty() || !dueSoon.isEmpty() || !garnished.isEmpty()) MainThread.run(() -> {
                 payouts.forEach(Bank::announce);
                 loans.forEach(Bank::announceLoan);
                 dueSoon.forEach(Bank::remindLoan);
+                garnished.forEach(Bank::announceGarnish);
             });
         }, 20L * 40, PAYOUT_PERIOD_TICKS);
     }
@@ -384,6 +412,7 @@ public final class Bank {
             JailHandler.markWantedUntilCaught(player, reason);
             player.sendMessage(PREFIX + "§cDu hast deinen Kredit nicht zurückgezahlt. Ich habe " + due.amount() + " Schilling eingezogen,");
             player.sendMessage(PREFIX + "§cjetzt wirst du gesucht. Neue Kredite erst nach deiner Strafe und einer Entschuldigung.");
+            player.sendMessage(PREFIX + "§cDer Rest bleibt Schuld: alles, was auf dein Konto kommt, pfände ich, bis sie bezahlt ist.");
         } else {
             String name = Bukkit.getOfflinePlayer(due.player()).getName();
             JailHandler.broadcastWanted(name == null ? "?" : name, reason);

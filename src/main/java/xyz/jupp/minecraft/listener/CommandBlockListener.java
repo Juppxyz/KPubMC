@@ -23,7 +23,7 @@ public class CommandBlockListener implements Listener {
             "/removechunk", "/staatskasse", "/kasse"
     );
     // allowed with any arguments (compared by the first word, so /payxyz stays blocked)
-    private static final Set<String> ALLOWED_WITH_ARGUMENTS = Set.of("/zahlen", "/pay", "/ueberweisen", "/kopfgeld");
+    private static final Set<String> ALLOWED_WITH_ARGUMENTS = Set.of("/kopfgeld");
 
     private static boolean isAllowedForNormalPlayer(String msg) {
         String command = msg.split(" ", 2)[0].toLowerCase(java.util.Locale.ROOT);

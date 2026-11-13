@@ -42,7 +42,11 @@ public final class BankLog {
      * transferred and withdrawn (owner's decision, 2026-09-29), only not put into a fixed deposit or bonds.
      * One parameter: the player.
      */
-    public static final String LOAN_LOCK = "(SELECT COALESCE(SUM(locked), 0) FROM bank_loans WHERE player_uuid = ? AND state = 'OPEN')";
+    // money of the account bound to Basil (one ? for the player): an open loan with its full interest, the unpaid
+    // debt of a defaulted one (locked = principal + full interest, paid = what was taken). It cannot go into deposits,
+    // bonds, cash, chest shops, Hondo, the emergency sale, the team treasury or bounties; the shop and fees stay open.
+    public static final String LOAN_LOCK = "(SELECT COALESCE(SUM(CASE WHEN state = 'OPEN' THEN locked ELSE GREATEST(0, locked - paid) END), 0) "
+            + "FROM bank_loans WHERE player_uuid = ? AND state IN ('OPEN', 'DEFAULTED'))";
 
     /** amount: change of the account, negative for money that left it. */
     public static void add(@NotNull Connection connection, @NotNull UUID player, @NotNull String kind, long amount,

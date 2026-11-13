@@ -24,6 +24,7 @@ import xyz.jupp.minecraft.database.Database;
 import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.database.TeamRepository;
 import xyz.jupp.minecraft.economy.Market;
+import xyz.jupp.minecraft.economy.Loans;
 import xyz.jupp.minecraft.economy.Nomad;
 import xyz.jupp.minecraft.economy.TaxClass;
 import xyz.jupp.minecraft.economy.Taxes;
@@ -502,8 +503,8 @@ public final class TeamView implements InventoryHolder {
 
         set(22, Items.named(Material.GOLD_BLOCK, "§e§lTeam-Kasse: §f§l" + Items.format(state.treasury()) + " Schilling", List.of(
                 "§7Links einzahlen, rechts auszahlen.",
-                "§7Beim Auszahlen fällt die Steuer",
-                "§7wie beim Abheben an.")), null);
+                "§7Beim Auszahlen fällt Steuer an:",
+                "§f" + Math.round(Taxes.rate(TaxClass.STANDARD) * 100) + " % §7vom Betrag.")), null);
         inventory.setItem(27, Items.named(Material.HOPPER, "§a§l⬇ Einzahlen", List.of(
                 "§7Von deinem Konto in die Team-Kasse.",
                 "§7Das kann jedes Mitglied.",
@@ -996,7 +997,10 @@ public final class TeamView implements InventoryHolder {
                 String message = viewer.getName() + " §fhat §a" + Items.format(amount) + " Schilling §fin die Team-Kasse gelegt.";
                 yield Feedback.ok(null, () -> Teams.notifyTeam(teamID, teamInfo() + "§a" + message));
             }
-            case INSUFFICIENT_FUNDS -> Feedback.fail("So viel hast du nicht auf dem Konto.");
+            case INSUFFICIENT_FUNDS -> {
+                String bound = Loans.lockedMessage(viewer.getUniqueId());
+                yield Feedback.fail(bound != null ? Text.strip(bound) : "So viel hast du nicht auf dem Konto.");
+            }
             case NOT_ALLOWED -> Feedback.fail("Du bist nicht mehr in diesem Team.");
         };
     }

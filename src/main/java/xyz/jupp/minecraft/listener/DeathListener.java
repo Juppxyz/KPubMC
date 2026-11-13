@@ -165,6 +165,8 @@ public class DeathListener implements Listener {
                 bounty = Loans.bounty(player.getUniqueId(), wantedEnd);
                 // the money players put on the head goes with it
                 Bounties.record(bountyID, player.getUniqueId(), player.getName(), playerTeamID, killer.getUniqueId(), bounty);
+                // the loan part of the bounty becomes debt of the defaulter (garnished like the rest)
+                Loans.chargeBounty(player.getUniqueId(), bounty);
             }
             Loans.warrantServed(player.getUniqueId());
         } catch (RuntimeException e) {

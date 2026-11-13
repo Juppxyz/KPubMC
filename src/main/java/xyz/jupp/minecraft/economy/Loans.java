@@ -24,18 +24,21 @@ import java.util.UUID;
  * repaid; a default is a real loss of the state. So it lends only what it can spare: half of its free money above the
  * recovery line (nothing while broke). Table bank_loans, every method is blocking.
  * <p>
- * Who gets how much: only after MIN_HOURS of playtime and MIN_DAYS on the server; the first loan is small, every loan
- * repaid on time unlocks the next step ({@link #tierMax}); and never more than INCOME_FACTOR times what the player
- * earned from the state in the last INCOME_DAYS (shop sales, Bauamt grants, interest, bounties; money from other
- * players does not count, so a friend cannot vouch for an alt).
+ * Who gets how much: only after MIN_HOURS of playtime and MIN_DAYS in the season; the steps ({@link #TIERS}) need
+ * loans repaid on time, one of them of a size, hours played and days in the season, so the ladder cannot be climbed
+ * with small loans in a few days; and never more than INCOME_FACTOR times what the player earned from the state in
+ * the last INCOME_DAYS (shop sales, Bauamt grants, interest, bounties; money from other players does not count).
+ * No new loans while the admins closed them or a season reset is marked.
  * <p>
  * Rules: one loan per player (a unique index), paid back within 7 days, interest per started day, so paying early
  * costs less. The rate is Basil's current fixed deposit rate plus a share for the treasury. While the loan runs, the
- * borrowed amount plus its full interest ("locked") cannot go into a fixed deposit or a state bond (no interest on
- * created money); otherwise it is the player's to use. From REMIND_DAYS before the due day Basil reminds the player
- * once a day. On the due day Basil takes it from the account; if that is not enough, he takes what is there,
- * the player is wanted until someone catches them, and gets no new loan until the apology (2.5 times the loan, minus
- * what was taken) is paid, which is only possible after the sentence.
+ * borrowed amount plus its full interest ("locked", {@link xyz.jupp.minecraft.database.BankLog#LOAN_LOCK}) is bound
+ * to the purpose: it buys at the shop and pays fees, but it does not leave the player (no cash, chest shops, team
+ * treasury, bounties), buys no jewels at Hondo nor the emergency sale, and goes into no deposit or bond. From
+ * REMIND_DAYS before the due day Basil reminds the player once a day. On the due day Basil takes it from the account;
+ * if that is not enough, he takes what is there, the player is wanted until someone catches them, the rest stays a
+ * debt that Basil garnishes from the account until it is paid ({@link #garnish}), and there is no new loan until the
+ * apology (2.5 times the loan, minus what was taken) is paid, which is only possible after the sentence.
  */
 public final class Loans {
 
@@ -54,13 +57,31 @@ public final class Loans {
     // the treasury lends at most this share of its free money above the recovery line
     static final double LEND_SHARE = 0.5;
 
-    /** The largest loan by the loans repaid on time and the hours played. */
-    public static int tierMax(int repaid, long hours) {
-        if (repaid >= 5 && hours >= 40) return 100_000;
-        if (repaid >= 3 && hours >= 20) return 50_000;
-        if (repaid >= 2) return 10_000;
-        if (repaid >= 1) return 5_000;
-        return 1_000;
+    /** A loan step: the amount and what it needs (loans repaid on time, the largest of them, hours played, days in the season). */
+    public record Tier(int amount, int repaid, int largest, int hours, int days) {}
+
+    public static final List<Tier> TIERS = List.of(
+            new Tier(1_000, 0, 0, MIN_HOURS, MIN_DAYS),
+            new Tier(5_000, 1, 0, 10, 5),
+            new Tier(10_000, 2, 5_000, 20, 7),
+            new Tier(50_000, 3, 10_000, 40, 14),
+            new Tier(100_000, 5, 50_000, 60, 21));
+
+    /** The largest step the player reached (0: not even the first). */
+    public static int tierMax(int repaid, long largest, long hours, long days) {
+        int max = 0;
+        for (Tier tier : TIERS) {
+            if (repaid >= tier.repaid() && largest >= tier.largest() && hours >= tier.hours() && days >= tier.days()) max = tier.amount();
+        }
+        return max;
+    }
+
+    /** The step above the reached one, null at the top. */
+    public static @Nullable Tier nextTier(int reached) {
+        for (Tier tier : TIERS) {
+            if (tier.amount() > reached) return tier;
+        }
+        return null;
     }
 
     /** What the server knows about the player's time on it (read on the main thread). */
@@ -69,8 +90,11 @@ public final class Loans {
             return playMinutes / 60;
         }
 
+        /** Days on the server in this season: since the first join, or since the season began for older players. */
         public long days() {
-            return firstPlayed <= 0 ? 0 : Duration.ofMillis(Math.max(0, System.currentTimeMillis() - firstPlayed)).toDays();
+            if (firstPlayed <= 0) return 0;
+            long seasonStart = xyz.jupp.minecraft.database.SeasonReset.startDay().atStartOfDay(Market.ZONE).toInstant().toEpochMilli();
+            return Duration.ofMillis(Math.max(0, System.currentTimeMillis() - Math.max(firstPlayed, seasonStart))).toDays();
         }
     }
 
@@ -80,10 +104,10 @@ public final class Loans {
     }
 
     /** What limits the loan: NEW (too little playtime or too few days), TIER, INCOME or TREASURY; FULL if nothing below the tier. */
-    public enum Reason { FULL, NEW, TIER, INCOME, TREASURY }
+    public enum Reason { FULL, NEW, TIER, INCOME, TREASURY, CLOSED }
 
-    /** max: the largest of AMOUNTS the player may take now (0: none). */
-    public record Limit(int max, Reason reason, int tierMax, int repaid, long income, long lendable) {}
+    /** max: the largest of AMOUNTS the player may take now (0: none); largest: the largest loan repaid that counts. */
+    public record Limit(int max, Reason reason, int tierMax, int repaid, long largest, long income, long lendable) {}
 
     /** For the menu: the free treasury from the cached balance (no scan of the whole ledger per menu open). */
     public static Limit limit(@NotNull UUID player, @NotNull Standing standing) {
@@ -102,10 +126,16 @@ public final class Loans {
                             AND source IN ('BUILDING_GRANT', 'INTEREST', 'BOUNTY') AND created_at >= now() - make_interval(days => ?)),
                        (SELECT COALESCE(SUM(payout), 0) FROM state_bonds WHERE NOT repaid),
                        (SELECT COALESCE(SUM(principal), 0) FROM bank_loans WHERE funded AND state = 'OPEN'),
-                       (SELECT COALESCE(SUM(amount), 0) FROM bank_deposits WHERE NOT paid_out AND in_treasury)""",
-                result -> new long[]{result.getLong(1), result.getLong(2), result.getLong(3), result.getLong(4), result.getLong(5)},
-                player, player, INCOME_DAYS, player, INCOME_DAYS);
+                       (SELECT COALESCE(SUM(amount), 0) FROM bank_deposits WHERE NOT paid_out AND in_treasury),
+                       (SELECT COALESCE(MAX(principal), 0) FROM bank_loans WHERE player_uuid = ? AND state = 'REPAID'
+                            AND closed_at >= taken_at + interval '20 hours'),
+                       EXISTS (SELECT 1 FROM market_meta WHERE key = 'season_reset_pending')""",
+                result -> new long[]{result.getLong(1), result.getLong(2), result.getLong(3), result.getLong(4), result.getLong(5),
+                        result.getLong(6), result.getBoolean(7) ? 1 : 0},
+                player, player, INCOME_DAYS, player, INCOME_DAYS, player);
         int repaid = row == null ? 0 : (int) row[0];
+        long largest = row == null ? 0 : row[5];
+        boolean resetMarked = row != null && row[6] == 1;
         long income = row == null ? 0 : Math.max(0, row[1]);
         long bondsOwed = row == null ? 0 : row[2];
         long lent = row == null ? 0 : row[3];
@@ -113,8 +143,12 @@ public final class Loans {
         long free = (exact ? level.free() : Treasury.balance() - (row == null ? 0 : row[4])) - bondsOwed;
         // half of the surplus above the recovery line, for all open loans together (what is lent out counts against it)
         long lendable = Math.max(0, Math.round((free + lent - level.recoveredAt()) * LEND_SHARE) - lent);
-        int tier = tierMax(repaid, standing.hours());
-        if (standing.hours() < MIN_HOURS || standing.days() < MIN_DAYS) return new Limit(0, Reason.NEW, tier, repaid, income, lendable);
+        int tier = tierMax(repaid, largest, standing.hours(), standing.days());
+        // the admins stopped new loans (AdminSettings), or the season ends: a loan would never come back
+        if (!AdminSettings.loansOpen() || resetMarked) return new Limit(0, Reason.CLOSED, tier, repaid, largest, income, lendable);
+        if (tier == 0 || standing.hours() < MIN_HOURS || standing.days() < MIN_DAYS) {
+            return new Limit(0, Reason.NEW, tier, repaid, largest, income, lendable);
+        }
         long incomeCap = income * INCOME_FACTOR;
         long cap = Math.min(tier, Math.min(incomeCap, lendable));
         int max = 0;
@@ -123,7 +157,7 @@ public final class Loans {
         }
         Reason reason = max >= tier ? Reason.FULL : lendable <= Math.min(tier, incomeCap) ? Reason.TREASURY
                 : incomeCap < tier ? Reason.INCOME : Reason.TIER;
-        return new Limit(max, reason, tier, repaid, income, lendable);
+        return new Limit(max, reason, tier, repaid, largest, income, lendable);
     }
 
     /** What the treasury has lent out and not got back yet (open loans). Blocking. */
@@ -134,7 +168,7 @@ public final class Loans {
 
     public enum State { OPEN, REPAID, DEFAULTED, SETTLED }
 
-    public enum Outcome { OK, HAS_LOAN, NOT_ALLOWED, TOO_HIGH, TOO_NEW, TREASURY_EMPTY, RATE_CHANGED, INSUFFICIENT_FUNDS, WANTED, UNAVAILABLE }
+    public enum Outcome { OK, HAS_LOAN, NOT_ALLOWED, TOO_HIGH, TOO_NEW, TREASURY_EMPTY, RATE_CHANGED, INSUFFICIENT_FUNDS, WANTED, UNAVAILABLE, CLOSED }
 
     // caught: the warrant of the default was served, the missing principal caps no later bounty;
     // funded: the treasury lent the money (false for older loans of created money)
@@ -209,6 +243,24 @@ public final class Loans {
     }
 
     /**
+     * Blocking, when a hunter caught a defaulter (before {@link #warrantServed}): the treasury pays the hunter the loan
+     * part of the bounty, so it becomes part of the debt that Basil garnishes (a default on purpose, caught by a friend,
+     * would otherwise pay the two of them from the treasury).
+     */
+    public static void chargeBounty(@NotNull UUID player, int bounty) {
+        if (bounty <= 0) return;
+        Loan loan = current(player);
+        if (loan == null || loan.state() != State.DEFAULTED || loan.caught()) return;
+        long missingPrincipal = Math.max(0, loan.principal() - loan.paid());
+        long loanPart = missingPrincipal == 0 ? 0
+                : Math.min(missingPrincipal, Math.max(DEFAULT_BOUNTY_MIN, Math.round(missingPrincipal * DEFAULT_BOUNTY_SHARE)));
+        long charge = Math.min(bounty, loanPart);
+        if (charge > 0) {
+            Database.update("UPDATE bank_loans SET locked = locked + ? WHERE id = ? AND state = 'DEFAULTED' AND NOT caught", (int) charge, loan.id());
+        }
+    }
+
+    /**
      * Blocking, after the bounty of a catch was fixed: the wanted player went to jail, so the debts behind the warrant
      * (overdue Bauamt bills, a defaulted loan) cap no later bounty. They stay owed.
      */
@@ -270,6 +322,7 @@ public final class Loans {
                 Loan active = Database.queryOne(connection, "SELECT * FROM bank_loans WHERE player_uuid = ? AND state IN ('OPEN', 'DEFAULTED')", Loans::map, player);
                 if (active != null) return active.state() == State.DEFAULTED ? Outcome.NOT_ALLOWED : Outcome.HAS_LOAN;
                 Limit limit = limit(connection, player, standing, true);
+                if (limit.reason() == Reason.CLOSED) return Outcome.CLOSED;
                 if (limit.reason() == Reason.NEW) return Outcome.TOO_NEW;
                 if (amount > limit.max()) return amount > limit.lendable() ? Outcome.TREASURY_EMPTY : Outcome.TOO_HIGH;
                 double rate = Bank.depositRate(connection) + TREASURY_SHARE;
@@ -358,6 +411,61 @@ public final class Loans {
         if (loan.funded()) Treasury.deposit(connection, Treasury.Source.LOAN_BACK, back, player);
         Treasury.deposit(connection, Treasury.Source.LOAN_PENALTY, penalty, player);
         return (loan.funded() ? back : 0) + penalty;
+    }
+
+
+    /** Blocking: money of the player bound to Basil (an open loan, the debt of a defaulted one), 0 if none. */
+    public static long locked(@NotNull UUID player) {
+        Long locked = Database.queryOne("SELECT " + BankLog.LOAN_LOCK, row -> row.getLong(1), player);
+        return locked == null ? 0 : locked;
+    }
+
+    /**
+     * Blocking, after a payment was refused on a bound way (cash, chest shop, Hondo, ...): why, if a loan is the reason;
+     * null otherwise (then the money is simply not there).
+     */
+    public static @Nullable String lockedMessage(@NotNull UUID player) {
+        long locked = locked(player);
+        if (locked <= 0) return null;
+        Loan loan = current(player);
+        boolean debt = loan != null && loan.state() == State.DEFAULTED;
+        return "§fDafür reicht dein freies Geld nicht: §e" + locked + " Schilling §f" + (debt
+                ? "gehören Basil für deine Kreditschulden."
+                : "sind an deinen Kredit gebunden §7(nur beim Händler und für Gebühren nutzbar)§f.");
+    }
+
+    /** What Basil garnished from a defaulter in one round, and the debt left after it. */
+    public record Garnished(UUID player, long taken, long left) {}
+
+    /**
+     * Worker, with the due loans: Basil takes what is on the account of a defaulter until the debt (the loan with its
+     * full interest, "locked") is paid; up to the missing principal it goes back to the treasury, the rest is a penalty.
+     */
+    public static List<Garnished> garnish() {
+        List<Long> ids = Database.query("SELECT id FROM bank_loans WHERE state = 'DEFAULTED' AND paid < locked", row -> row.getLong(1));
+        List<Garnished> results = new ArrayList<>();
+        for (long id : ids) {
+            long[] toTreasury = {0};
+            Garnished garnished = Database.inTransaction(connection -> {
+                Loan loan = Database.queryOne(connection, "SELECT * FROM bank_loans WHERE id = ? AND state = 'DEFAULTED' AND paid < locked FOR UPDATE",
+                        Loans::map, id);
+                if (loan == null) return null;
+                UUID player = Database.queryOne(connection, "SELECT player_uuid FROM bank_loans WHERE id = ?", row -> row.getObject(1, UUID.class), id);
+                Long money = Database.queryOne(connection, "SELECT money FROM players WHERE uuid = ? FOR UPDATE", row -> row.getLong(1), player);
+                if (money == null || money <= 0) return null;
+                long left = loan.locked() - loan.paid();
+                long taken = Math.min(money, left);
+                Database.update(connection, "UPDATE players SET money = money - ? WHERE uuid = ?", taken, player);
+                toTreasury[0] = bookDefaultPayment(connection, player, loan, taken);
+                Database.update(connection, "UPDATE bank_loans SET paid = paid + ? WHERE id = ?", taken, id);
+                BankLog.add(connection, player, BankLog.LOAN_DEFAULT, -taken, "Pfändung");
+                return new Garnished(player, taken, left - taken);
+            });
+            if (garnished == null) continue;
+            if (toTreasury[0] > 0) Treasury.committed(toTreasury[0]);
+            results.add(garnished);
+        }
+        return results;
     }
 
 

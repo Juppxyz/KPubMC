@@ -8,7 +8,7 @@ import org.jetbrains.annotations.Nullable;
  * <p>
  * Buy price: {@code basePrice * e^(elasticity * demand)}, clamped to [minPrice, maxPrice]. Every bought bundle raises
  * the demand by 1, every sold bundle lowers it by 1, and the demand decays towards 0 over time.
- * Sell price: the same curve, but it may fall to {@link #SELL_FLOOR_SHARE} of the base price (a flooded good pays
+ * Sell price: the same curve down to 0; the sale that gets there saturates the good for some hours (a flooded good pays
  * almost nothing, for everyone: whoever dumps a farm's output ruins its price), capped at the base price and the
  * maximum price, times sellRatio. Selling therefore never profits from demand spikes, so buying somewhere and selling
  * here cannot print money.
@@ -33,8 +33,11 @@ public record MarketItem(
         @Nullable TaxClass taxClassOverride
 ) {
 
-    /** Selling pushes the price down to this share of the base price at most; buying stops at the minimum price (25 %). */
-    public static final double SELL_FLOOR_SHARE = 0.05;
+    /*
+     * Selling can push the buy-back down to 0; the sale that gets there saturates the good: the demand drops so far that
+     * it pays nothing for the admins' saturation hours (AdminSettings, the demand decay brings it back), and the shop
+     * takes none of it meanwhile. Buying stops at the minimum price (25 %).
+     */
 
     /** The item's own tax class, else the default of its category. */
     public TaxClass taxClass() {
@@ -56,12 +59,56 @@ public record MarketItem(
         return (int) Math.max(1, rounded);
     }
 
-    /** Sell price of one bundle at the given demand, never above basePrice * sellRatio, down to SELL_FLOOR_SHARE of it. */
+    /** Sell price of one bundle at the given demand, never above basePrice * sellRatio, down to 0 when flooded. */
     public int sellPriceAt(double atDemand) {
         double raw = basePrice * Math.exp(elasticity * atDemand);
-        double floor = Math.max(1, Math.ceil(basePrice * SELL_FLOOR_SHARE));
-        long price = Math.round(Math.min(Math.min(Math.max(raw, floor), effectiveMaxPrice()), basePrice));
+        long price = Math.round(Math.min(Math.min(raw, effectiveMaxPrice()), basePrice));
         return (int) Math.max(0, Math.round(price * sellRatio));
+    }
+
+    /** The shop takes none of it right now: the next bundle would pay nothing. */
+    public boolean saturated() {
+        // a good that pays nothing even at a normal market is not saturated, it is simply not bought back
+        return sellable && demand < 0 && sellPriceAt(demand) == 0 && sellPriceAt(0) > 0;
+    }
+
+    /** How many of these bundles the shop takes one after another before it pays nothing for the next. */
+    public int payingBundles(int max) {
+        int paying = 0;
+        while (paying < max && sellPriceAt(demand - paying) > 0) paying++;
+        return paying;
+    }
+
+    // the highest demand at which a bundle pays nothing (the price only rises with the demand); null if it always pays
+    private @Nullable Double zeroDemand() {
+        if (!sellable || sellPriceAt(-1_000_000) > 0) return null;
+        if (sellPriceAt(0) == 0) return 0.0;
+        double low = -1_000_000, high = 0;
+        for (int i = 0; i < 80; i++) {
+            double middle = (low + high) / 2;
+            if (sellPriceAt(middle) == 0) low = middle;
+            else high = middle;
+        }
+        return low;
+    }
+
+    /**
+     * The demand a saturating sale sets: so far below the zero line that the decay (half-life in hours) needs
+     * the given hours to lift it back; the current demand if it is lower already or the good never saturates.
+     */
+    public double saturatedDemand(double halfLifeHours, double hours) {
+        Double zero = zeroDemand();
+        if (zero == null || zero >= 0 || halfLifeHours <= 0) return demand;
+        return Math.min(demand, zero * Math.pow(2, hours / halfLifeHours));
+    }
+
+    /** When the shop takes it again (roughly, by the decay), null if it is not saturated. */
+    public java.time.@Nullable Instant saturatedUntil(double halfLifeHours) {
+        if (!saturated()) return null;
+        Double zero = zeroDemand();
+        if (zero == null || zero >= 0 || demand >= 0 || halfLifeHours <= 0) return java.time.Instant.now();
+        double hours = halfLifeHours * Math.log(demand / zero) / Math.log(2);
+        return java.time.Instant.now().plusSeconds((long) Math.max(0, hours * 3600));
     }
 
     public int buyPrice() {

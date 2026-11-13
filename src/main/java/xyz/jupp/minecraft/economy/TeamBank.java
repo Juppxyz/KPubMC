@@ -47,7 +47,9 @@ public final class TeamBank {
         if (amount <= 0) return Outcome.NOT_ALLOWED;
         Outcome outcome = Database.inTransaction(connection -> {
             if (role(connection, teamID, player) == null) return Outcome.NOT_ALLOWED;
-            if (Database.update(connection, "UPDATE players SET money = money - ? WHERE uuid = ? AND money >= ?", amount, player, amount) == 0) {
+            // money bound to a loan does not go to the team
+            if (Database.update(connection, "UPDATE players SET money = money - ? WHERE uuid = ? AND money - ? >= " + BankLog.LOAN_LOCK,
+                    amount, player, amount, player) == 0) {
                 return Outcome.INSUFFICIENT_FUNDS;
             }
             Database.update(connection, "UPDATE teams SET treasury = treasury + ? WHERE team_id = ?", amount, teamID);

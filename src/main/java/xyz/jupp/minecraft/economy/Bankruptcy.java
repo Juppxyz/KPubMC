@@ -7,6 +7,7 @@ import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.config.ConfigManager;
 import xyz.jupp.minecraft.database.Database;
+import xyz.jupp.minecraft.database.BankLog;
 import xyz.jupp.minecraft.utils.EndAccess;
 import xyz.jupp.minecraft.utils.Text;
 
@@ -222,7 +223,9 @@ public final class Bankruptcy {
             price[0] = salePrice(item);
             if (price[0] != expectedPrice) return Outcome.PRICE_CHANGED;
             // the account row is locked first, so the money checked here is still there when it is taken
-            Long money = Database.queryOne(connection, "SELECT money FROM players WHERE uuid = ? FOR UPDATE", row -> row.getLong(1), player);
+            // free money only: what is bound to a loan buys nothing from the emergency sale
+            Long money = Database.queryOne(connection, "SELECT money - " + BankLog.LOAN_LOCK + " FROM players WHERE uuid = ? FOR UPDATE",
+                    row -> row.getLong(1), player, player);
             if (money == null || money < price[0]) return Outcome.INSUFFICIENT_FUNDS;
             // the primary key allows one bundle per player, item and day
             if (Database.update(connection, "INSERT INTO emergency_purchases (day, player_uuid, material) VALUES (?, ?, ?) ON CONFLICT DO NOTHING",

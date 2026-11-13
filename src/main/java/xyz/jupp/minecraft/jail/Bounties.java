@@ -114,7 +114,9 @@ public final class Bounties {
             if (active == null) return new Pledge(PledgeOutcome.UNKNOWN, 0);
             if (!active) return new Pledge(PledgeOutcome.NOT_WANTED, 0);
             long cost = (long) amount + PLEDGE_FEE;
-            if (Database.update(connection, "UPDATE players SET money = money - ? WHERE uuid = ? AND money >= ?", cost, sponsor, cost) == 0) {
+            // money bound to a loan does not go to a hunter
+            if (Database.update(connection, "UPDATE players SET money = money - ? WHERE uuid = ? AND money - ? >= " + BankLog.LOAN_LOCK,
+                    cost, sponsor, cost, sponsor) == 0) {
                 return new Pledge(PledgeOutcome.INSUFFICIENT_FUNDS, 0);
             }
             Database.update(connection, "INSERT INTO bounty_pledges (wanted_uuid, sponsor_uuid, amount) VALUES (?, ?, ?)", wanted, sponsor, amount);

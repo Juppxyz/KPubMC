@@ -32,6 +32,7 @@ import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.database.ChestShopRepository;
 import xyz.jupp.minecraft.economy.Cash;
+import xyz.jupp.minecraft.economy.Loans;
 import xyz.jupp.minecraft.inventory.Items;
 import xyz.jupp.minecraft.inventory.Loading;
 import xyz.jupp.minecraft.inventory.MainThread;
@@ -333,15 +334,20 @@ public class CreateLocalShopListener implements Listener {
     private static void buy(Player player, Shop shop, Block chestBlock) {
         UUID buyer = player.getUniqueId();
         Tasks.async(() -> {
-            boolean paid;
+            ChestShopRepository.Payment paid;
             try {
                 paid = ChestShopRepository.pay(buyer, shop.owner(), shop.price());
             } catch (RuntimeException e) {
                 notifyBuyer(player, "§cDas ging gerade nicht, versuch es gleich nochmal.");
                 return;
             }
-            if (!paid) {
-                notifyBuyer(player, "§cDein Konto ist aktuell leider nicht ausreichend gedeckt.");
+            if (paid == ChestShopRepository.Payment.SAME_TEAM) {
+                notifyBuyer(player, "§cIm eigenen Team handelt ihr nicht über Kistenshops.");
+                return;
+            }
+            if (paid != ChestShopRepository.Payment.OK) {
+                String bound = Loans.lockedMessage(buyer);
+                notifyBuyer(player, bound != null ? bound : "§cDein Konto ist aktuell leider nicht ausreichend gedeckt.");
                 return;
             }
             // the server stops before the hand-over: the money back
@@ -457,7 +463,7 @@ public class CreateLocalShopListener implements Listener {
             return;
         }
         if (Cash.isAnyCash(template)) {
-            refuse(event, "§cBargeld verkauft man nicht im Shop. §7(Zum Bezahlen: /zahlen)");
+            refuse(event, "§cBargeld verkauft man nicht im Shop. §7(Zum Bezahlen gibt man die Scheine einfach weiter.)");
             return;
         }
         byte[] item = template.serializeAsBytes();

@@ -4,6 +4,7 @@ import org.bukkit.Material;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
+import xyz.jupp.minecraft.database.SeasonReset;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -15,7 +16,8 @@ import java.util.Map;
  * <p>
  * Selling: the shop's price curve per piece (dearer the more is bought), never below {@link #PRICE_FLOOR} of the base
  * price and never below the most the shop can ever pay for it (plus a margin), so buying here and selling in the
- * shop never pays off. Netherite at most {@link #NETHERITE_PER_DAY} pieces per player and day.
+ * shop never pays off. Netherite only when the admins release it (or automatically one week into the season,
+ * {@link AdminSettings}), at most {@link #netheritePerDay()} pieces per player within 24 hours.
  * The friendship bonus only lowers the sale price (discount), the floors always hold.
  */
 public final class Hondo {
@@ -29,10 +31,30 @@ public final class Hondo {
     public static final List<Material> GOODS = List.of(Material.EMERALD, Material.GOLD_INGOT, Material.DIAMOND,
             Material.NETHERITE_INGOT, Material.AMETHYST_SHARD, Material.RESIN_CLUMP, Material.LAPIS_LAZULI);
 
-    /** Netherite a player gets from Hondo per day (bought or as a friendship offer). */
-    public static final int NETHERITE_PER_DAY = 2;
+    /** Netherite a player gets from Hondo within 24 hours (bought or as a friendship offer), set by the admins. */
+    public static int netheritePerDay() {
+        return AdminSettings.netheritePerDay();
+    }
     /** Hondo never sells below this share of the base price, however many were sold to the shop. */
     static final double PRICE_FLOOR = 0.8;
+    /** Diamonds cost more in the first days of a season, so nobody wears a full kit right away. */
+    public static final int DIAMOND_EARLY_DAYS = 3;
+    public static final double DIAMOND_EARLY_FACTOR = 1.5;
+
+    /** Whether Hondo sells netherite now: as the admins decided, automatically from one week into the season on. */
+    public static boolean netheriteOpen() {
+        return switch (AdminSettings.netheriteMode()) {
+            case OPEN -> true;
+            case CLOSED -> false;
+            case AUTO -> SeasonReset.seasonDay() >= AdminSettings.NETHERITE_AUTO_DAY;
+        };
+    }
+
+    /** The surcharge on the material right now (1.0: none): diamonds in the first days of a season. */
+    public static double earlyFactor(@NotNull Material material) {
+        return material == Material.DIAMOND && AdminSettings.diamondEarly() && SeasonReset.seasonDay() <= DIAMOND_EARLY_DAYS
+                ? DIAMOND_EARLY_FACTOR : 1.0;
+    }
 
     /**
      * Once per player and level (also after losing and regaining the level): unlocked by the friendship level,
@@ -67,7 +89,7 @@ public final class Hondo {
 
     /** Pieces a right click buys: BULK, netherite only up to its daily limit. */
     public static int bulk(@NotNull Material material) {
-        return material == Material.NETHERITE_INGOT ? Math.min(BULK, NETHERITE_PER_DAY) : BULK;
+        return material == Material.NETHERITE_INGOT ? Math.min(BULK, netheritePerDay()) : BULK;
     }
 
 
@@ -137,7 +159,8 @@ public final class Hondo {
         for (int i = 0; i < units; i++) raw += item.buyPriceAt(item.demand() + (double) i / item.amount());
         int price = (int) Math.ceil(raw / item.amount() * (1.0 - discount) - 1e-9);
         int normalFloor = (int) Math.ceil(units * (double) item.basePrice() / item.amount() * PRICE_FLOOR - 1e-9);
-        return Math.max(Math.max(Math.max(1, price), normalFloor), floor(item, units));
+        int floored = Math.max(Math.max(Math.max(1, price), normalFloor), floor(item, units));
+        return (int) Math.ceil(floored * earlyFactor(item.material()) - 1e-9);
     }
 
     // above the most the shop can ever pay for these pieces: never more than base price * sell ratio per bundle,
@@ -151,7 +174,8 @@ public final class Hondo {
     /** Net price of a friendship offer; it does not move the market. */
     public static int offerPrice(@NotNull MarketItem item, @NotNull FriendOffer offer) {
         int price = (int) Math.ceil(offer.amount() * (double) item.buyPrice() / item.amount() * (1.0 - offer.discount()) - 1e-9);
-        return Math.max(Math.max(1, price), floor(item, offer.amount()));
+        int floored = Math.max(Math.max(1, price), floor(item, offer.amount()));
+        return (int) Math.ceil(floored * earlyFactor(item.material()) - 1e-9);
     }
 
     public static @Nullable FriendOffer offer(int level) {
