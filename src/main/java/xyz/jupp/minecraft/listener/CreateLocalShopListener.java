@@ -32,6 +32,8 @@ import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.database.ChestShopRepository;
 import xyz.jupp.minecraft.economy.Cash;
+import xyz.jupp.minecraft.economy.AdminSettings;
+import xyz.jupp.minecraft.economy.Taxes;
 import xyz.jupp.minecraft.economy.Loans;
 import xyz.jupp.minecraft.inventory.Items;
 import xyz.jupp.minecraft.inventory.Loading;
@@ -333,6 +335,10 @@ public class CreateLocalShopListener implements Listener {
     // the buyer pays on a worker first, so the goods are only taken out of the chest for a covered purchase
     private static void buy(Player player, Shop shop, Block chestBlock) {
         UUID buyer = player.getUniqueId();
+        if (AdminSettings.stopped(AdminSettings.STOP_CHEST_SHOPS)) {
+            player.sendMessage(Main.getChatPrefix() + "§fDie Kistenshops sind gerade geschlossen.");
+            return;
+        }
         Tasks.async(() -> {
             ChestShopRepository.Payment paid;
             try {
@@ -372,7 +378,8 @@ public class CreateLocalShopListener implements Listener {
             return;
         }
         Material material = shop.item().getType();
-        Tasks.asyncOrNow(() -> ChestShopRepository.sold(shop.owner(), buyer, material, shop.amount(), shop.price()));
+        int tax = Taxes.chestShopTaxOn(shop.price());
+        Tasks.asyncOrNow(() -> ChestShopRepository.sold(shop.owner(), buyer, material, shop.amount(), shop.price(), tax));
 
         player.getInventory().addItem(goods.toArray(ItemStack[]::new)).values()
                 .forEach(rest -> player.getWorld().dropItemNaturally(player.getLocation(), rest));
@@ -387,7 +394,8 @@ public class CreateLocalShopListener implements Listener {
         if (seller != null) {
             seller.playSound(seller.getLocation(), Sound.ENTITY_VILLAGER_TRADE, 1f, 1f);
             seller.sendMessage(Text.section(Main.getChatPrefix() + "§a" + player.getName() + " §fhat aus deinem Shop §6" + shop.amount() + "× ")
-                    .append(itemName(shop.item())).append(Text.section(" §fgekauft: §a+" + Items.format(shop.price()) + " Schilling")));
+                    .append(itemName(shop.item())).append(Text.section(" §fgekauft: §a+" + Items.format(shop.price() - tax) + " Schilling"
+                            + (tax > 0 ? " §7(Steuer " + Items.format(tax) + ")" : ""))));
         }
     }
 
@@ -491,7 +499,8 @@ public class CreateLocalShopListener implements Listener {
 
         player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 2f, 2f);
         player.playSound(player.getLocation(), Sound.BLOCK_ANVIL_USE, 2f, 2f);
-        player.sendMessage(Main.getChatPrefix() + "§aDein Shop steht. §7Linksklick zeigt Kunden das Angebot, Rechtsklick kauft.");
+        player.sendMessage(Main.getChatPrefix() + "§aDein Shop steht. §7Linksklick zeigt Kunden das Angebot, Rechtsklick kauft. "
+                + "Von jedem Verkauf gehen gerade " + Math.round(Taxes.cashWithdrawRate() * 100) + " % Steuer an den Staat.");
     }
 
     // the unpacked size of a serialized item (the bytes are compressed, text compresses a thousandfold)

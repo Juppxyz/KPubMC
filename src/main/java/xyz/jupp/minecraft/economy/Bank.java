@@ -85,6 +85,7 @@ public final class Bank {
 
     /** Books cash paid in at Basil, minus the deposit tax; null if the account does not exist (nothing booked). */
     public static @Nullable Deposit deposit(@NotNull UUID player, long amount) {
+        if (AdminSettings.stopped(AdminSettings.STOP_CASH)) return null;
         long tax = Math.min(amount, Taxes.cashDepositTaxOn(amount));
         long credited = amount - tax;
         Deposit booked = Database.inTransaction(connection -> {

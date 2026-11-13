@@ -665,6 +665,10 @@ public final class BankView implements InventoryHolder {
     }
 
     private void deposit(Player player) {
+        if (AdminSettings.stopped(AdminSettings.STOP_CASH)) {
+            fail(player, "§fBasil nimmt gerade kein Bargeld an.");
+            return;
+        }
         // taken right away on the main thread, so the same notes cannot be paid in twice
         long amount = Cash.takeAll(player, true);
         if (amount <= 0) {
@@ -710,6 +714,10 @@ public final class BankView implements InventoryHolder {
     }
 
     private void withdraw(Player player, int amount) {
+        if (AdminSettings.stopped(AdminSettings.STOP_CASH)) {
+            fail(player, "§fBasil zahlt gerade kein Bargeld aus.");
+            return;
+        }
         if (amount > state.balance()) {
             fail(player, "§fSo viel hast du nicht auf dem Konto.");
             return;

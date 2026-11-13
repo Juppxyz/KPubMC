@@ -895,6 +895,8 @@ public final class ShopView implements InventoryHolder {
                     fail(player, limit);
                 } else if (trade.outcome() == MarketRepository.Outcome.ALREADY) {
                     fail(player, "§fDu hast heute schon gezogen. §7Morgen gibt es einen neuen Versuch.");
+                } else if (trade.outcome() == MarketRepository.Outcome.UNAVAILABLE) {
+                    fail(player, "§fDer Händler verkauft gerade nichts.");
                 } else {
                     fail(player, "§fDafür fehlen dir Schilling §7(benötigt: " + (trade.net() + trade.tax()) + ")§f.");
                 }

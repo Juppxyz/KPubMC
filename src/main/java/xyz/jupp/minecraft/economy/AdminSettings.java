@@ -32,6 +32,14 @@ public final class AdminSettings {
     public static final String LOANS_OPEN = "loans_open";
     public static final String AI_REVIEW = "ai_review";
 
+    // emergency switches ("true": stopped), for a bug or an exploit until it is fixed; players only see "closed"
+    public static final String STOP_SHOP_SELL = "stop_shop_sell";
+    public static final String STOP_SHOP_BUY = "stop_shop_buy";
+    public static final String STOP_CHEST_SHOPS = "stop_chest_shops";
+    public static final String STOP_HONDO = "stop_hondo";
+    public static final String STOP_BAUAMT = "stop_bauamt";
+    public static final String STOP_CASH = "stop_cash";
+
     /** In automatic mode Hondo sells netherite from this day of the season on (one week after it began). */
     public static final int NETHERITE_AUTO_DAY = 8;
     public static final int NETHERITE_PER_DAY_DEFAULT = 2;
@@ -98,6 +106,11 @@ public final class AdminSettings {
 
     public static double saturatedHours() {
         return number(SATURATED_HOURS, SATURATED_HOURS_DEFAULT, 1, 72);
+    }
+
+    /** An emergency switch is on (the thing behind it is stopped). */
+    public static boolean stopped(@NotNull String key) {
+        return "true".equals(values.get(key));
     }
 
     /** Basil gives new loans (running ones go on as usual). */

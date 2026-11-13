@@ -30,6 +30,8 @@ public final class Treasury {
         WITHDRAW_TAX("Abhebesteuer"),
         // cash paid in at Basil
         DEPOSIT_TAX("Einzahlsteuer"),
+        // sales in players' chest shops (the seller pays it, like the cash a payment would have needed)
+        CHEST_SHOP_TAX("Kistenshop-Steuer"),
         DEATH_TAX("Todessteuer"),
         NETHER_TAX("Transfersteuer"),
         VAULT_FEE("Schließfach"),

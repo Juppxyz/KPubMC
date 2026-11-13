@@ -14,6 +14,7 @@ import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.jetbrains.annotations.Nullable;
+import xyz.jupp.minecraft.economy.AdminSettings;
 import xyz.jupp.minecraft.economy.Bank;
 import xyz.jupp.minecraft.economy.Loans;
 import xyz.jupp.minecraft.economy.Taxes;
@@ -136,6 +137,10 @@ public class MoneyInventoryListener implements Listener {
                 return;
             }
 
+            if (AdminSettings.stopped(AdminSettings.STOP_CASH)) {
+                player.sendMessage(Main.getChatPrefix() + "§fBasil zahlt gerade kein Bargeld aus.");
+                return;
+            }
             withdrawCash(player, selectedAmount);
         }
     }

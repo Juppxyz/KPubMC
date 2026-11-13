@@ -62,6 +62,11 @@ public final class Taxes {
         return (int) Math.round(amount * cashWithdrawRate());
     }
 
+    /** A chest-shop sale pays the same as taking cash out: shops are no tax-free way around paying in cash. */
+    public static int chestShopTaxOn(int price) {
+        return cashWithdrawTaxOn(price);
+    }
+
     public static long cashDepositTaxOn(long amount) {
         return Math.round(amount * cashDepositRate());
     }
@@ -194,7 +199,7 @@ public final class Taxes {
     public static CashWithdrawal withdrawCash(@NotNull UUID player, int requested) {
         int tax = cashWithdrawTaxOn(requested);
         int cash = Math.max(0, requested - tax) / 10 * 10;
-        if (cash == 0) return new CashWithdrawal(false, 0, 0);
+        if (cash == 0 || AdminSettings.stopped(AdminSettings.STOP_CASH)) return new CashWithdrawal(false, 0, 0);
         boolean success = Database.inTransaction(connection -> {
             // money bound to a loan does not become cash (BankLog.LOAN_LOCK)
             if (Database.update(connection, "UPDATE players SET money = money - ? WHERE uuid = ? AND money - ? >= " + BankLog.LOAN_LOCK,

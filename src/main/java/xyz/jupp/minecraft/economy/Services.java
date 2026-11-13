@@ -146,6 +146,7 @@ public final class Services {
      * saw, demand +1, trade log and treasury booking in one transaction.
      */
     public static Purchase buy(@NotNull UUID player, @NotNull String key, int damage, int expectedNet) {
+        if (AdminSettings.stopped(AdminSettings.STOP_SHOP_BUY)) return new Purchase(MarketRepository.Outcome.UNAVAILABLE, 0, 0, null);
         Purchase purchase = Database.inTransaction(connection -> {
             ServiceOffer offer = Database.queryOne(connection, "SELECT " + COLUMNS + " FROM market_services WHERE key = ? FOR UPDATE",
                     Services::map, key);

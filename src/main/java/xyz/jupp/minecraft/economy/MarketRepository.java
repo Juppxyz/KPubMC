@@ -239,6 +239,7 @@ public final class MarketRepository {
      */
     public static Trade buy(@NotNull UUID player, @NotNull Material material, int bundles, double discount,
                             @Nullable Integer expectedNet, @Nullable Integer expectedTax) {
+        if (AdminSettings.stopped(AdminSettings.STOP_SHOP_BUY)) return new Trade(Outcome.UNAVAILABLE, 0, 0, null);
         Trade trade = Database.inTransaction(connection -> {
             MarketItem item = lock(connection, material);
             if (item == null || !item.enabled() || !item.buyable()) return new Trade(Outcome.UNAVAILABLE, 0, 0, item);
@@ -269,6 +270,7 @@ public final class MarketRepository {
 
     /** Sells n bundles (the items were already taken from the player). expectedNet as in {@link #buy}. */
     public static Trade sell(@NotNull UUID player, @NotNull Material material, int bundles, @Nullable Integer expectedNet) {
+        if (AdminSettings.stopped(AdminSettings.STOP_SHOP_SELL)) return new Trade(Outcome.UNAVAILABLE, 0, 0, null);
         return Database.inTransaction(connection -> {
             MarketItem item = lock(connection, material);
             if (item == null || !item.enabled() || !item.sellable()) return new Trade(Outcome.UNAVAILABLE, 0, 0, item);
@@ -300,6 +302,7 @@ public final class MarketRepository {
      */
     public static Trade buyRandom(@NotNull UUID player, @NotNull Material material, int quantity, int net, @NotNull TaxClass taxClass) {
         int tax = Taxes.taxOn(net, taxClass);
+        if (AdminSettings.stopped(AdminSettings.STOP_SHOP_BUY)) return new Trade(Outcome.UNAVAILABLE, net, tax, null);
         Trade trade = Database.inTransaction(connection -> {
             if (Database.update(connection, "INSERT INTO random_draws (day, player_uuid) VALUES (?, ?) ON CONFLICT DO NOTHING",
                     Date.valueOf(LocalDate.now(Market.ZONE)), player) == 0) return new Trade(Outcome.ALREADY, net, tax, null);

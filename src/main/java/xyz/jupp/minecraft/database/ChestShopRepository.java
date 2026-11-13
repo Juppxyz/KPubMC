@@ -1,5 +1,6 @@
 package xyz.jupp.minecraft.database;
 
+import xyz.jupp.minecraft.economy.Treasury;
 import org.bukkit.Material;
 import org.jetbrains.annotations.NotNull;
 
@@ -8,7 +9,8 @@ import java.util.UUID;
 /**
  * The money side of the players' chest shops: the buyer pays first, the seller gets the money once the goods were taken
  * out of the chest, every booking on both statements (bank_log) and every sale in chest_shop_sales (trade between
- * players, for the economy statistics). No tax: money should be the way players pay each other. Blocking.
+ * players, for the economy statistics). The seller pays the chest-shop tax (the cash withdrawal rate), so a shop
+ * is no tax-free way to move money that cash would have taxed. Not between members of one team. Blocking.
  */
 public final class ChestShopRepository {
 
@@ -49,18 +51,25 @@ public final class ChestShopRepository {
         });
     }
 
-    /** The goods went to the buyer: the seller gets the money, the sale is logged. */
-    public static void sold(@NotNull UUID seller, @NotNull UUID buyer, @NotNull Material material, int quantity, int price) {
+    /**
+     * The goods went to the buyer: the seller gets the price minus the chest-shop tax (into the treasury), the sale is
+     * logged with the full price.
+     */
+    public static void sold(@NotNull UUID seller, @NotNull UUID buyer, @NotNull Material material, int quantity, int price, int tax) {
+        int toSeller = Math.max(0, price - tax);
+        int taxed = price - toSeller;
         Database.inTransaction(connection -> {
             // the shop stands in the world, the owner's account may not exist (yet) after a season reset: created here,
             // so the money is not lost
             Database.update(connection, "INSERT INTO players (uuid) VALUES (?) ON CONFLICT (uuid) DO NOTHING", seller);
-            Database.update(connection, "UPDATE players SET money = money + ? WHERE uuid = ?", price, seller);
-            BankLog.add(connection, seller, SALE, price, buyer.toString());
+            Database.update(connection, "UPDATE players SET money = money + ? WHERE uuid = ?", toSeller, seller);
+            BankLog.add(connection, seller, SALE, toSeller, buyer.toString());
+            Treasury.deposit(connection, Treasury.Source.CHEST_SHOP_TAX, taxed, seller);
             Database.update(connection, "INSERT INTO chest_shop_sales (seller_uuid, buyer_uuid, material, quantity, price) VALUES (?, ?, ?, ?, ?)",
                     seller, buyer, material.name(), quantity, price);
             return null;
         });
+        Treasury.committed(taxed);
     }
 
 }

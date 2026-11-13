@@ -296,7 +296,8 @@ public final class Bauamt {
 
     // the guide value times the share, never more than one day's budget: a big template is paid less, not never
     static int payout(@NotNull Blueprint template, @NotNull Funding funding) {
-        if (funding.broke()) return 0;
+        // nothing while broke, nor while the admins stopped the grants (/wirtschaft, emergency)
+        if (funding.broke() || xyz.jupp.minecraft.economy.AdminSettings.stopped(xyz.jupp.minecraft.economy.AdminSettings.STOP_BAUAMT)) return 0;
         return (int) Math.min(Math.round(template.reward() * funding.share()), dailyBudget(funding.averageIncome()));
     }
 

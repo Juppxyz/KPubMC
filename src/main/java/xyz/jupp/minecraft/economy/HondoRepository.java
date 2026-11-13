@@ -141,7 +141,7 @@ public final class HondoRepository {
 
     /** Buys pieces of one of Hondo's goods. expectedNet is the price the player saw, a different price books nothing. */
     public static Result buy(@NotNull UUID player, @NotNull Material material, int units, int expectedNet) {
-        if (!Hondo.GOODS.contains(material) || units <= 0) return Result.of(Outcome.UNAVAILABLE);
+        if (!Hondo.GOODS.contains(material) || units <= 0 || AdminSettings.stopped(AdminSettings.STOP_HONDO)) return Result.of(Outcome.UNAVAILABLE);
         List<MarketItem> changed = new ArrayList<>();
         Result result = Database.inTransaction(connection -> {
             MarketItem item = MarketRepository.lock(connection, material);
@@ -180,7 +180,7 @@ public final class HondoRepository {
     /** Buys the friendship offer of the level: once per player and tax free (Hondo's gift, no tax, nothing for the treasury). */
     public static Result claim(@NotNull UUID player, int offerLevel, int expectedNet) {
         Hondo.FriendOffer offer = Hondo.offer(offerLevel);
-        if (offer == null) return Result.of(Outcome.UNAVAILABLE);
+        if (offer == null || AdminSettings.stopped(AdminSettings.STOP_HONDO)) return Result.of(Outcome.UNAVAILABLE);
         return Database.inTransaction(connection -> {
             MarketItem item = MarketRepository.lock(connection, offer.material());
             if (item == null || !item.enabled() || !EndAccess.isAvailable(offer.material())) return Result.of(Outcome.UNAVAILABLE);
