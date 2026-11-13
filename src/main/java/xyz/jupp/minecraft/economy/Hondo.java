@@ -41,8 +41,12 @@ public final class Hondo {
     public static final int DIAMOND_EARLY_DAYS = 3;
     public static final double DIAMOND_EARLY_FACTOR = 1.5;
 
-    /** Whether Hondo sells netherite now: as the admins decided, automatically from one week into the season on. */
+    /**
+     * Whether Hondo sells netherite now: as the admins decided, automatically from one week into the season on; never
+     * while the Nether is still locked (netherUnlock in the config).
+     */
     public static boolean netheriteOpen() {
+        if (!xyz.jupp.minecraft.utils.EndAccess.isNetherOpen()) return false;
         return switch (AdminSettings.netheriteMode()) {
             case OPEN -> true;
             case CLOSED -> false;

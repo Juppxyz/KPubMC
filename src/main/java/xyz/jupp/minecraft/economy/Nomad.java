@@ -330,7 +330,8 @@ public final class Nomad {
     // a themed contract: everyday things for THEMED_DAYS, from a theme the other running contract does not have
     private static @Nullable Contract createThemed(int slot, LocalDate endDay, Set<Material> used, Set<Theme> themes, Map<Material, Instant> recent) {
         List<Theme> open = new ArrayList<>(List.of(Theme.values()));
-        open.removeIf(theme -> themes.contains(theme) || (theme == Theme.END && !EndAccess.isOpen()));
+        open.removeIf(theme -> themes.contains(theme) || (theme == Theme.END && !EndAccess.isOpen())
+                || (theme == Theme.NETHER && !EndAccess.isNetherOpen()));
         java.util.Collections.shuffle(open, ThreadLocalRandom.current());
         for (Theme theme : open) {
             List<Task> candidates = freshest(TASK_POOL.stream()

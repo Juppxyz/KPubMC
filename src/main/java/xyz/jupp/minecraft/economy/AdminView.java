@@ -240,6 +240,7 @@ public final class AdminView implements InventoryHolder {
                 "§7Gerade: " + (Hondo.netheriteOpen() ? "§azu kaufen" : "§cnicht zu kaufen"),
                 "§7Spieler sehen kein Datum, nur \"gerade nicht vorrätig\".",
                 "§7Gilt auch für das Freundschaftsangebot (Stufe 5).",
+                "§7Frühestens, wenn der Nether offen ist.",
                 "§7Beim Saisonreset wieder automatisch."), "umschalten"));
         inventory.setItem(SLOT_NETHERITE_LIMIT, setting(Material.CLOCK, "§fNetherit pro 24 Stunden: §a" + AdminSettings.netheritePerDay(),
                 List.of("§7Je Spieler, gekauft und als Angebot zusammen."), "-1 / +1"));

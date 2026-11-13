@@ -34,22 +34,34 @@ public class NetherTransferListener implements Listener {
     @EventHandler
     public void onEnterEnd(PlayerPortalEvent event) {
         Player player = event.getPlayer();
-        // the End opens some days after the season start
-        if (event.getTo().getWorld() != null && event.getTo().getWorld().getEnvironment() == World.Environment.THE_END && !EndAccess.isOpen()) {
+        if (event.getTo().getWorld() == null) return;
+        World.Environment target = event.getTo().getWorld().getEnvironment();
+        // the Nether and the End open some days after the season start
+        if (target == World.Environment.THE_END && !EndAccess.isOpen()) {
             event.setCancelled(true);
-            LocalDateTime unlock = EndAccess.unlock();
-            long daysLeft = ChronoUnit.DAYS.between(LocalDate.now(ZoneId.of("Europe/Berlin")), unlock.toLocalDate());
-            player.sendMessage(Main.getChatPrefix() + "§cDas End ist noch gesperrt.§f Es öffnet am §e"
-                    + unlock.format(DateTimeFormatter.ofPattern("dd.MM.yyyy")) + " §fum §e"
-                    + unlock.format(DateTimeFormatter.ofPattern("HH:mm")) + " Uhr §7(noch " + daysLeft + (daysLeft == 1 ? " Tag)" : " Tage)"));
+            player.sendMessage(Main.getChatPrefix() + "§cDas End ist noch gesperrt.§f Es öffnet " + when(EndAccess.unlock()));
+        } else if (target == World.Environment.NETHER && !EndAccess.isNetherOpen()) {
+            event.setCancelled(true);
+            player.sendMessage(Main.getChatPrefix() + "§cDer Nether ist noch gesperrt.§f Er öffnet " + when(EndAccess.netherUnlock()));
         }
     }
 
-    // an ender pearl or a vehicle through an End portal would take its player along
+    // "am 03.12.2026 um 18:00 Uhr (noch 2 Tage)"
+    private static String when(LocalDateTime unlock) {
+        long daysLeft = ChronoUnit.DAYS.between(LocalDate.now(ZoneId.of("Europe/Berlin")), unlock.toLocalDate());
+        return "am §e" + unlock.format(DateTimeFormatter.ofPattern("dd.MM.yyyy")) + " §fum §e"
+                + unlock.format(DateTimeFormatter.ofPattern("HH:mm")) + " Uhr §7("
+                + (daysLeft <= 0 ? "heute)" : "noch " + daysLeft + (daysLeft == 1 ? " Tag)" : " Tage)"));
+    }
+
+    // an ender pearl or a vehicle through a portal would take its player along
     @EventHandler(ignoreCancelled = true)
     public void onEntityEnterEnd(EntityPortalEvent event) {
-        if (EndAccess.isOpen() || event.getTo() == null || event.getTo().getWorld() == null) return;
-        if (event.getTo().getWorld().getEnvironment() == World.Environment.THE_END) event.setCancelled(true);
+        if (event.getTo() == null || event.getTo().getWorld() == null) return;
+        World.Environment target = event.getTo().getWorld().getEnvironment();
+        if ((target == World.Environment.THE_END && !EndAccess.isOpen()) || (target == World.Environment.NETHER && !EndAccess.isNetherOpen())) {
+            event.setCancelled(true);
+        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR)

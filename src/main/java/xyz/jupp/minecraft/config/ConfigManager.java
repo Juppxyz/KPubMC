@@ -60,6 +60,7 @@ public class ConfigManager {
     private static volatile String openAiModel = "gpt-5-mini";
     private static volatile String openAiApiKey = "";
     private static volatile LocalDateTime endUnlock = null;
+    private static volatile LocalDateTime netherUnlock = null;
     // progressive nether transfer tax, sorted by 'from'; immutable list, replaced as a whole on reload
     // (small enough that moving money away first is not worth the effort: up to 1.000 free, then 5 %, from 20.000 10 %)
     private static final List<TaxBracket> DEFAULT_NETHER_BRACKETS = List.of(
@@ -102,7 +103,8 @@ public class ConfigManager {
             aiReview = !"false".equalsIgnoreCase(optString(config, "aiReview", "true"));
             openAiModel = optString(config, "openAiModel", "gpt-5-mini");
             openAiApiKey = optString(config, "openAiApiKey", "").trim();
-            endUnlock = parseDateTime(optString(config, "endUnlock", ""));
+            endUnlock = parseDateTime(optString(config, "endUnlock", ""), "endUnlock");
+            netherUnlock = parseDateTime(optString(config, "netherUnlock", ""), "netherUnlock");
             netherTransferTaxBrackets = parseBrackets(config.get("netherTransferTaxBrackets"));
             dntLootRules = parseDntLoot(config.get("dntLoot"));
 
@@ -162,15 +164,16 @@ public class ConfigManager {
     public String getOpenAiModel() { return openAiModel; }
     public String getOpenAiApiKey() { return openAiApiKey; }
     public LocalDateTime getEndUnlock() { return endUnlock; }
+    public LocalDateTime getNetherUnlock() { return netherUnlock; }
     public DntLootRules getDntLootRules() { return dntLootRules; }
 
     // "2026-10-10T16:00" or "2026-10-10"; empty or invalid -> null
-    private static LocalDateTime parseDateTime(String value) {
+    private static LocalDateTime parseDateTime(String value, String key) {
         if (value == null || value.isBlank()) return null;
         try {
             return value.contains("T") ? LocalDateTime.parse(value.trim()) : LocalDate.parse(value.trim()).atStartOfDay();
         } catch (DateTimeParseException e) {
-            Main.getInstance().getSLF4JLogger().warn("Invalid endUnlock '{}', the End stays open", value);
+            Main.getInstance().getSLF4JLogger().warn("Invalid {} '{}', that dimension stays open", key, value);
             return null;
         }
     }

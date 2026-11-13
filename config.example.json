@@ -20,7 +20,8 @@
       "rate": 0.1
     }
   ],
-  "endUnlock": "2026-12-13T16:00",
+  "netherUnlock": "2026-12-03T18:00",
+  "endUnlock": "2026-12-09T18:00",
   "dailyOffers": 7,
   "dailyDiscount": 0.15,
   "demandHalfLifeHours": 6,
