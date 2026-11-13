@@ -72,10 +72,21 @@ public record MarketItem(
         return sellable && demand < 0 && sellPriceAt(demand) == 0 && sellPriceAt(0) > 0;
     }
 
+    /** How far one sold bundle lowers the demand (the admins' factor, AdminSettings.sellStep). */
+    public static double sellStep() {
+        return AdminSettings.sellStep();
+    }
+
+    /** The demand after selling these bundles. */
+    public double demandAfterSelling(int bundles) {
+        return demand - bundles * sellStep();
+    }
+
     /** How many of these bundles the shop takes one after another before it pays nothing for the next. */
     public int payingBundles(int max) {
+        double step = sellStep();
         int paying = 0;
-        while (paying < max && sellPriceAt(demand - paying) > 0) paying++;
+        while (paying < max && sellPriceAt(demand - paying * step) > 0) paying++;
         return paying;
     }
 
@@ -138,8 +149,9 @@ public record MarketItem(
 
     /** Payout for selling n bundles one after another, each lowering the demand. */
     public int sellTotal(int bundles) {
+        double step = sellStep();
         long total = 0;
-        for (int i = 0; i < bundles; i++) total += sellPriceAt(demand - i);
+        for (int i = 0; i < bundles; i++) total += sellPriceAt(demand - i * step);
         return (int) total;
     }
 

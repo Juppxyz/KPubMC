@@ -31,6 +31,9 @@ public final class AdminSettings {
     public static final String SATURATED_HOURS = "saturated_hours";
     public static final String LOANS_OPEN = "loans_open";
     public static final String AI_REVIEW = "ai_review";
+    // how much a sold bundle lowers the demand (buying raises it by one): above 1 the buy-back falls faster
+    public static final String SELL_STEP = "sell_step";
+    public static final double SELL_STEP_DEFAULT = 1.5;
 
     // emergency switches ("true": stopped), for a bug or an exploit until it is fixed; players only see "closed"
     public static final String STOP_SHOP_SELL = "stop_shop_sell";
@@ -102,6 +105,11 @@ public final class AdminSettings {
 
     public static double cashDepositTax() {
         return number(CASH_DEPOSIT_TAX, ConfigManager.getManager().getCashDepositTax(), 0, 0.5);
+    }
+
+    /** How far one sold bundle pushes the demand down (1: as far as a bought one pushes it up). */
+    public static double sellStep() {
+        return number(SELL_STEP, SELL_STEP_DEFAULT, 1, 3);
     }
 
     public static double saturatedHours() {

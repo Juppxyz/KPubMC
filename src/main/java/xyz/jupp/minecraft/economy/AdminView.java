@@ -62,6 +62,7 @@ public final class AdminView implements InventoryHolder {
     private static final int SLOT_SATURATION = 15;
     private static final int SLOT_LOANS = 16;
     private static final int SLOT_AI = 17;
+    private static final int SLOT_SELL_STEP = 19;
     // main page: emergency stops
     private static final int SLOT_STOP_LABEL = 27;
     private static final Map<Integer, String> STOP_SLOTS = Map.of(
@@ -256,6 +257,10 @@ public final class AdminView implements InventoryHolder {
         inventory.setItem(SLOT_LOANS, setting(Material.EMERALD, "§fNeue Kredite bei Basil: " + (AdminSettings.loansOpen() ? "§aja" : "§cnein"),
                 List.of("§7Laufende Kredite laufen weiter.", "§7Sinnvoll z. B. vor einem Saisonende",
                         "§7(ein vorgemerkter Saisonreset sperrt sie ohnehin).", "§7Beim Saisonreset wieder an."), "an / aus"));
+        inventory.setItem(SLOT_SELL_STEP, setting(Material.ANVIL, "§fPreisverfall beim Verkauf: §a×" + factor(AdminSettings.sellStep()),
+                List.of("§7Wie stark ein verkauftes Paket den Ankaufpreis drückt,",
+                        "§7verglichen damit, wie stark ein gekauftes ihn hebt.",
+                        "§7×1: gleich stark, ×2: doppelt so schnell fallend."), "-0,25 / +0,25"));
         inventory.setItem(SLOT_AI, setting(Material.WRITABLE_BOOK, "§fKI-Marktprüfung: " + (AdminSettings.aiReview() ? "§aan" : "§caus"),
                 List.of("§7Täglicher Marktbericht und Korrekturen am Katalog", "§7(braucht den API-Schlüssel in der Config)."), "an / aus"));
 
@@ -406,6 +411,10 @@ public final class AdminView implements InventoryHolder {
         return named(icon, name, lore);
     }
 
+    private static String factor(double value) {
+        return String.format(Locale.GERMANY, "%.2f", value);
+    }
+
     private static String hours(double hours) {
         return hours == Math.rint(hours) ? String.valueOf((long) hours) : String.format(Locale.GERMANY, "%.1f", hours);
     }
@@ -527,6 +536,11 @@ public final class AdminView implements InventoryHolder {
             case SLOT_LOANS -> {
                 key = AdminSettings.LOANS_OPEN;
                 value = AdminSettings.loansOpen() ? "false" : null;
+            }
+            case SLOT_SELL_STEP -> {
+                key = AdminSettings.SELL_STEP;
+                double next = Math.round((AdminSettings.sellStep() + (up ? 0.25 : -0.25)) * 4) / 4.0;
+                value = String.valueOf(Math.max(1, Math.min(3, next)));
             }
             case SLOT_AI -> {
                 key = AdminSettings.AI_REVIEW;

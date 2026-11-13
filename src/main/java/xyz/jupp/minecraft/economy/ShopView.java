@@ -469,7 +469,7 @@ public final class ShopView implements InventoryHolder {
             String name = (i == 1 ? (paying < ownedBundles ? "§c§lVerkaufen §8» §f" : "§c§lAlles verkaufen §8» §f")
                     : "§c§lVerkaufen §8» §f") + bundles * item.amount() + "×";
             List<String> sellLore = new ArrayList<>(List.of("§7Du erhältst: " + Main.getCurrencyName(item.sellTotal(bundles))));
-            if (item.sellPriceAt(item.demand() - bundles) == 0) {
+            if (item.sellPriceAt(item.demandAfterSelling(bundles)) == 0) {
                 sellLore.add("§cDanach ist der Markt " + Math.round(AdminSettings.saturatedHours()) + " Stunden gesättigt.");
                 if (bundles < ownedBundles) sellLore.add("§7Mehr nimmt der Händler gerade nicht.");
             }

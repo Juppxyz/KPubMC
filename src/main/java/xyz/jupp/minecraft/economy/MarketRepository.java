@@ -285,7 +285,8 @@ public final class MarketRepository {
             if (Database.update(connection, "UPDATE players SET money = money + ? WHERE uuid = ?", payout, player) == 0) {
                 return new Trade(Outcome.UNAVAILABLE, payout, 0, item);
             }
-            double demand = item.demand() - bundles;
+            // a sold bundle lowers the demand by the admins' factor (above 1: the buy-back falls faster than buying raises it)
+            double demand = item.demandAfterSelling(bundles);
             // the next bundle would pay nothing: the good is saturated and stays so for the admins' saturation hours
             if (item.sellPriceAt(demand) == 0) {
                 demand = item.withDemand(demand).saturatedDemand(ConfigManager.getManager().getDemandHalfLifeHours(), AdminSettings.saturatedHours());

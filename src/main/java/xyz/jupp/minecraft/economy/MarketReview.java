@@ -95,7 +95,7 @@ public final class MarketReview {
             [minPrice, maxPrice] (null: 25 % bzw. 400 % des Basispreises). Verkaufspreis = dieselbe Kurve bis hinunter auf 0
             (minPrice gilt nur für den Kauf), höchstens basePrice, mal sellRatio; fällt er auf 0, ist das Item gesättigt und
             der Händler kauft es einige Stunden lang nicht an.
-            'demand' steigt mit jedem gekauften Paket, sinkt mit jedem verkauften und zerfällt mit der Zeit.
+            'demand' steigt mit jedem gekauften Paket um 1, sinkt mit jedem verkauften etwas stärker und zerfällt mit der Zeit.
             Deine Änderungen dürfen den Shop nur weniger auszahlen lassen: sell_ratio nur senken (bis 0,2, höchstens 0,1 am
             Tag), base_price höchstens ±20 % am Tag und zwischen 70 % und
             150 % von seedBasePrice (bei verkaufbaren Items nur senken),
