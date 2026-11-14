@@ -28,7 +28,7 @@ import java.util.UUID;
  * wanted player or a member of their team. The treasury pays the state's part (the points are new); while it does not
  * have the money free, the head stays unpaid and can be brought again later.
  * <p>
- * Players can put money of their own on a wanted player's head (/kopfgeld): any amount plus PLEDGE_FEE for the state.
+ * Players can put money of their own on a wanted player's head (at the Sheriff, SheriffView): any amount plus PLEDGE_FEE for the state.
  * The Sheriff holds it; the hunter who brings the head gets it on top. If the warrant ends without a hunter's catch, or
  * the head is not brought within PLEDGE_HEAD_DAYS, the money (not the fee) goes back. Database methods block.
  */

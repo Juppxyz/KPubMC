@@ -58,7 +58,7 @@ public class WantedCommand implements CommandExecutor {
             long pledged = Bounties.pledged(wantedPlayer.uuid());
             lines.add("§fBelohnung§8» " + Main.getCurrencyName(Loans.bounty(wantedPlayer.uuid(), wantedPlayer.jailEnd()))
                     + (pledged > 0 ? " §7+ §a" + pledged + " §7von Spielern" : "") + " §7und §a" + Bounties.TEAM_POINTS + " Team-Punkte");
-            lines.add("§7Den Kopf zum §9Sheriff §7bringen. Selbst Kopfgeld aussetzen: §a/kopfgeld <Spieler> <Betrag>");
+            lines.add("§7Den Kopf zum §9Sheriff §7bringen. Selbst Kopfgeld aussetzen: beim §9Sheriff§7.");
             lines.add("§7----------------------");
         }
         return lines;

@@ -9,8 +9,6 @@ commands:
   money:
     aliases: [geld, schilling]
     usage: /<command>
-  kopfgeld:
-    usage: /<command> <Spieler> <Betrag>
   config:
   help:
     aliases: [hilfe]
@@ -61,3 +59,4 @@ commands:
   ort:
   mvtp:
   mvload:
+  tabtps: # TEMPORARY debug

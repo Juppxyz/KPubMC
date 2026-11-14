@@ -833,6 +833,7 @@ public final class BankView implements InventoryHolder {
                 // the counter closes first, so no second click can pay a second time while the vault loads
                 player.closeInventory();
                 Vault.open(player);
+                player.sendMessage(Bank.PREFIX + "Dein Schließfach ist offen: §c-" + Bank.VAULT_FEE + " " + Main.getCurrencyName() + " §7(Gebühr)");
             });
         });
     }

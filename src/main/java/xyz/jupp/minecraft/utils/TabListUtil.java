@@ -3,6 +3,7 @@ package xyz.jupp.minecraft.utils;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
+import xyz.jupp.minecraft.commands.TabTpsCommand;
 import xyz.jupp.minecraft.economy.Bankruptcy;
 import xyz.jupp.minecraft.inventory.Items;
 import xyz.jupp.minecraft.economy.Economy;
@@ -20,16 +21,21 @@ public class TabListUtil {
         Component header = header();
         Component footer = footer();
         for (Player player : Bukkit.getOnlinePlayers()) {
-            player.sendPlayerListHeaderAndFooter(header, footer);
+            player.sendPlayerListHeaderAndFooter(TabTpsCommand.isWatching(player) ? debugHeader() : header, footer);
         }
     }
 
     public static void updateTabFor(Player player) {
-        player.sendPlayerListHeaderAndFooter(header(), footer());
+        player.sendPlayerListHeaderAndFooter(TabTpsCommand.isWatching(player) ? debugHeader() : header(), footer());
     }
 
     private static Component header() {
         return Component.text(HEADER + currentPerformance() + "\n");
+    }
+
+    // TEMPORARY (/tabtps): the real numbers next to the word
+    private static Component debugHeader() {
+        return Component.text(HEADER + currentPerformance() + " §8| " + TabTpsCommand.debugText() + "\n");
     }
 
     private static Component footer() {

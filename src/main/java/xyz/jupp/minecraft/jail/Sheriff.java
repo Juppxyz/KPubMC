@@ -21,8 +21,8 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * The Sheriff (/createsheriff): a right-click hands him every bounty head in the inventory, he pays what they are
- * worth (Bounties). He does nothing else. Only used on the main thread.
+ * The Sheriff (/createsheriff): his menu ({@link SheriffView}) hands him every bounty head in the inventory, he pays what
+ * they are worth (Bounties); there players also put money on a wanted player's head. Only used on the main thread.
  */
 public final class Sheriff {
 
@@ -33,7 +33,8 @@ public final class Sheriff {
     // players whose heads are being paid right now: a second click waits for the first
     private static final Set<UUID> busy = new HashSet<>();
 
-    public static void interact(@NotNull Player player) {
+    /** Main thread: pays every bounty head the player carries (from the Sheriff's menu). */
+    public static void handIn(@NotNull Player player) {
         UUID uuid = player.getUniqueId();
         if (busy.contains(uuid)) return;
         String team = CacheHandler.getInstance().getPlayerInCache(player).getTeamID();

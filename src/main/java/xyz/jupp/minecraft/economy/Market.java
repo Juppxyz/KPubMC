@@ -90,6 +90,8 @@ public final class Market {
         int eased = MarketRepository.easeElasticityOnce(0.75);
         if (eased > 0) Main.getInstance().getSLF4JLogger().info("price reaction of {} goods eased (elasticity x0.75)", eased);
         int lowered = MarketRepository.setSellRatiosOnce("sell_ratios_2026_11", SELL_RATIOS_2026_11);
+        // 2026-11-14: diamonds pay a little less (125 -> 113), the miner's lead over the other players was too big
+        lowered += MarketRepository.setSellRatiosOnce("sell_ratios_2026_11b", Map.of(Material.DIAMOND, 0.45));
         if (lowered > 0) Main.getInstance().getSLF4JLogger().info("shop buy-back of {} farmable goods lowered", lowered);
         int repriced = MarketRepository.setPricesOnce("hondo_prices_2026_11", HONDO_PRICES_2026_11);
         if (repriced > 0) Main.getInstance().getSLF4JLogger().info("Hondo's jewels repriced: {}", repriced);

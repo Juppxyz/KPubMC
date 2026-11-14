@@ -487,6 +487,7 @@
   "category": "ORES",
   "amount": 1,
   "price": 250,
+  "sellRatio": 0.45,
   "sellable": true,
   "buyable": false,
   "description": "Kaufen beim Juwelier"

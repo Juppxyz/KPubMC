@@ -18,7 +18,7 @@ import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.economy.HondoView;
 import xyz.jupp.minecraft.economy.NomadView;
 import xyz.jupp.minecraft.economy.ShopView;
-import xyz.jupp.minecraft.jail.Sheriff;
+import xyz.jupp.minecraft.jail.SheriffView;
 import xyz.jupp.minecraft.utils.JailHandler;
 import xyz.jupp.minecraft.utils.Npcs;
 import xyz.jupp.minecraft.utils.Text;
@@ -50,7 +50,7 @@ public class ShopListener implements Listener {
             if (Main.getFinanceVillagerFredName().equals(villagerName)) return BankView::open;
             if (Main.getJewelerVillagerName().equals(villagerName)) return HondoView::open;
             if (Main.getBauamtVillagerName().equals(villagerName)) return BauamtView::open;
-            if (Main.getSheriffVillagerName().equals(villagerName)) return Sheriff::interact;
+            if (Main.getSheriffVillagerName().equals(villagerName)) return SheriffView::open;
             return null;
         }
         if (entityType == EntityType.VINDICATOR) {

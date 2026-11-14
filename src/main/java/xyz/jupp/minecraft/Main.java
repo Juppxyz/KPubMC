@@ -65,9 +65,6 @@ public final class Main extends JavaPlugin {
     private void registerCommands() {
         Logger.console("register commands..");
         this.getCommand("money").setExecutor(new MoneyCommand());
-        BountyCommand bounty = new BountyCommand();
-        this.getCommand("kopfgeld").setExecutor(bounty);
-        this.getCommand("kopfgeld").setTabCompleter(bounty);
         this.getCommand("config").setExecutor(new ConfigCommand());
         this.getCommand("help").setExecutor(new HelpCommand());
         this.getCommand("slimechunk").setExecutor(new SlimeChunkCommand());
@@ -104,6 +101,7 @@ public final class Main extends JavaPlugin {
         this.getCommand("ort").setExecutor(new PlacesCommand());
         this.getCommand("mvtp").setExecutor(new WorldTeleportCommand());
         this.getCommand("mvload").setExecutor(new WorldLoadCommand());
+        this.getCommand("tabtps").setExecutor(new TabTpsCommand()); // TEMPORARY debug
     }
 
     private void registerListener() {
