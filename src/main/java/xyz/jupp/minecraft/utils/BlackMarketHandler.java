@@ -86,6 +86,11 @@ public final class BlackMarketHandler {
         roll(System.currentTimeMillis() / HOUR_MILLIS);
     }
 
+    /** Every item Morpheus can offer (for the admin command /customItem morpheus). */
+    public static List<CustomItemsInterface> items() {
+        return blackMarketItems;
+    }
+
     public static ItemStack getCurrentBlackMarketItem() {
         int idx = currentItem.get();
         if (idx < 0) return null;

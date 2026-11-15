@@ -76,7 +76,9 @@ public final class Main extends JavaPlugin {
         this.getCommand("hover").setExecutor(new HoverTextCommand());
         this.getCommand("head").setExecutor(new PlayerHeadsCommand());
         this.getCommand("warp").setExecutor(new WarpCommand());
-        this.getCommand("customItem").setExecutor(new ItemCommand());
+        ItemCommand itemCommand = new ItemCommand();
+        this.getCommand("customItem").setExecutor(itemCommand);
+        this.getCommand("customItem").setTabCompleter(itemCommand);
         this.getCommand("donate").setExecutor(new DonateCommand());
         this.getCommand("spawn").setExecutor(new SpawnCommand());
         this.getCommand("rules").setExecutor(new RulesCommand());
