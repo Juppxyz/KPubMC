@@ -124,6 +124,7 @@ public final class Main extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new PlayerMovementListener(), this);
         Bukkit.getPluginManager().registerEvents(new TeamExpListener(), this);
         Bukkit.getPluginManager().registerEvents(new CustomToolsListener(), this);
+        Bukkit.getPluginManager().registerEvents(new FenceLeashListener(), this);
         Bukkit.getPluginManager().registerEvents(new EnderDragonListener(), this);
         Bukkit.getPluginManager().registerEvents(new SpawnListener(), this);
         Bukkit.getPluginManager().registerEvents(new TeamAreaListener(), this);

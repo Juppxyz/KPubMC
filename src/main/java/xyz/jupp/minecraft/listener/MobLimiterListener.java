@@ -69,6 +69,8 @@ public class MobLimiterListener implements Listener {
     @EventHandler(ignoreCancelled = true)
     public void onSpawnCreature(CreatureSpawnEvent event) {
         Entity entity = event.getEntity();
+        // the invisible end of an admin's fence lead (FenceLeashListener), marked before it spawns
+        if (FenceLeashListener.isAnchor(entity)) return;
         EntityType entityType = event.getEntityType();
         Location location = entity.getLocation();
 
