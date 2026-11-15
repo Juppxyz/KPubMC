@@ -7,6 +7,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
@@ -15,6 +16,8 @@ import xyz.jupp.minecraft.utils.Text;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Cash: bank notes of 10, 100 and 1.000 Schilling. A note is recognized by an invisible marker with its value, never by
@@ -34,6 +37,9 @@ public final class Cash {
     private static final NamespacedKey SEASON_KEY = new NamespacedKey(Main.getInstance(), "cash_season");
     private static final int LEGACY_VALUE = 10;
     private static volatile int season;
+    private static final StackWalker WALKER = StackWalker.getInstance(StackWalker.Option.RETAIN_CLASS_REFERENCE);
+    // foreign callers already reported in the log (once each)
+    private static final Set<String> refused = ConcurrentHashMap.newKeySet();
 
     /** Blocking, in onEnable after a marked season reset ran: the season notes are printed for and valid in. */
     public static void load() {
@@ -45,8 +51,9 @@ public final class Cash {
         return season;
     }
 
-    /** A stack of notes of one value (10, 100 or 1.000). */
+    /** A stack of notes of one value (10, 100 or 1.000); for KPubMC's own code only. */
     public static ItemStack note(int value, int amount) {
+        ownCallerOnly();
         ItemStack note = new ItemStack(Material.PAPER, amount);
         ItemMeta meta = note.getItemMeta();
         meta.customName(Text.of(switch (value) {
@@ -145,6 +152,8 @@ public final class Cash {
      * possible. False (and nothing taken) if the cash is not enough.
      */
     public static boolean pay(@NotNull Player player, int price) {
+        // before the notes are taken: the change is printed by note()
+        ownCallerOnly();
         if (price <= 0 || total(player) < price) return false;
         long total = takeAll(player, false);
         give(player, total - price);
@@ -171,6 +180,44 @@ public final class Cash {
             }
         }
         return stacks;
+    }
+
+    /*
+     * Notes are printed only for KPubMC's own code: a call from another plugin, also by reflection, is refused before
+     * anything moves. Other plugins go through the API (xyz.jupp.minecraft.api.KPubEconomy), which pays casino wins out
+     * of the casino till instead of printing them. A guard against shortcuts, not a wall: code in the same server could
+     * still write the marker itself.
+     */
+    private static void ownCallerOnly() {
+        /*
+         * The first frame outside this class and the JDK decides. Reflection frames are skipped by the walker, so a
+         * reflective call shows its caller; JDK frames (a stream or Optional running a callback) are skipped here, the
+         * caller is further down. No such frame at all (a method reference run on a JDK thread) is refused too.
+         */
+        Class<?> caller = WALKER.walk(frames -> frames.map(StackWalker.StackFrame::getDeclaringClass)
+                .filter(type -> type != Cash.class && !isJdk(type)).findFirst().orElse(null));
+        if (caller != null && caller.getClassLoader() == Cash.class.getClassLoader()) return;
+        String name = caller == null ? "no caller (JDK thread)" : caller.getName();
+        if (refused.add(name)) {
+            Main.getInstance().getSLF4JLogger().warn("{} tried to print cash notes directly ({}), refused: other plugins use the KPubMC API",
+                    pluginOf(caller), name);
+        }
+        throw new IllegalStateException("Only KPubMC prints cash notes; use the API xyz.jupp.minecraft.api.KPubEconomy (casino: takeBet/payWin)");
+    }
+
+    // the JDK's own classes (boot and platform loader)
+    private static boolean isJdk(Class<?> type) {
+        ClassLoader loader = type.getClassLoader();
+        return loader == null || loader == ClassLoader.getPlatformClassLoader();
+    }
+
+    private static String pluginOf(@Nullable Class<?> type) {
+        if (type == null) return "Foreign code";
+        try {
+            return "Plugin " + JavaPlugin.getProvidingPlugin(type).getName();
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return "Foreign code";
+        }
     }
 
 }
