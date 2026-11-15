@@ -14,6 +14,7 @@ import org.bukkit.entity.AbstractArrow;
 import org.bukkit.entity.Arrow;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Fireball;
+import org.bukkit.entity.FishHook;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
@@ -32,6 +33,7 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
+import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Vector;
 import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.Main;
@@ -190,6 +192,10 @@ public class CustomToolsListener implements Listener {
     private static final long HOOK_FALL_PROTECTION_MILLIS = 3000;
     // player -> end of the fall protection after a grappling hook pull (main thread)
     private static final Map<UUID, Long> hookFallProtection = new HashMap<>();
+    // hook entity -> where it caught a wall or the ground (main thread)
+    private static final Map<UUID, Location> hookAnchors = new HashMap<>();
+    // FishingHook's default gravity per tick
+    private static final double HOOK_GRAVITY = 0.03;
 
     // right clicks into the air arrive cancelled, so no ignoreCancelled here; another plugin can still deny the item
     private static @Nullable ItemStack rightClickTool(PlayerInteractEvent event, Material type, NamespacedKey key) {
@@ -255,19 +261,65 @@ public class CustomToolsListener implements Listener {
         Logger.console("forged papers: " + player.getUniqueId() + " is no longer wanted");
     }
 
+    private static boolean isGrapplingHook(ItemStack item) {
+        return item.getType() == Material.FISHING_ROD && item.getPersistentDataContainer().has(GrapplingHook.KEY, PersistentDataType.BYTE);
+    }
+
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
+    public void onGrapplingHookCast(PlayerFishEvent event) {
+        if (event.getState() != PlayerFishEvent.State.FISHING || event.getHand() == null) return;
+        if (!isGrapplingHook(event.getPlayer().getInventory().getItem(event.getHand()))) return;
+        FishHook hook = event.getHook();
+        Bukkit.getScheduler().runTaskTimer(Main.getInstance(), task -> holdHook(task, hook), 1, 1);
+    }
+
+    // Vanilla only counts a hook lying on top of a block as caught (IN_GROUND). A hook hitting a wall stops,
+    // slides down and reeling in is a plain REEL_IN, so it pulled nothing. Here it sticks where it stopped.
+    private static void holdHook(BukkitTask task, FishHook hook) {
+        UUID id = hook.getUniqueId();
+        // gone, in water or on an entity: vanilla rules
+        if (!hook.isValid() || hook.getState() != FishHook.HookState.UNHOOKED) {
+            hookAnchors.remove(id);
+            task.cancel();
+            return;
+        }
+        Location anchor = hookAnchors.get(id);
+        if (anchor == null) {
+            // vanilla zeroes the velocity in the tick the hook runs into a block; in flight gravity never lets it be zero
+            if (hook.getVelocity().lengthSquared() != 0) return;
+            anchor = hook.getLocation();
+            hookAnchors.put(id, anchor);
+        }
+        if (hook.isOnGround()) return; // on top of a block vanilla keeps it still
+        if (!hook.getWorld().hasCollisionsIn(hook.getBoundingBox().expand(0.1))) {
+            // the block it stuck in is gone: it falls and may catch again
+            hookAnchors.remove(id);
+            return;
+        }
+        if (hook.getLocation().distanceSquared(anchor) > 1.0e-4) hook.teleport(anchor);
+        // its next tick adds the gravity on top, so it does not move at all
+        hook.setVelocity(new Vector(0, HOOK_GRAVITY, 0));
+    }
+
     @EventHandler
     public void onGrapplingHook(PlayerFishEvent event) {
-        if (event.getState() != PlayerFishEvent.State.IN_GROUND || event.getHand() == null) return;
+        PlayerFishEvent.State state = event.getState();
+        if ((state != PlayerFishEvent.State.IN_GROUND && state != PlayerFishEvent.State.REEL_IN) || event.getHand() == null) return;
         Player player = event.getPlayer();
         EquipmentSlot hand = event.getHand();
         ItemStack rod = player.getInventory().getItem(hand);
-        if (rod.getType() != Material.FISHING_ROD || !rod.getPersistentDataContainer().has(GrapplingHook.KEY, PersistentDataType.BYTE)) return;
+        if (!isGrapplingHook(rod)) return;
+        Location hook = hookAnchors.remove(event.getHook().getUniqueId());
+        if (hook == null) {
+            // REEL_IN without an anchor: still in flight, nothing to pull towards
+            if (state != PlayerFishEvent.State.IN_GROUND) return;
+            hook = event.getHook().getLocation();
+        }
         if (JailHandler.isPlayerInJail(player)) {
             player.sendMessage(Main.getChatPrefix() + "§cIm Gefängnis greift der Haken nicht.");
             return;
         }
 
-        Location hook = event.getHook().getLocation();
         Location from = player.getLocation();
         if (hook.getWorld() != from.getWorld()) return;
         Vector delta = hook.toVector().subtract(from.toVector());
