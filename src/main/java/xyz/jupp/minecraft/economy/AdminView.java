@@ -67,7 +67,8 @@ public final class AdminView implements InventoryHolder {
     private static final int SLOT_STOP_LABEL = 27;
     private static final Map<Integer, String> STOP_SLOTS = Map.of(
             28, AdminSettings.STOP_SHOP_SELL, 29, AdminSettings.STOP_SHOP_BUY, 30, AdminSettings.STOP_CHEST_SHOPS,
-            31, AdminSettings.STOP_HONDO, 32, AdminSettings.STOP_BAUAMT, 33, AdminSettings.STOP_CASH);
+            31, AdminSettings.STOP_HONDO, 32, AdminSettings.STOP_BAUAMT, 33, AdminSettings.STOP_CASH,
+            34, AdminSettings.STOP_CASINO);
     // main page: monitoring
     private static final int SLOT_MONITOR_LABEL = 45;
     private static final int SLOT_PLAYERS = 47;
@@ -274,6 +275,7 @@ public final class AdminView implements InventoryHolder {
         stop(31, Material.AMETHYST_SHARD, "Hondo", "Käufe und Freundschaftsangebote bei Hondo.");
         stop(32, Material.BRICKS, "Bauamt-Förderung", "Keine neuen Aufträge, keine Auszahlungen.");
         stop(33, Material.PAPER, "Bargeld bei Basil", "Abheben und Einzahlen von Bargeld.");
+        stop(34, Material.GOLD_BLOCK, "Casino", "Einsätze und Gewinne im Casino-Plugin.");
 
         inventory.setItem(SLOT_MONITOR_LABEL, named(Material.LIGHT_BLUE_STAINED_GLASS_PANE, "§bÜberblick §7▶", List.of()));
         inventory.setItem(SLOT_PLAYERS, named(Material.PLAYER_HEAD, "§bSpieler online", List.of(
@@ -387,6 +389,7 @@ public final class AdminView implements InventoryHolder {
         lore.add("§7Kredite offen: §f" + info.loanCount() + " §7über §f" + Items.format(info.loansOpen())
                 + (info.debt() > 0 ? " §8| §cSchulden " + Items.format(info.debt()) : ""));
         lore.add("§7Festgeld: §f" + Items.format(info.depositsOwed()) + " §8| §7Anleihen: §f" + Items.format(info.bondsOwed()));
+        lore.add("§7Casinokasse: §f" + Items.format(Casino.balance()) + " §7(Start " + Items.format(Casino.startCapital()) + ")");
         lore.add("§7Saisonreset: " + (info.resetPending() == null ? "§fnicht vorgemerkt" : "§cvorgemerkt §7(" + info.resetPending() + ")"));
         long stops = STOP_SLOTS.values().stream().filter(AdminSettings::stopped).count();
         if (stops > 0) lore.add("§c§l" + stops + " Notfall-Schalter aktiv");

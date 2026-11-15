@@ -107,7 +107,9 @@ public final class SeasonReset {
             "hondo_friends", "hondo_trades", "hondo_claims", "hondo_pending",
             "bank_log", "bank_deposits", "bank_loans", "bank_vaults", "state_bonds",
             "bauamt_orders", "bauamt_damage",
-            "bounties", "bounty_pledges");
+            "bounties", "bounty_pledges",
+            // the casino till starts over with its start capital (Casino.load)
+            "casino_till", "casino_ledger");
 
     /**
      * Kept: the admins' setup and logs; the catalog and services only lose their demand. The Bauamt's register of

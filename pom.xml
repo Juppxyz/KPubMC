@@ -77,6 +77,52 @@
                     </execution>
                 </executions>
             </plugin>
+            <!-- target/api/kpubmc-<version>-api.jar (+ -api-sources.jar): only the package xyz.jupp.minecraft.api, for other
+                 plugins (the casino) to compile against; at runtime the classes come from the KPubMC plugin (depend: [KPubMC]).
+                 Declared after the shade plugin (it runs first and only sees the plugin jar) and written to target/api, so
+                 "target/kpubmc-*.jar" still means the plugin jar alone when deploying. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.4.1</version>
+                <executions>
+                    <execution>
+                        <id>api</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                        <configuration>
+                            <classifier>api</classifier>
+                            <outputDirectory>${project.build.directory}/api</outputDirectory>
+                            <archive>
+                                <addMavenDescriptor>false</addMavenDescriptor>
+                            </archive>
+                            <includes>
+                                <include>xyz/jupp/minecraft/api/**</include>
+                            </includes>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>api-sources</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                        <configuration>
+                            <classifier>api-sources</classifier>
+                            <outputDirectory>${project.build.directory}/api</outputDirectory>
+                            <archive>
+                                <addMavenDescriptor>false</addMavenDescriptor>
+                            </archive>
+                            <classesDirectory>${project.basedir}/src/main/java</classesDirectory>
+                            <includes>
+                                <include>xyz/jupp/minecraft/api/**</include>
+                            </includes>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
         <resources>
             <resource>

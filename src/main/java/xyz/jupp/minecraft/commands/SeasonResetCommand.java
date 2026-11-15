@@ -61,13 +61,15 @@ public class SeasonResetCommand implements CommandExecutor, TabCompleter {
                 lines.add("§7Ein Saisonreset setzt alles zurück, was Spieler aufgebaut haben:");
                 lines.add("§fGeld, Staatskasse, Steuerhistorie, Markt-Nachfrage, Bank, Festgelder, Kredite, Anleihen, Tresore,");
                 lines.add("§fHondo, Nomad, Kopfgelder, Gefängnisstrafen, Teams, Claims, Warps, Bauamt-Aufträge und");
-                lines.add("§fSchadensrechnungen, Kistenshop-Verkäufe, Notverkauf, Zufallsitem.");
+                lines.add("§fSchadensrechnungen, Kistenshop-Verkäufe, Notverkauf, Zufallsitem, Casinokasse.");
                 lines.add("§7Bleibt: Shop-Katalog, Dienste, Bauamt-Vorlagen, Baupläne und das Register der stehenden Bauten,");
                 lines.add("§7Gefängniszellen, Gesucht-Tafel, Spawn und Kartenbereiche, Befehlsprotokoll.");
                 lines.add("§7Die Welt und die Inventare fasst er nicht an, aber Geldscheine der alten Saison");
                 lines.add("§7sind danach nichts mehr wert. Vorher werden alle Tabellen des Plugins gesichert.");
                 int capital = xyz.jupp.minecraft.config.ConfigManager.getManager().getTreasuryStartCapital();
                 if (capital > 0) lines.add("§7Die Staatskasse startet danach mit §f" + capital + " Schilling §7Startkapital.");
+                int casino = xyz.jupp.minecraft.config.ConfigManager.getManager().getCasinoStartCapital();
+                if (casino > 0) lines.add("§7Die Casinokasse startet mit §f" + casino + " Schilling§7.");
                 lines.forEach(sender::sendMessage);
             });
             default -> sender.sendMessage(prefix + "§c\"" + args[0] + "\" kenne ich nicht, es wurde nichts vorgemerkt. §7Nutze §f/"

@@ -596,6 +596,21 @@ public final class Database {
                 layer       INTEGER NOT NULL,
                 map_id      INTEGER NOT NULL,
                 PRIMARY KEY (template_id, layer)
+            )""",
+            // the casino's own till (Casino, the API for the casino plugin): one row with the balance, and every booking
+            """
+            CREATE TABLE IF NOT EXISTS casino_till (
+                id      INTEGER PRIMARY KEY CHECK (id = 1),
+                balance BIGINT  NOT NULL CHECK (balance >= 0)
+            )""",
+            """
+            CREATE TABLE IF NOT EXISTS casino_ledger (
+                id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                kind        TEXT   NOT NULL,
+                amount      BIGINT NOT NULL,
+                player_uuid UUID,
+                game        TEXT,
+                created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
             )"""
     );
 

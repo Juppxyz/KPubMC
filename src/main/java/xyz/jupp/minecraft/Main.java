@@ -21,6 +21,8 @@ import xyz.jupp.minecraft.database.SeasonReset;
 import xyz.jupp.minecraft.economy.AdminSettings;
 import xyz.jupp.minecraft.economy.Bank;
 import xyz.jupp.minecraft.economy.Cash;
+import xyz.jupp.minecraft.economy.Casino;
+import xyz.jupp.minecraft.economy.EconomyApi;
 import xyz.jupp.minecraft.economy.Bankruptcy;
 import xyz.jupp.minecraft.inventory.MainThread;
 import xyz.jupp.minecraft.inventory.WarpView;
@@ -185,6 +187,7 @@ public final class Main extends JavaPlugin {
         Logger.console("init market..");
         Bank.load();
         Treasury.load();
+        Casino.load();
         // the season's first day (Hondo's netherite, early diamonds, the market report)
         SeasonReset.loadStart();
         Economy.load();
@@ -208,6 +211,8 @@ public final class Main extends JavaPlugin {
         Npcs.keepLoaded();
 
         JailHandler.startJailWatcherTask();
+        // the API for other plugins (the casino), last: they get it from their own onEnable on
+        EconomyApi.register(this);
     }
 
     // Running async workers (e.g. a money transfer between withdraw and credit) are not interrupted by Bukkit,

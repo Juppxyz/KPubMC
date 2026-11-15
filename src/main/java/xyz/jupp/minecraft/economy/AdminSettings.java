@@ -42,6 +42,7 @@ public final class AdminSettings {
     public static final String STOP_HONDO = "stop_hondo";
     public static final String STOP_BAUAMT = "stop_bauamt";
     public static final String STOP_CASH = "stop_cash";
+    public static final String STOP_CASINO = "stop_casino";
 
     /** In automatic mode Hondo sells netherite from this day of the season on (one week after it began). */
     public static final int NETHERITE_AUTO_DAY = 8;

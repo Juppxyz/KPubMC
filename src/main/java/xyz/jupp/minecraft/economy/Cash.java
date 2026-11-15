@@ -40,6 +40,11 @@ public final class Cash {
         season = SeasonReset.season();
     }
 
+    /** The season notes are printed for and valid in. */
+    public static int season() {
+        return season;
+    }
+
     /** A stack of notes of one value (10, 100 or 1.000). */
     public static ItemStack note(int value, int amount) {
         ItemStack note = new ItemStack(Material.PAPER, amount);
