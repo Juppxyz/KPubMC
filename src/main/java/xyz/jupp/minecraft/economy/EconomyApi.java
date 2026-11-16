@@ -23,7 +23,8 @@ import java.util.concurrent.CompletableFuture;
 /**
  * The {@link KPubEconomy} service other plugins get (the casino plugin), registered in onEnable. The rules are in the api
  * package: cash is only read, notes only move between a player and the casino till ({@link Casino}), no account is
- * credited and nothing is printed that the till did not pay for. Notes are taken and handed out on the main thread
+ * credited and nothing is printed that the till did not pay for (one player at most the daily payout limit); the
+ * till's surplus above its start capital may go into the treasury. Notes are taken and handed out on the main thread
  * (like a deposit at Basil, the player file is written soon after), the till books on a worker, and every future
  * completes on the main thread.
  */
@@ -188,6 +189,52 @@ public final class EconomyApi implements KPubEconomy, CashNotes, CasinoBank {
                 Casino.winBack(uuid, amount, label);
                 future.complete(result(CasinoResult.Status.PLAYER_GONE, amount));
             }
+        });
+        return future;
+    }
+
+
+    @Override
+    public long dailyPayoutLimit() {
+        return Casino.dailyLimit();
+    }
+
+    @Override
+    public @NotNull CompletableFuture<Long> payoutLeft(@NotNull Player player) {
+        mainThread();
+        UUID uuid = player.getUniqueId();
+        CompletableFuture<Long> future = new CompletableFuture<>();
+        worker(() -> {
+            long left;
+            try {
+                left = Casino.payoutLeft(uuid);
+            } catch (RuntimeException e) {
+                Main.getInstance().getSLF4JLogger().warn("Casino payout limit of {} could not be read", uuid, e);
+                left = 0;
+            }
+            long value = left;
+            if (!toMain(() -> future.complete(value))) future.complete(value);
+        });
+        return future;
+    }
+
+    @Override
+    public @NotNull CompletableFuture<CasinoResult> payToTreasury(long amount, @NotNull String reason) {
+        mainThread();
+        if (amount <= 0 || amount > MAX_AMOUNT) return CompletableFuture.completedFuture(result(CasinoResult.Status.INVALID_AMOUNT, amount));
+        if (!isOpen()) return CompletableFuture.completedFuture(result(CasinoResult.Status.CLOSED, amount));
+        String label = label(reason);
+        CompletableFuture<CasinoResult> future = new CompletableFuture<>();
+        worker(() -> {
+            long left;
+            try {
+                left = Casino.toTreasury(amount, label);
+            } catch (RuntimeException e) {
+                Main.getInstance().getSLF4JLogger().warn("Casino payment of {} to the treasury ({}) could not be booked", amount, label, e);
+                finish(future, result(CasinoResult.Status.FAILED, amount));
+                return;
+            }
+            finish(future, left < 0 ? result(CasinoResult.Status.CASINO_EMPTY, amount) : new CasinoResult(CasinoResult.Status.OK, amount, left));
         });
         return future;
     }

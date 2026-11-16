@@ -167,14 +167,12 @@ public final class BankView implements InventoryHolder {
         }
 
         long cash = Cash.total(viewer);
-        long legacy = legacyCash();
         inventory.setItem(SLOT_BALANCE, named(Material.GOLD_INGOT, "§fDein Konto: " + Main.getCurrencyName(state.balance()),
                 List.of("§7Bargeld bei dir: §f" + cash + " Schilling")));
         inventory.setItem(SLOT_CLOSE, named(Material.BARRIER, "§cSchließen", List.of()));
 
         List<String> depositLore = new ArrayList<>();
         depositLore.add("§7Bei dir: §f" + cash + " Schilling §7in Scheinen");
-        if (legacy > 0) depositLore.add("§7Alte Smaragd-Scheine: §f" + legacy + " Schilling");
         depositLore.add("§7Steuer beim Einzahlen: §f" + ShopView.percent(Taxes.cashDepositRate()));
         depositLore.add("");
         depositLore.add("§e» Linksklick: einzahlen");
@@ -517,14 +515,6 @@ public final class BankView implements InventoryHolder {
         });
     }
 
-    private long legacyCash() {
-        long total = 0;
-        for (ItemStack stack : viewer.getInventory().getStorageContents()) {
-            if (Cash.isLegacy(stack)) total += 10L * stack.getAmount();
-        }
-        return total;
-    }
-
     private ItemStack statementItem() {
         ItemStack book = new ItemStack(Material.WRITABLE_BOOK);
         ItemMeta meta = book.getItemMeta();
@@ -670,10 +660,10 @@ public final class BankView implements InventoryHolder {
             return;
         }
         // taken right away on the main thread, so the same notes cannot be paid in twice
-        long amount = Cash.takeAll(player, true);
+        long amount = Cash.takeAll(player);
         if (amount <= 0) {
             fail(player, Cash.hasOldSeason(player)
-                    ? "§fDeine Scheine sind aus der letzten Saison und nichts mehr wert."
+                    ? "§fDeine Scheine sind ungültig oder aus der letzten Saison und nichts mehr wert."
                     : "§fDu hast kein Bargeld dabei.");
             return;
         }

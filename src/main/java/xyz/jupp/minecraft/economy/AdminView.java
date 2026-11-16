@@ -92,7 +92,8 @@ public final class AdminView implements InventoryHolder {
     private boolean busy;
 
     private record Info(long free, long brokeBelow, long recoveredAt, @Nullable String resetPending, long accounts,
-                        long loansOpen, long loanCount, long debt, long bondsOwed, long depositsOwed) {}
+                        long loansOpen, long loanCount, long debt, long bondsOwed, long depositsOwed,
+                        long casinoNet, @Nullable Ranked casinoTop) {}
 
     private record PlayerRow(UUID uuid, long money, boolean wanted, boolean jail, long shopSold, long chestSold, long fromState,
                              long loan, long debt) {}
@@ -140,7 +141,15 @@ public final class AdminView implements InventoryHolder {
                        (SELECT COALESCE(SUM(amount), 0) FROM bank_deposits WHERE NOT paid_out)""",
                 r -> new long[]{r.getLong(1), r.getLong(2), r.getLong(3), r.getLong(4), r.getLong(5), r.getLong(6)});
         long[] v = row == null ? new long[6] : row;
-        return new Info(level.free(), level.brokeBelow(), level.recoveredAt(), SeasonReset.pending(), v[0], v[1], v[2], v[3], v[4], v[5]);
+        // the casino in the last 24 hours, net cash out of its till (wins minus bets): all players and the one who got most
+        Long casinoNet = Database.queryOne("SELECT COALESCE(-SUM(amount), 0) FROM casino_ledger WHERE kind IN (?, ?, ?) "
+                + "AND created_at >= now() - interval '24 hours'", r -> r.getLong(1), Casino.BET, Casino.WIN, Casino.WIN_BACK);
+        Ranked casinoTop = Database.queryOne("SELECT player_uuid, -SUM(amount) AS net FROM casino_ledger WHERE kind IN (?, ?, ?) "
+                + "AND player_uuid IS NOT NULL AND created_at >= now() - interval '24 hours' GROUP BY player_uuid "
+                + "HAVING -SUM(amount) > 0 ORDER BY net DESC LIMIT 1",
+                r -> new Ranked(r.getObject(1, UUID.class), r.getLong(2)), Casino.BET, Casino.WIN, Casino.WIN_BACK);
+        return new Info(level.free(), level.brokeBelow(), level.recoveredAt(), SeasonReset.pending(), v[0], v[1], v[2], v[3], v[4], v[5],
+                casinoNet == null ? 0 : casinoNet, casinoTop);
     }
 
     private static List<PlayerRow> players(List<UUID> online) {
@@ -390,6 +399,13 @@ public final class AdminView implements InventoryHolder {
                 + (info.debt() > 0 ? " §8| §cSchulden " + Items.format(info.debt()) : ""));
         lore.add("§7Festgeld: §f" + Items.format(info.depositsOwed()) + " §8| §7Anleihen: §f" + Items.format(info.bondsOwed()));
         lore.add("§7Casinokasse: §f" + Items.format(Casino.balance()) + " §7(Start " + Items.format(Casino.startCapital()) + ")");
+        lore.add("§7Casino 24 h an Spieler: " + (info.casinoNet() >= 0 ? "§a+" : "§c") + Items.format(info.casinoNet()) + " §7netto");
+        if (info.casinoTop() != null) {
+            int limit = Casino.dailyLimit();
+            boolean atLimit = limit > 0 && info.casinoTop().amount() >= limit;
+            lore.add("§7  Meiste: §f" + name(info.casinoTop().uuid()) + " §a+" + Items.format(info.casinoTop().amount())
+                    + (limit > 0 ? " §7von §f" + Items.format(limit) : "") + (atLimit ? " §c(Limit)" : ""));
+        }
         lore.add("§7Saisonreset: " + (info.resetPending() == null ? "§fnicht vorgemerkt" : "§cvorgemerkt §7(" + info.resetPending() + ")"));
         long stops = STOP_SLOTS.values().stream().filter(AdminSettings::stopped).count();
         if (stops > 0) lore.add("§c§l" + stops + " Notfall-Schalter aktiv");

@@ -12,7 +12,7 @@ import org.jetbrains.annotations.NotNull;
 public record CasinoResult(@NotNull Status status, long amount, long casinoBalance) {
 
     public enum Status {
-        /** Booked: the bet is in the till, or the win was handed out. */
+        /** Booked: the bet is in the till, the win was handed out, or the money is in the treasury. */
         OK,
         /** Not a multiple of 10, not positive, or above {@link CasinoBank#MAX_AMOUNT}. Nothing happened. */
         INVALID_AMOUNT,
@@ -20,7 +20,10 @@ public record CasinoResult(@NotNull Status status, long amount, long casinoBalan
         NOT_ENOUGH_CASH,
         /** The change of the bet would not fit into the player's inventory (it would drop). Nothing was taken. */
         INVENTORY_FULL,
-        /** The till cannot cover the win. Nothing was paid. */
+        /**
+         * The till cannot cover the win, or the player reached the daily payout limit, or (payToTreasury) the surplus
+         * above the start capital is too small. Nothing was paid.
+         */
         CASINO_EMPTY,
         /** An admin has stopped the casino. Nothing happened. */
         CLOSED,

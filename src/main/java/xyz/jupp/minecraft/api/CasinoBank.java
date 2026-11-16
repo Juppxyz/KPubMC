@@ -17,12 +17,17 @@ import java.util.concurrent.CompletableFuture;
  * <p>
  * The till can run empty: a win larger than the balance is refused ({@link CasinoResult.Status#CASINO_EMPTY}) and
  * nothing is paid. Check {@link #balance()} before you accept a bet whose highest possible win the till cannot cover.
- * An admin can close the casino with an emergency switch ({@link CasinoResult.Status#CLOSED}): then wins and refunds
- * are refused too; keep them and pay them once {@link #isOpen()} is true again.
+ * One player may take at most {@link #dailyPayoutLimit()} out of the till in 24 hours, net (wins minus bets); a win
+ * beyond it is refused the same way (CASINO_EMPTY), keep it and pay it later ({@link #payoutLeft(Player)} says how
+ * much fits now). An admin can close the casino with an emergency switch ({@link CasinoResult.Status#CLOSED}): then
+ * wins and refunds are refused too; keep them and pay them once {@link #isOpen()} is true again.
+ * <p>
+ * What the casino collects for the state (e.g. exchange fees) goes straight into the state treasury with
+ * {@link #payToTreasury(long, String)}, never as cash to a player.
  */
 public interface CasinoBank {
 
-    /** The largest single bet or win. */
+    /** The largest single bet, win or payment to the treasury. */
     long MAX_AMOUNT = 1_000_000;
 
     /** What the till holds now (updated after every booking; good for "can we cover this bet"). */
@@ -52,9 +57,30 @@ public interface CasinoBank {
      *
      * @param amount a multiple of 10, from 10 to {@link #MAX_AMOUNT}
      * @param game   a short name of the game for the casino's log (letters, digits, space, _ . : - only, cut at 32 characters)
-     * @return OK; or INVALID_AMOUNT, CLOSED, CASINO_EMPTY, FAILED (nothing paid); or PLAYER_GONE (the player left before
+     * @return OK; or INVALID_AMOUNT, CLOSED, FAILED (nothing paid); or CASINO_EMPTY (the till cannot cover it, or the
+     *         player reached the daily payout limit: nothing paid, pay it later); or PLAYER_GONE (the player left before
      *         the notes could be handed out, the amount went back into the till: pay it again when they are back)
      */
     @NotNull CompletableFuture<CasinoResult> payWin(@NotNull Player player, long amount, @NotNull String game);
+
+    /** The most cash one player may take out of the till in 24 hours, net (wins minus bets); 0: no limit. */
+    long dailyPayoutLimit();
+
+    /**
+     * How much the player may take out of the till right now under the daily payout limit ({@code Long.MAX_VALUE}
+     * without a limit). Main thread; the future completes on the main thread.
+     */
+    @NotNull CompletableFuture<Long> payoutLeft(@NotNull Player player);
+
+    /**
+     * Pays money of the till into the state treasury (Staatskasse), e.g. the exchange fees the casino collected for the
+     * state. Only the till's surplus above the season's start capital can go, i.e. money players left at the casino.
+     * Main thread; the future completes on the main thread.
+     *
+     * @param amount from 1 to {@link #MAX_AMOUNT}
+     * @param reason a short note for the casino's log (letters, digits, space, _ . : - only, cut at 32 characters)
+     * @return OK; or INVALID_AMOUNT, CLOSED, CASINO_EMPTY (the surplus is too small), FAILED (nothing booked)
+     */
+    @NotNull CompletableFuture<CasinoResult> payToTreasury(long amount, @NotNull String reason);
 
 }

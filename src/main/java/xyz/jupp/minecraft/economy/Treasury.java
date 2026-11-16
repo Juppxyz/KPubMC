@@ -57,6 +57,8 @@ public final class Treasury {
         BOUNTY("Kopfgeld"),
         // warps, teleports and team foundings
         FEES("Gebühren"),
+        // what the casino plugin collects for the state (its exchange fees), paid out of the casino till's surplus
+        CASINO("Casino"),
         // the state's money at the start of a season (no income: it does not raise the Bauamt's budget)
         START_CAPITAL("Startkapital");
 

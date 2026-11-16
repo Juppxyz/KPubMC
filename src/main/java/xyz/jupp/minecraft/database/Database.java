@@ -611,7 +611,9 @@ public final class Database {
                 player_uuid UUID,
                 game        TEXT,
                 created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-            )"""
+            )""",
+            // the daily payout limit sums one player's last 24 hours
+            "CREATE INDEX IF NOT EXISTS casino_ledger_player_idx ON casino_ledger (player_uuid, created_at)"
     );
 
     private static volatile HikariDataSource dataSource;

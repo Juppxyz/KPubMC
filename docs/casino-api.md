@@ -15,16 +15,17 @@ Das Casino **darf**:
 
 - Bargeld lesen: Ist ein Item ein gültiger Schein, was ist er wert, wie viel Bargeld trägt ein Spieler.
 - Einen Einsatz nehmen: Scheine aus dem Inventar des Spielers gehen in die Casinokasse.
-- Einen Gewinn auszahlen: Scheine aus der Casinokasse gehen an den Spieler, aber nur, wenn die Kasse ihn decken kann.
+- Einen Gewinn auszahlen: Scheine aus der Casinokasse gehen an den Spieler, aber nur, wenn die Kasse ihn decken kann und der Spieler sein Tageslimit nicht überschreitet.
+- Gebühren an den Staat abführen: Geld aus der Casinokasse geht direkt in die Staatskasse (`payToTreasury`).
 
 Das Casino **kann nicht**:
 
 - Geld auf Bankkonten buchen oder von dort abbuchen. Die API kennt keine Konten.
-- Scheine drucken, die die Casinokasse nicht bezahlt hat.
-- Die Staatskasse anfassen.
+- Scheine drucken, die die Casinokasse nicht bezahlt hat. KPubMC druckt Scheine nur für sich selbst; ein Aufruf aus einem anderen Plugin, auch per Reflection, wird abgelehnt.
+- Geld aus der Staatskasse nehmen.
 - Kreditgeld verspielen. Geld, das an einen Kredit gebunden ist, kann man bei Basil gar nicht als Bargeld abheben.
 
-Damit kann das Casino pro Saison höchstens sein Startkapital (Standard 100.000) plus das, was Spieler dort verloren haben, wieder ausgeben. Mehr Geld kann über das Casino nicht in die Wirtschaft kommen.
+Damit kann das Casino pro Saison höchstens sein Startkapital (Standard 100.000) plus das, was Spieler dort verloren haben, wieder ausgeben, und an einen einzelnen Spieler höchstens das Tageslimit (Standard 20.000 netto in 24 Stunden). Mehr Geld kann über das Casino nicht in die Wirtschaft kommen.
 
 ## Einbinden
 
@@ -58,6 +59,8 @@ mvn install:install-file -Dfile=kpubmc-2.0.0-api.jar -Dsources=kpubmc-2.0.0-api-
 </dependency>
 ```
 
+`payToTreasury`, `dailyPayoutLimit` und `payoutLeft` gibt es ab dem KPubMC-Stand vom 16.11.2026; dafür die neue API-Jar verwenden. `apiVersion()` bleibt 1, ältere Aufrufe laufen unverändert weiter.
+
 **Wichtig:** Die API-Jar **nicht** ins Casino-Plugin einbauen (nicht shaden, nicht `implementation`). Zur Laufzeit kommen die Klassen aus KPubMC. Eine zweite Kopie im Casino-Plugin führt zu `ClassCastException`, oder `KPubEconomy.get()` findet den Dienst nicht.
 
 ## Grundregeln
@@ -73,6 +76,7 @@ mvn install:install-file -Dfile=kpubmc-2.0.0-api.jar -Dsources=kpubmc-2.0.0-api-
 ## Bargeld
 
 - Scheine zu **10, 100 und 1.000** Schilling. Ein Schein ist ein Papier mit unsichtbarer Markierung (Wert und Saison). Der Name ist egal, umbenanntes Papier ist 0 wert.
+- **Jeder gültige Schein trägt den Saison-Stempel, auch in Saison 0.** Ein Papier mit `kpubmc:cash`, aber ohne `kpubmc:cash_season` ist wertlos. Selbst gebaute Scheine (z. B. der alte Legacy-Modus) gelten deshalb auf einem Server mit KPubMC nie.
 - `cash().valueOf(item)` gibt den Wert **eines** Scheins des Stapels zurück, oder 0, wenn es kein gültiger Schein dieser Saison ist.
 - `cash().cashOf(player)` liefert das gesamte gültige Bargeld in den 36 Lagerplätzen (Hotbar und Inventar). Offhand, Rüstung und Cursor zählen nicht.
 - `cash().isOldNote(item)` erkennt einen Schein aus einer alten Saison, z. B. für die Meldung „Deine Scheine sind aus der letzten Saison“.
@@ -86,7 +90,11 @@ CasinoBank casino = KPubEconomy.get().casino();
 casino.balance();       // aktueller Stand
 casino.startCapital();  // Startkapital der Saison
 casino.isOpen();        // false, wenn ein Admin das Casino per Notschalter gestoppt hat
+casino.dailyPayoutLimit();  // höchstens so viel netto pro Spieler in 24 Stunden (0 = kein Limit)
+casino.payoutLeft(player);  // Future: wie viel der Spieler gerade noch auszahlen lassen kann
 ```
+
+**Tageslimit:** Ein Spieler kann in 24 Stunden höchstens `dailyPayoutLimit()` netto aus der Casinokasse bekommen, also Gewinne minus Einsätze. Ein Gewinn darüber wird wie eine leere Kasse abgelehnt (`CASINO_EMPTY`, nichts gezahlt). Den Gewinn behalten (z. B. als Jetons) und später auszahlen; `payoutLeft(player)` sagt, wie viel gerade geht. Das Limit gilt auch für Admin-Auszahlungen.
 
 | Status | Bei `takeBet` | Bei `payWin` |
 |---|---|---|
@@ -94,7 +102,7 @@ casino.isOpen();        // false, wenn ein Admin das Casino per Notschalter gest
 | `INVALID_AMOUNT` | Betrag ungültig, nichts passiert | Betrag ungültig, nichts passiert |
 | `NOT_ENOUGH_CASH` | Spieler hat zu wenig Bargeld, nichts genommen | – |
 | `INVENTORY_FULL` | Wechselgeld passt nicht ins Inventar, nichts genommen | – |
-| `CASINO_EMPTY` | – | Kasse reicht nicht, nichts gezahlt |
+| `CASINO_EMPTY` | – | Kasse reicht nicht oder Tageslimit des Spielers erreicht, nichts gezahlt: **später erneut auszahlen** |
 | `CLOSED` | Admin hat gestoppt, nichts passiert | Admin hat gestoppt, nichts gezahlt: **später erneut auszahlen** |
 | `PLAYER_GONE` | Spieler nicht online, nichts genommen | Spieler ist gerade gegangen, Gewinn ist zurück in der Kasse: **später erneut auszahlen** |
 | `FAILED` | Datenbankfehler, Scheine wurden zurückgegeben | Datenbankfehler, nichts gezahlt |
@@ -107,6 +115,24 @@ Das Casino muss sich um diese Fälle selbst kümmern:
 - **`CASINO_EMPTY` nach genommenem Einsatz:** Mindestens den Einsatz zurückzahlen (`payWin(player, einsatz, "refund")`), und bis die Kasse wieder voll ist, keine neuen Spiele annehmen.
 - **`PLAYER_GONE` oder `CLOSED` bei `payWin`:** Den offenen Gewinn speichern und später erneut mit `payWin` auszahlen, beim nächsten Join oder sobald `isOpen()` wieder `true` ist.
 - **Serverstopp:** Offene Spiele dürfen im `onDisable` des Casinos noch erstattet werden (`payWin`). Beim Stoppen läuft alles sofort, das Future ist schon fertig, wenn der Aufruf zurückkommt.
+
+## Gebühren für den Staat
+
+Was das Casino für den Staat einnimmt (z. B. Gebühren am Geldwechsler), geht **direkt in die Staatskasse**, nie als Bargeld an einen Spieler oder Admin:
+
+```java
+casino.payToTreasury(betrag, "wechselgebuehr").thenAccept(result -> {
+    switch (result.status()) {
+        case OK -> topf -= betrag;                    // ist in der Staatskasse
+        case CASINO_EMPTY, CLOSED -> { }              // im Topf lassen, später nochmal
+        default -> getLogger().warning("Gebühren nicht abgeführt: " + result.status());
+    }
+});
+```
+
+- Abgeführt werden kann nur, was die Casinokasse **über ihrem Startkapital** hat, also Geld, das Spieler im Casino gelassen haben. Das Startkapital selbst darf nicht zu Staatseinnahmen werden.
+- Am besten automatisch, z. B. einmal pro Stunde den ganzen Topf. Ein Knopf zum Abholen als Bargeld wird nicht gebraucht.
+- In der Staatskasse erscheint das unter der Quelle **Casino**.
 
 ## Beispiel: Spielautomat
 
@@ -188,5 +214,6 @@ Fürs Casino heißt das: die Saison zusammen mit den eigenen Daten speichern (si
 ## Für Admins
 
 - Startkapital in der `config.json` von KPubMC: `"casinoStartCapital": 100000`. Es gilt ab der nächsten Saison, eine laufende Kasse wird nicht verändert.
-- `/wirtschaft` zeigt den Stand der Casinokasse und hat einen Notschalter **Casino**. Solange er an ist, sind Einsätze und Gewinne geschlossen.
+- Tageslimit pro Spieler in der `config.json`: `"casinoDailyPayoutLimit": 20000` (0 = kein Limit).
+- `/wirtschaft` zeigt den Stand der Casinokasse, wie viel das Casino in 24 Stunden netto an Spieler ausgezahlt hat und wer am meisten bekommen hat, und hat einen Notschalter **Casino**. Solange er an ist, sind Einsätze, Gewinne und Zahlungen an den Staat geschlossen.
 - Jede Buchung steht in der Tabelle `casino_ledger` mit Spieler, Spiel, Betrag und Zeit.
