@@ -25,6 +25,8 @@ import xyz.jupp.minecraft.economy.Casino;
 import xyz.jupp.minecraft.economy.EconomyApi;
 import xyz.jupp.minecraft.economy.Bankruptcy;
 import xyz.jupp.minecraft.inventory.MainThread;
+import xyz.jupp.minecraft.perf.PerfCommand;
+import xyz.jupp.minecraft.perf.PerfSession;
 import xyz.jupp.minecraft.inventory.WarpView;
 import xyz.jupp.minecraft.economy.Economy;
 import xyz.jupp.minecraft.economy.Hondo;
@@ -108,6 +110,9 @@ public final class Main extends JavaPlugin {
         this.getCommand("mvtp").setExecutor(new WorldTeleportCommand());
         this.getCommand("mvload").setExecutor(new WorldLoadCommand());
         this.getCommand("tabtps").setExecutor(new TabTpsCommand()); // TEMPORARY debug
+        PerfCommand perf = new PerfCommand();
+        this.getCommand("leistung").setExecutor(perf);
+        this.getCommand("leistung").setTabCompleter(perf);
     }
 
     private void registerListener() {
@@ -228,6 +233,8 @@ public final class Main extends JavaPlugin {
     // so the client is only closed once they are done (bounded, Paper itself waits 5 s for them after onDisable).
     @Override
     public void onDisable() {
+        // a running performance measurement ends without a report (its recording is deleted)
+        PerfSession.abort();
         getServer().getScheduler().cancelTasks(this);
         // the deputies leave with KPubMC (PvpBot is still enabled: it loads first, so it is disabled after us)
         Deputies.shutdown();

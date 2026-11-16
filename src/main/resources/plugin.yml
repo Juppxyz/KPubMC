@@ -62,3 +62,6 @@ commands:
   mvtp:
   mvload:
   tabtps: # TEMPORARY debug
+  leistung:
+    aliases: [perf]
+    usage: /<command> [start|stop|status|berichte]
