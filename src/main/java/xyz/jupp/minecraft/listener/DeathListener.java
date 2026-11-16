@@ -23,6 +23,8 @@ import xyz.jupp.minecraft.cache.PlayerCacheObject;
 import xyz.jupp.minecraft.cache.TeamCacheObject;
 import xyz.jupp.minecraft.items.KeepInventoryItem;
 import xyz.jupp.minecraft.jail.Bounties;
+import xyz.jupp.minecraft.jail.Deputies;
+import xyz.jupp.minecraft.utils.Bots;
 import xyz.jupp.minecraft.utils.JailHandler;
 import xyz.jupp.minecraft.utils.Locations;
 import xyz.jupp.minecraft.utils.Tasks;
@@ -71,16 +73,21 @@ public class DeathListener implements Listener {
     @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGHEST)
     public void atDying(PlayerDeathEvent event) {
         Player player = event.getEntity();
+        // a bot (PvpBot) is nobody: no tax, no jail, no team points (Deputies clears a deputy's drops)
+        if (Bots.isBot(player)) return;
 
-        Player killer = player.getKiller();
+        Player killedBy = player.getKiller();
+        // a bot is no hunter: no head, no bounty for anyone; the sheriff's deputies catch like one (no escape)
+        boolean deputyCatch = Deputies.isDeputy(killedBy);
+        Player killer = Bots.isBot(killedBy) ? null : killedBy;
 
         if (isPlayerInArena(player)) {
             event.setShowDeathMessages(false);
             keepInventory(event);
 
             String msg;
-            if (killer != null) {
-                msg = Main.getChatPrefix() + "§a" + player.getName() + " §fwurde von §c" + killer.getName() + " §fin der Arena besiegt!";
+            if (killedBy != null) {
+                msg = Main.getChatPrefix() + "§a" + player.getName() + " §fwurde von §c" + killedBy.getName() + " §fin der Arena besiegt!";
             } else {
                 msg = Main.getChatPrefix() + "§a" + player.getName() + " §fist in der Arena gestorben.";
             }
@@ -127,7 +134,7 @@ public class DeathListener implements Listener {
             }
 
             if (wanted) {
-                jailWanted(player, killer, bountyID, playerTeamID, killerTeamID, wantedEnd);
+                jailWanted(player, killer, bountyID, playerTeamID, killerTeamID, wantedEnd, deputyCatch);
                 return;
             }
             if (killer == null) return;
@@ -153,10 +160,12 @@ public class DeathListener implements Listener {
         sync(() -> player.sendMessage(message));
     }
 
-    // worker thread: the wanted player goes to jail; with a bounty (bountyID) the head dropped and a hunter caught them
-    private static void jailWanted(Player player, Player killer, UUID bountyID, String playerTeamID, String killerTeamID, long wantedEnd) {
+    // worker thread: the wanted player goes to jail; with a bounty (bountyID) the head dropped and a hunter caught them;
+    // deputyCatch: the sheriff's deputies got them (no head, the money players put on it goes back with warrantServed)
+    private static void jailWanted(Player player, Player killer, UUID bountyID, String playerTeamID, String killerTeamID, long wantedEnd,
+                                   boolean deputyCatch) {
         // jailed first, whatever the database says below
-        JailHandler.jailAfterDeath(player, bountyID != null);
+        JailHandler.jailAfterDeath(player, bountyID != null || deputyCatch);
         // the bounty is fixed before the debts behind the warrant count as served (each caps only its own warrant);
         // a failure pays nothing rather than creating money
         int bounty = 0;
@@ -173,6 +182,14 @@ public class DeathListener implements Listener {
             Main.getInstance().getSLF4JLogger().error("Bounty of {} could not be fixed", player.getName(), e);
         }
         String sentence = Main.getChatPrefix() + "§6Deine Haft wurde auf §c" + JailHandler.DEATH_SENTENCE_HOURS + "h §6festgesetzt.";
+        if (deputyCatch) {
+            sync(() -> {
+                player.playSound(player.getLocation(), Sound.BLOCK_IRON_DOOR_CLOSE, 1, 1);
+                player.sendMessage(Main.getChatPrefix() + "§cDie Gehilfen des Sheriffs haben dich gefasst.");
+                player.sendMessage(sentence + " §7(Diesmal ohne Flucht.)");
+            });
+            return;
+        }
         if (killer == null) {
             sync(() -> {
                 player.playSound(player.getLocation(), Sound.BLOCK_DEADBUSH_IDLE, 1, 1);

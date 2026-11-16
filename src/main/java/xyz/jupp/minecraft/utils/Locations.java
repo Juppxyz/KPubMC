@@ -66,6 +66,12 @@ public final class Locations {
             return value >= Math.min(a, b) - below && value < Math.max(a, b) + above;
         }
 
+        /** The location's column lies in the area grown by margin blocks on every side (any height). */
+        public boolean near(@NotNull Location location, int margin) {
+            if (corner1 == null || corner2 == null || location.getWorld() == null || !location.getWorld().getName().equals(world)) return false;
+            return within(location.getX(), corner1[0], corner2[0], margin, 1 + margin) && within(location.getZ(), corner1[2], corner2[2], margin, 1 + margin);
+        }
+
         /** Block column (x, z) inside the area, for a spawn area whatever the height; no Location needed. */
         public boolean containsColumn(@NotNull String worldName, int x, int z) {
             if (corner1 == null || corner2 == null || !worldName.equals(world)) return false;
@@ -148,6 +154,14 @@ public final class Locations {
 
     public static boolean isInArena(@NotNull Location location) {
         return isIn(Kind.ARENA, location);
+    }
+
+    /** The ready spawn area whose column, grown by margin blocks, holds the location; null if none. */
+    public static @Nullable Area spawnAreaNear(@NotNull Location location, int margin) {
+        for (Area area : areas) {
+            if (area.kind() == Kind.SPAWN && area.near(location, margin)) return area;
+        }
+        return null;
     }
 
     /** The block lies in a spawn area (any height); block coordinates only, explosions check every block. */

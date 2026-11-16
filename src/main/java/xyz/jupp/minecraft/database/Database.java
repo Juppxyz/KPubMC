@@ -566,6 +566,10 @@ public final class Database {
                     + "WHERE source IN ('BUILDING_GRANT', 'INTEREST', 'BOUNTY')",
             // the time a wanted player spent online on the run (the state's bounty grows with it)
             "ALTER TABLE players ADD COLUMN IF NOT EXISTS wanted_seconds INTEGER NOT NULL DEFAULT 0",
+            // when the running warrant started (the sheriff's deputies come after Deputies.HUNT_AFTER_DAYS); a warrant
+            // from before the column counts from the first start with it
+            "ALTER TABLE players ADD COLUMN IF NOT EXISTS wanted_since TIMESTAMPTZ",
+            "UPDATE players SET wanted_since = now() WHERE is_wanted AND NOT jail AND wanted_since IS NULL",
             // money players put on a wanted player's head: held until a hunter brings the head, back if the warrant ends
             """
             CREATE TABLE IF NOT EXISTS bounty_pledges (

@@ -4,6 +4,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import xyz.jupp.minecraft.utils.Bots;
 
 import java.util.Map;
 import java.util.UUID;
@@ -15,9 +16,17 @@ final class PlayerCache {
 
     private static final ConcurrentHashMap<UUID, PlayerCacheObject> playerCacheMap = new ConcurrentHashMap<>();
 
+    // bots get a detached entry without a database row (Bots), dropped with their quit
+    private static final ConcurrentHashMap<UUID, PlayerCacheObject> botMap = new ConcurrentHashMap<>();
+
     // Returns the cached object, loads it synchronously if it was not preloaded. Never null.
     static PlayerCacheObject getPlayer(@NotNull Player player) {
         UUID uuid = player.getUniqueId();
+        if (Bots.isBot(player)) {
+            PlayerCacheObject bot = botMap.computeIfAbsent(uuid, PlayerCacheObject::detached);
+            bot.attach(player);
+            return bot;
+        }
         PlayerCacheObject cached = playerCacheMap.get(uuid);
         if (cached == null) {
             PlayerCacheObject loaded = PlayerCacheObject.load(uuid);
@@ -53,6 +62,7 @@ final class PlayerCache {
      * that fresh entry (not attached yet, or attached to the new Player) stays, so the join does not hit the database.
      */
     static void removeSession(@NotNull Player quitting) {
+        botMap.remove(quitting.getUniqueId());
         playerCacheMap.computeIfPresent(quitting.getUniqueId(), (uuid, cached) -> {
             Player attached = cached.attached();
             // the newer session's entry

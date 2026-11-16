@@ -26,6 +26,8 @@ public class PlayerCacheObject {
     private volatile boolean isWanted = false;
     private volatile @Nullable Integer jailCell;
     private volatile boolean caught;
+    // when the running warrant started (epoch millis), 0 without one; mirrors PlayerRepository's wanted_since
+    private volatile long wantedSince;
 
 
     private PlayerCacheObject(@NotNull PlayerData data) {
@@ -39,6 +41,15 @@ public class PlayerCacheObject {
         this.isWanted = data.isWanted();
         this.jailCell = data.jailCell();
         this.caught = data.caught();
+        this.wantedSince = data.wantedSince();
+    }
+
+    /**
+     * For a bot (PvpBot fake player): the defaults of a new player without touching the database, so no listener or
+     * task creates a player row for it. Writes through it hit no row.
+     */
+    static PlayerCacheObject detached(@NotNull UUID uuid) {
+        return new PlayerCacheObject(new PlayerData(uuid, 0, null, false, 0, false, null, false, 0));
     }
 
     // Loads the player from the database (blocking). A missing player is created like on the first login.
@@ -155,6 +166,8 @@ public class PlayerCacheObject {
             this.jailEnd = 0L;
         }
         this.isWanted = isEscaped;
+        // an escape starts a new warrant
+        this.wantedSince = isEscaped ? System.currentTimeMillis() : 0;
         PlayerRepository.unsetJail(uuid, this.jailEnd, this.isWanted);
     }
     public boolean isJail() {
@@ -174,14 +187,38 @@ public class PlayerCacheObject {
     }
     // wanted for a limited time (black market), ends like an escape
     public void setWantedUntil(long wantedEnd) {
+        warrantStartsOrGoesOn();
         this.isWanted = true;
         this.jailEnd = wantedEnd;
         PlayerRepository.setWantedUntil(uuid, wantedEnd);
     }
 
     public void setWanted(boolean wanted) {
+        if (wanted) {
+            warrantStartsOrGoesOn();
+        } else {
+            wantedSince = 0;
+        }
         isWanted = wanted;
         PlayerRepository.setIsWanted(uuid, wanted);
+    }
+
+    // before a warrant is written: a running one keeps its start (like PlayerRepository.WANTED_SINCE_ON_WARRANT)
+    private void warrantStartsOrGoesOn() {
+        long now = System.currentTimeMillis();
+        boolean running = isWanted && !jail && (jailEnd == 0 || jailEnd > now);
+        if (!running || wantedSince == 0) wantedSince = now;
+    }
+
+    /** When the running warrant started (epoch millis), 0 without one. */
+    public long getWantedSince() {
+        return wantedSince;
+    }
+
+    /** Wanted right now: a warrant that has not run out, not in jail. */
+    public boolean isWantedNow() {
+        long end = jailEnd;
+        return isWanted && !jail && (end == 0 || end > System.currentTimeMillis());
     }
 
 

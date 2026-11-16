@@ -8,6 +8,7 @@ import xyz.jupp.minecraft.building.Bauamt;
 import xyz.jupp.minecraft.database.BankLog;
 import xyz.jupp.minecraft.database.Database;
 import xyz.jupp.minecraft.database.DatabaseException;
+import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.jail.Bounties;
 
 import java.sql.Connection;
@@ -495,8 +496,10 @@ public final class Loans {
                 if (account[1] == 1) return null;
                 // not enough: Basil takes what is there, the rest is owed as the apology
                 long taken = account[0];
-                Database.update(connection, "UPDATE players SET money = money - ?, is_wanted = TRUE, jail_end = 0, wanted_seconds = CASE WHEN is_wanted AND NOT jail AND (jail_end = 0 OR jail_end > ?) THEN wanted_seconds ELSE 0 END WHERE uuid = ?",
-                        taken, System.currentTimeMillis(), player);
+                long now = System.currentTimeMillis();
+                Database.update(connection, "UPDATE players SET money = money - ?, is_wanted = TRUE, jail_end = 0, " + PlayerRepository.WANTED_SINCE_ON_WARRANT
+                                + ", wanted_seconds = CASE WHEN is_wanted AND NOT jail AND (jail_end = 0 OR jail_end > ?) THEN wanted_seconds ELSE 0 END WHERE uuid = ?",
+                        taken, now, now, player);
                 toTreasury[0] = bookDefaultPayment(connection, player, loan, taken);
                 Database.update(connection, "UPDATE bank_loans SET state = 'DEFAULTED', paid = ?, closed_at = now() WHERE id = ?", taken, id);
                 BankLog.add(connection, player, BankLog.LOAN_DEFAULT, -taken, null);

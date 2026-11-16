@@ -8,6 +8,7 @@ import xyz.jupp.minecraft.Main;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.List;
 import java.util.UUID;
 
@@ -22,11 +23,14 @@ public final class PlayerRepository {
     public enum TransferResult { SUCCESS, INSUFFICIENT_FUNDS, TARGET_NOT_FOUND }
 
     // the column team_invites (the old /invites switch) is no longer read: invitations are answered in the chat now
-    // jailCell: the prisoner's cell (JailCells), caught: a bounty hunter caught them, no escape this sentence
+    // jailCell: the prisoner's cell (JailCells), caught: a bounty hunter caught them, no escape this sentence;
+    // wantedSince: when the running warrant started (epoch millis), 0 without one
     public record PlayerData(UUID uuid, int money, @Nullable String teamID,
-                             boolean jail, long jailEnd, boolean isWanted, @Nullable Integer jailCell, boolean caught) {}
+                             boolean jail, long jailEnd, boolean isWanted, @Nullable Integer jailCell, boolean caught,
+                             long wantedSince) {}
 
     private static PlayerData map(ResultSet row) throws SQLException {
+        Timestamp wantedSince = row.getTimestamp("wanted_since");
         return new PlayerData(
                 row.getObject("uuid", UUID.class),
                 row.getInt("money"),
@@ -35,8 +39,15 @@ public final class PlayerRepository {
                 row.getLong("jail_end"),
                 row.getBoolean("is_wanted"),
                 row.getObject("jail_cell", Integer.class),
-                row.getBoolean("caught"));
+                row.getBoolean("caught"),
+                wantedSince == null ? 0 : wantedSince.getTime());
     }
+
+    // SQL: the warrant in the row (before the update) is still running, so a new one only extends it
+    private static final String WARRANT_RUNNING = "is_wanted AND NOT jail AND (jail_end = 0 OR jail_end > ?)";
+    /** SET part for a warrant that starts or extends a running one; one parameter: now in millis. */
+    public static final String WANTED_SINCE_ON_WARRANT = "wanted_since = CASE WHEN " + WARRANT_RUNNING
+            + " THEN COALESCE(wanted_since, now()) ELSE now() END";
 
     private static Logger log() {
         return Main.getInstance().getSLF4JLogger();
@@ -143,14 +154,17 @@ public final class PlayerRepository {
     // wanted is written as well: a timed wanted that ran out must not stay TRUE (with jail_end 0 it means "until caught")
     public static void unsetJail(@NotNull UUID uuid, long jailEnd, boolean wanted) {
         // a warrant ends or (after an escape) a new one starts: the time on the run counts from 0
-        Database.update("UPDATE players SET jail = FALSE, jail_end = ?, is_wanted = ?, jail_cell = NULL, caught = FALSE, wanted_seconds = 0 WHERE uuid = ?",
-                jailEnd, wanted, uuid);
+        Database.update("UPDATE players SET jail = FALSE, jail_end = ?, is_wanted = ?, wanted_since = CASE WHEN ? THEN now() END, "
+                        + "jail_cell = NULL, caught = FALSE, wanted_seconds = 0 WHERE uuid = ?",
+                jailEnd, wanted, wanted, uuid);
         log().info("unset jail for {}", uuid);
     }
 
     /** Wanted until the given time (the same end field the escape uses). */
     public static void setWantedUntil(@NotNull UUID uuid, long wantedEnd) {
-        Database.update("UPDATE players SET is_wanted = TRUE, jail_end = ?, wanted_seconds = CASE WHEN is_wanted AND NOT jail AND (jail_end = 0 OR jail_end > ?) THEN wanted_seconds ELSE 0 END WHERE uuid = ?", wantedEnd, System.currentTimeMillis(), uuid);
+        long now = System.currentTimeMillis();
+        Database.update("UPDATE players SET is_wanted = TRUE, jail_end = ?, " + WANTED_SINCE_ON_WARRANT + ", wanted_seconds = CASE WHEN "
+                + WARRANT_RUNNING + " THEN wanted_seconds ELSE 0 END WHERE uuid = ?", wantedEnd, now, now, uuid);
         log().info("set wanted for {} until {}", uuid, wantedEnd);
     }
 
@@ -159,7 +173,7 @@ public final class PlayerRepository {
      * already (a running warrant stays as it is; an expired timed one does not count); true if set.
      */
     public static boolean setWantedUntilCaughtIfFree(@NotNull UUID uuid) {
-        boolean set = Database.update("UPDATE players SET is_wanted = TRUE, jail_end = 0, wanted_seconds = 0 WHERE uuid = ? AND NOT jail"
+        boolean set = Database.update("UPDATE players SET is_wanted = TRUE, jail_end = 0, wanted_since = now(), wanted_seconds = 0 WHERE uuid = ? AND NOT jail"
                 + " AND NOT (is_wanted AND (jail_end = 0 OR jail_end > ?))", uuid, System.currentTimeMillis()) > 0;
         if (set) log().info("set wanted for {} until caught", uuid);
         return set;
@@ -172,16 +186,18 @@ public final class PlayerRepository {
 
     /** Ends a warrant until caught (not a timed one, not a sentence), for a player who is offline. Blocking. */
     public static void clearUntilCaughtWarrant(@NotNull UUID uuid) {
-        if (Database.update("UPDATE players SET is_wanted = FALSE, wanted_seconds = 0 WHERE uuid = ? AND is_wanted AND jail_end = 0 AND NOT jail", uuid) > 0) {
+        if (Database.update("UPDATE players SET is_wanted = FALSE, wanted_since = NULL, wanted_seconds = 0 WHERE uuid = ? AND is_wanted AND jail_end = 0 AND NOT jail", uuid) > 0) {
             log().info("warrant of {} ended", uuid);
         }
     }
 
     public static void setIsWanted(@NotNull UUID uuid, boolean isWanted) {
         if (isWanted) {
-            Database.update("UPDATE players SET is_wanted = TRUE, wanted_seconds = CASE WHEN is_wanted AND NOT jail AND (jail_end = 0 OR jail_end > ?) THEN wanted_seconds ELSE 0 END WHERE uuid = ?", System.currentTimeMillis(), uuid);
+            long now = System.currentTimeMillis();
+            Database.update("UPDATE players SET is_wanted = TRUE, " + WANTED_SINCE_ON_WARRANT + ", wanted_seconds = CASE WHEN "
+                    + WARRANT_RUNNING + " THEN wanted_seconds ELSE 0 END WHERE uuid = ?", now, now, uuid);
         } else {
-            Database.update("UPDATE players SET is_wanted = FALSE WHERE uuid = ?", uuid);
+            Database.update("UPDATE players SET is_wanted = FALSE, wanted_since = NULL WHERE uuid = ?", uuid);
         }
         log().info("set wanted for {} to {}", uuid, isWanted);
     }

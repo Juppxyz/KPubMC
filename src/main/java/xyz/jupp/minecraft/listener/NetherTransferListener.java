@@ -23,6 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import xyz.jupp.minecraft.utils.EndAccess;
 import xyz.jupp.minecraft.economy.Taxes;
 import xyz.jupp.minecraft.Main;
+import xyz.jupp.minecraft.utils.Bots;
 import xyz.jupp.minecraft.utils.Tasks;
 
 public class NetherTransferListener implements Listener {
@@ -89,6 +90,7 @@ public class NetherTransferListener implements Listener {
     public void onEnterNether(PlayerChangedWorldEvent event) {
         Player player = event.getPlayer();
         if (event.getFrom().getEnvironment() != World.Environment.NORMAL || player.getWorld().getEnvironment() != World.Environment.NETHER) return;
+        if (Bots.isBot(player)) return;
         if (exempt.remove(player.getUniqueId())) return;
         chargeNetherTax(player);
     }

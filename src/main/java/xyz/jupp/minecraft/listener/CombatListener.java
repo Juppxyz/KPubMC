@@ -13,6 +13,7 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.Inventory;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.economy.Vault;
+import xyz.jupp.minecraft.utils.Bots;
 import xyz.jupp.minecraft.utils.CombatLock;
 import xyz.jupp.minecraft.utils.JailHandler;
 import xyz.jupp.minecraft.utils.Text;
@@ -57,8 +58,10 @@ public class CombatListener implements Listener {
         // a caught prisoner is out of every fight (PrisonListener cancels their damage, this is the safety net)
         if (JailHandler.isCaughtPrisoner(victim) || JailHandler.isCaughtPrisoner(attacker)) return;
 
-        CombatLock.tag(victim, attacker);
-        CombatLock.tag(attacker, victim);
+        // a bot (the sheriff's deputies) locks its opponent in the fight but is never locked itself: logging out from
+        // it is a death and a catch, removing the bot is nothing
+        if (!Bots.isBot(victim)) CombatLock.tag(victim, attacker);
+        if (!Bots.isBot(attacker)) CombatLock.tag(attacker, victim);
         // no stashing the gear in the ender chest mid-fight
         closeEnderChest(victim);
         closeEnderChest(attacker);
@@ -79,6 +82,10 @@ public class CombatListener implements Listener {
     @EventHandler(priority = EventPriority.LOWEST)
     public void onQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
+        if (Bots.isBot(player)) {
+            CombatLock.untag(player.getUniqueId());
+            return;
+        }
         boolean selfCaused = selfKicked.remove(player.getUniqueId());
         boolean inCombat = CombatLock.isInCombat(player);
         Player opponent = CombatLock.lastOpponent(player);

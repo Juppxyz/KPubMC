@@ -35,6 +35,7 @@ import xyz.jupp.minecraft.economy.ShopViewListener;
 import xyz.jupp.minecraft.economy.Treasury;
 import xyz.jupp.minecraft.economy.Vault;
 import xyz.jupp.minecraft.jail.BountyHeadListener;
+import xyz.jupp.minecraft.jail.Deputies;
 import xyz.jupp.minecraft.jail.JailCells;
 import xyz.jupp.minecraft.jail.PrisonListener;
 import xyz.jupp.minecraft.jail.WantedBoard;
@@ -137,6 +138,7 @@ public final class Main extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new BauplanListener(), this);
         Bukkit.getPluginManager().registerEvents(new BountyHeadListener(), this);
         Bukkit.getPluginManager().registerEvents(new PrisonListener(), this);
+        Bukkit.getPluginManager().registerEvents(new Deputies(), this);
 
         // afk
         Bukkit.getPluginManager().registerEvents(new AfkListener(), this);
@@ -154,6 +156,7 @@ public final class Main extends JavaPlugin {
         Bauamt.startTask();
         PlayerSaves.start();
         WantedBoard.startTask();
+        Deputies.startTask();
     }
 
 
@@ -223,6 +226,8 @@ public final class Main extends JavaPlugin {
     @Override
     public void onDisable() {
         getServer().getScheduler().cancelTasks(this);
+        // the deputies leave with KPubMC (PvpBot is still enabled: it loads first, so it is disabled after us)
+        Deputies.shutdown();
         awaitRunningWorkers(5_000L);
         MainThread.runPending();
         WarpView.refundPending();

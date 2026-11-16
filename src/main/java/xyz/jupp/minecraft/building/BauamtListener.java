@@ -35,6 +35,7 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.world.StructureGrowEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.util.BoundingBox;
+import xyz.jupp.minecraft.utils.Bots;
 import xyz.jupp.minecraft.utils.PermissionsUtil;
 import xyz.jupp.minecraft.utils.Tasks;
 
@@ -217,6 +218,7 @@ public class BauamtListener implements Listener {
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
+        if (Bots.isBot(player)) return;
         Tasks.syncLater(60L, () -> {
             if (player.isOnline()) Bauamt.remind(player);
         });

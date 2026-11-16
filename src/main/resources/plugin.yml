@@ -3,6 +3,8 @@ version: '${project.version}'
 main: xyz.jupp.minecraft.Main
 api-version: '26.3'
 description: "Offizielles Plugin für den KlotzscherPub Minecraft Server. (2025)"
+# optional: the sheriff's deputies (jail/Deputies) are PvpBot fake players; without it they are simply off
+softdepend: [PvpBot]
 
 # usage /<command>: the usage line Bukkit sends on "return false" repeats the typed label (e.g. /geld)
 commands:

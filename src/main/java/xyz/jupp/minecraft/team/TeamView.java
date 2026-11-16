@@ -32,6 +32,7 @@ import xyz.jupp.minecraft.economy.TeamBank;
 import xyz.jupp.minecraft.inventory.Items;
 import xyz.jupp.minecraft.inventory.MainThread;
 import xyz.jupp.minecraft.utils.AreaOptionsEnum;
+import xyz.jupp.minecraft.utils.Bots;
 import xyz.jupp.minecraft.utils.JailHandler;
 import xyz.jupp.minecraft.utils.Locations;
 import xyz.jupp.minecraft.utils.Tasks;
@@ -458,7 +459,7 @@ public final class TeamView implements InventoryHolder {
         for (Player candidate : Bukkit.getOnlinePlayers()) {
             if (slot > 44) break;
             // jailed players cannot run commands, so they could not answer in the chat
-            if (candidate.equals(viewer) || !viewer.canSee(candidate) || JailHandler.isPlayerInJail(candidate)) continue;
+            if (candidate.equals(viewer) || !viewer.canSee(candidate) || Bots.isBot(candidate) || JailHandler.isPlayerInJail(candidate)) continue;
             if (CacheHandler.getInstance().getPlayerInCache(candidate).getTeamID() != null) continue;
             UUID target = candidate.getUniqueId();
             String name = candidate.getName();

@@ -37,6 +37,8 @@ public class AfkHelper {
                 long now = System.currentTimeMillis();
 
                 for (Player p : Bukkit.getOnlinePlayers()) {
+                    // a bot never moves by packets, it would count as idle
+                    if (Bots.isBot(p)) continue;
                     UUID id = p.getUniqueId();
                     long last = lastActivityMs.getOrDefault(id, now);
                     long idleMs = now - last;

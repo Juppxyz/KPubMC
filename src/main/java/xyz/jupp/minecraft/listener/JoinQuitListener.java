@@ -21,6 +21,7 @@ import xyz.jupp.minecraft.economy.Vault;
 import xyz.jupp.minecraft.commands.SpecCommand;
 import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.inventory.Loading;
+import xyz.jupp.minecraft.utils.Bots;
 import xyz.jupp.minecraft.utils.JailHandler;
 import xyz.jupp.minecraft.utils.LastSeen;
 import xyz.jupp.minecraft.utils.Locations;
@@ -59,6 +60,8 @@ public class JoinQuitListener implements Listener {
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         event.joinMessage(Component.empty());
+        // a bot (PvpBot) is no visitor: no message, no first-join teleport, no jail or bank work
+        if (Bots.isBot(player)) return;
 
         int activeState = LastSeen.getJoinState(player);
         applyTeamDisplayNames(player);
@@ -107,6 +110,10 @@ public class JoinQuitListener implements Listener {
         CacheHandler.getInstance().removePlayerFromCache(player);
         Loading.forget(player.getUniqueId());
         Vault.forgetLater(player.getUniqueId());
+        if (Bots.isBot(player)) {
+            event.quitMessage(null);
+            return;
+        }
 
         if (SpecCommand.getSpecMode(player.getUniqueId())) {
             SpecCommand.changeSpecMode(player.getUniqueId());
