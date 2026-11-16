@@ -124,6 +124,8 @@ public final class PerfSession implements Listener {
     });
     // once a second on the main thread
     final List<Integer> players = new ArrayList<>();
+    // who is behind the server's later work (inventory sync, entities): counts, main thread
+    final PerfCauses causes = new PerfCauses();
 
     // baselines for the deltas over the whole measurement
     private final long mainCpuStart;
@@ -156,6 +158,7 @@ public final class PerfSession implements Listener {
         PerfSession session = new PerfSession(starter, Math.max(MIN_SECONDS, Math.min(MAX_SECONDS, seconds)), keepRecording);
         current = session;
         Bukkit.getPluginManager().registerEvents(session, Main.getInstance());
+        session.causes.start();
         session.sampler = Bukkit.getScheduler().runTaskTimer(Main.getInstance(), session::sample, 20L, 20L);
         session.meter.scheduleAtFixedRate(session::measure, 1, 1, TimeUnit.SECONDS);
         if (starter instanceof Player player) player.showBossBar(session.bar);
@@ -171,6 +174,7 @@ public final class PerfSession implements Listener {
         current = null;
         ended = true;
         HandlerList.unregisterAll(this);
+        causes.stop();
         if (sampler != null) sampler.cancel();
         meter.shutdown();
         if (stoppedBy instanceof Player player) recipients.add(player.getUniqueId());
@@ -187,7 +191,15 @@ public final class PerfSession implements Listener {
         }
         // everything that needs the main thread is read now; stopping the recording writes its file, which can take a
         // moment, so that and the analysis happen on a worker
-        Snapshot snapshot = snapshot();
+        Snapshot snapshot;
+        try {
+            snapshot = snapshot();
+        } catch (RuntimeException e) {
+            Main.getInstance().getSLF4JLogger().error("performance measurement could not be finished", e);
+            discardRecording();
+            tell("§cDie Messung konnte nicht abgeschlossen werden, siehe Server-Log.", stoppedBy);
+            return;
+        }
         Main.getInstance().getSLF4JLogger().info("performance measurement finished, the report is being written");
         tell("§7Messung beendet, der Bericht wird erstellt …", stoppedBy);
         Tasks.async(() -> report(snapshot));
@@ -242,6 +254,7 @@ public final class PerfSession implements Listener {
         current = null;
         session.ended = true;
         HandlerList.unregisterAll(session);
+        session.causes.stop();
         if (session.sampler != null) session.sampler.cancel();
         session.meter.shutdownNow();
         session.discardRecording();
@@ -360,6 +373,12 @@ public final class PerfSession implements Listener {
             stop(null);
             return;
         }
+        try {
+            causes.sample(elapsed);
+        } catch (RuntimeException e) {
+            // an odd inventory or item: the counts miss a second, the measurement goes on
+            Main.getInstance().getSLF4JLogger().debug("performance cause sample failed", e);
+        }
         Player starter = starterId == null ? null : Bukkit.getPlayer(starterId);
         if (starter != null) {
             bar.progress((float) Math.min(1.0, elapsed / (double) seconds));
@@ -384,12 +403,13 @@ public final class PerfSession implements Listener {
     /** What the server knows about itself at the end (main thread). */
     record Snapshot(Instant endedAt, long mainCpuNanos, long allocatedBytes, Map<String, long[]> gc, long heapMax,
                     long heapCommitted, int cores, List<WorldInfo> worlds, Map<String, Integer> entityTypes,
-                    List<PluginInfo> plugins, String javaVersion, double[] tps) {}
+                    Map<String, Map<String, Integer>> markedEntities, List<PluginInfo> plugins, ClassLoader serverLoader,
+                    String javaVersion, double[] tps) {}
 
     record WorldInfo(String name, int chunks, int entities, int tileEntities, int tickingTileEntities, int players) {}
 
-    // a plugin and its jar, for the class loader -> plugin map the worker builds
-    record PluginInfo(String name, @Nullable File jar) {}
+    // a plugin, its jar and the jars of its libraries (plugin.yml libraries:), for the class -> plugin map of the worker
+    record PluginInfo(String name, @Nullable File jar, List<File> libraries) {}
 
     private Snapshot snapshot() {
         ThreadMXBean threads = ManagementFactory.getThreadMXBean();
@@ -400,19 +420,28 @@ public final class PerfSession implements Listener {
         }
         List<WorldInfo> worlds = new ArrayList<>();
         Map<String, Integer> types = new HashMap<>();
+        Map<String, Map<String, Integer>> marked = new HashMap<>();
         for (World world : Bukkit.getWorlds()) {
             worlds.add(new WorldInfo(world.getName(), world.getChunkCount(), world.getEntityCount(), world.getTileEntityCount(),
                     world.getTickableTileEntityCount(), world.getPlayerCount()));
-            for (Entity entity : world.getEntities()) types.merge(entity.getType().name().toLowerCase(Locale.ROOT), 1, Integer::sum);
+            for (Entity entity : world.getEntities()) {
+                String type = PerfCauses.type(entity);
+                types.merge(type, 1, Integer::sum);
+                // players carry plugin data too (e.g. a stashed hotbar): they are no plugin's entities
+                if (entity instanceof Player) continue;
+                for (String plugin : causes.markersOf(entity)) marked.computeIfAbsent(plugin, k -> new HashMap<>()).merge(type, 1, Integer::sum);
+            }
         }
         List<PluginInfo> plugins = new ArrayList<>();
-        for (Plugin plugin : Bukkit.getPluginManager().getPlugins()) plugins.add(new PluginInfo(plugin.getName(), jarOf(plugin)));
+        for (Plugin plugin : Bukkit.getPluginManager().getPlugins()) {
+            plugins.add(new PluginInfo(plugin.getName(), jarOf(plugin), librariesOf(plugin)));
+        }
         MemoryMXBean memory = ManagementFactory.getMemoryMXBean();
         long allocated = totalAllocated(threads);
         Snapshot result = new Snapshot(Instant.now(), Math.max(0, threadCpu(threads, mainThread) - mainCpuStart),
                 allocated < 0 || allocatedStart < 0 ? -1 : allocated - allocatedStart, gc,
                 memory.getHeapMemoryUsage().getMax(), memory.getHeapMemoryUsage().getCommitted(),
-                Runtime.getRuntime().availableProcessors(), worlds, types, plugins,
+                Runtime.getRuntime().availableProcessors(), worlds, types, marked, plugins, Bukkit.class.getClassLoader(),
                 System.getProperty("java.version", "?"), Bukkit.getTPS());
         return result;
     }
@@ -426,6 +455,29 @@ public final class PerfSession implements Listener {
         } catch (Exception | LinkageError e) {
             return null;
         }
+    }
+
+    /*
+     * The jars Paper loaded for the plugin's "libraries:" (Maven downloads): its PluginClassLoader keeps them in an own
+     * URLClassLoader (field "libraryLoader"). Paper internals, so anything unexpected just means "none".
+     */
+    private static List<File> librariesOf(Plugin plugin) {
+        List<File> jars = new ArrayList<>();
+        try {
+            ClassLoader loader = plugin.getClass().getClassLoader();
+            if (!(loader instanceof org.bukkit.plugin.java.PluginClassLoader)) return jars;
+            java.lang.reflect.Field field = org.bukkit.plugin.java.PluginClassLoader.class.getDeclaredField("libraryLoader");
+            field.setAccessible(true);
+            if (field.get(loader) instanceof java.net.URLClassLoader libraries) {
+                for (java.net.URL url : libraries.getURLs()) {
+                    File file = new File(url.toURI());
+                    if (file.isFile()) jars.add(file);
+                }
+            }
+        } catch (Exception | LinkageError e) {
+            // another Paper: no library attribution
+        }
+        return jars;
     }
 
     private static long threadCpu(ThreadMXBean threads, Thread thread) {

@@ -52,11 +52,18 @@ final class PerfReport {
             {"Server: Mob-Spawning", "net.minecraft.world.level.NaturalSpawner"},
             {"Server: Entity-Tracking (Bewegungen an Spieler senden)", "net.minecraft.server.level.ChunkMap$TrackedEntity",
                     "net.minecraft.server.level.ServerEntity"},
+            {"Server: Inventar-Abgleich (geänderte Items an Spieler senden)",
+                    "net.minecraft.world.inventory.AbstractContainerMenu#broadcastChanges",
+                    "net.minecraft.world.inventory.AbstractContainerMenu#broadcastFullState",
+                    "net.minecraft.world.inventory.AbstractContainerMenu#sendAllDataToRemote",
+                    "net.minecraft.world.inventory.AbstractContainerMenu#triggerSlotListeners",
+                    "net.minecraft.world.inventory.AbstractContainerMenu#synchronizeSlotToRemote",
+                    "net.minecraft.world.inventory.AbstractContainerMenu#synchronizeCarriedToRemote"},
             {"Server: Block-Entities (Trichter, Öfen, Spawner …)", "net.minecraft.world.level.block.entity.",
                     "net.minecraft.world.level.chunk.LevelChunk$BoundTickingBlockEntity",
                     "net.minecraft.world.level.chunk.LevelChunk$RebindableTickingBlockEntityWrapper",
                     "net.minecraft.world.level.Level#tickBlockEntities"},
-            {"Server: Spieler (Ticks, Inventare, Fortschritte)", "net.minecraft.server.level.ServerPlayer#doTick",
+            {"Server: Spieler (Ticks, Fortschritte)", "net.minecraft.server.level.ServerPlayer#doTick",
                     "net.minecraft.server.level.ServerPlayer#tick", "net.minecraft.server.players.", "net.minecraft.server.PlayerAdvancements"},
             {"Server: Spieler-Pakete (Bewegung, Klicks, Chat)", "net.minecraft.server.network.", "net.minecraft.network.", "io.netty."},
             {"Server: Entities (Mobs, Tiere, Items, Loren)", "net.minecraft.server.level.ServerLevel#tickNonPassenger",
@@ -73,6 +80,7 @@ final class PerfReport {
             {"Server: Welt (Wetter, Dörfer, Raids, Sonstiges)", "net.minecraft.world.level.", "net.minecraft.server.level."},
     };
     private static final String SERVER_REST = "Server: Rest (Java, Sonstiges)";
+    static final String INVENTORY_SYNC = "Server: Inventar-Abgleich (geänderte Items an Spieler senden)";
     // the tick loop waiting between ticks (no work: left out of the shares)
     private static final String IDLE = "Leerlauf zwischen den Ticks";
     private static final Set<String> IDLE_METHODS = Set.of("runServer", "waitUntilNextTick", "managedBlock", "haveTime",
@@ -142,17 +150,50 @@ final class PerfReport {
     /*
      * A frame's class -> its plugin, by the class loader JFR recorded for it: Paper names a plugin's loader after the
      * plugin's jar. A class of the server (or Java) has another loader and never counts for a plugin, even if a plugin
-     * shaded the same library. Only for a plugin loader we cannot place by name, the jar contents decide.
+     * shaded the same library. Libraries a plugin lists under "libraries:" come from an unnamed loader like the server's
+     * own classes: such a class counts for the plugin if it is in one of the plugin's library jars and the server cannot
+     * load it itself (Paper's library loader asks the server first, so a class the server has is the server's).
      */
     private static final class Owners {
         final Map<String, String> jarNames = new HashMap<>();
         final Map<String, String> classes = new HashMap<>();
+        final Map<String, String> libraryClasses = new HashMap<>();
         final Map<String, String> cache = new HashMap<>();
+        final Map<String, Boolean> serverHas = new HashMap<>();
+        final ClassLoader serverLoader;
 
-        Owners(List<PerfSession.PluginInfo> plugins) {
+        Owners(List<PerfSession.PluginInfo> plugins, ClassLoader serverLoader) {
+            this.serverLoader = serverLoader;
             for (PerfSession.PluginInfo plugin : plugins) {
                 if (plugin.jar() != null) jarNames.put(plugin.jar().getName(), plugin.name());
+                for (java.io.File library : plugin.libraries()) {
+                    try (java.util.jar.JarFile jar = new java.util.jar.JarFile(library)) {
+                        var entries = jar.entries();
+                        while (entries.hasMoreElements()) {
+                            String path = entries.nextElement().getName();
+                            if (!path.endsWith(".class") || path.startsWith("META-INF/")) continue;
+                            libraryClasses.merge(path.substring(0, path.length() - 6).replace('/', '.'), plugin.name(),
+                                    (a, b) -> a.equals(b) || a.contains(b) ? a : a + ", " + b);
+                        }
+                    } catch (IOException e) {
+                        // unreadable library jar: its classes count for the server
+                    }
+                }
             }
+        }
+
+        // the plugin whose library a class of an unnamed loader comes from, null for the server's own classes
+        private @Nullable String library(String name) {
+            if (libraryClasses.isEmpty()) return null;
+            int lambda = name.indexOf("$$Lambda");
+            String plain = lambda > 0 ? name.substring(0, lambda) : name;
+            String plugin = libraryClasses.get(plain);
+            if (plugin == null && plain.indexOf('$') > 0) plugin = libraryClasses.get(plain.substring(0, plain.indexOf('$')));
+            if (plugin == null) return null;
+            boolean server = serverHas.computeIfAbsent(plain, n -> serverLoader.getResource(n.replace('.', '/') + ".class") != null);
+            if (server) return null;
+            // listed by several plugins: JFR cannot tell whose copy ran
+            return plugin.contains(", ") ? "Bibliothek von " + plugin : plugin;
         }
 
         // only needed for loaders without a known name (built on first use)
@@ -180,8 +221,15 @@ final class PerfReport {
             String loaderName = loader == null ? null : loader.getName();
             String loaderType = loader == null || loader.getType() == null ? "" : loader.getType().getName();
             if (!loaderType.contains("PluginClassLoader")) {
-                // the server's, Java's or a library loader: not a plugin's own code
-                return null;
+                // Java's own loaders: never a plugin
+                if (loader == null || "bootstrap".equals(loaderName) || "platform".equals(loaderName) || "app".equals(loaderName)) return null;
+                // the server's loader or a plugin's library loader (both unnamed)
+                String key = "lib|" + name;
+                String hit = cache.get(key);
+                if (hit != null) return hit.isEmpty() ? null : hit;
+                String plugin = library(name);
+                cache.put(key, plugin == null ? "" : plugin);
+                return plugin;
             }
             String key = loaderName + '|' + name;
             String hit = cache.get(key);
@@ -320,7 +368,7 @@ final class PerfReport {
         if (jfr == null || !Files.isRegularFile(jfr)) {
             breakdownProblem = session.recorderProblem == null ? "keine Aufnahme" : session.recorderProblem;
         } else {
-            Owners owners = new Owners(snap.plugins());
+            Owners owners = new Owners(snap.plugins(), snap.serverLoader());
             long mainId = session.mainThread.threadId();
             long events = 0;
             try (jdk.jfr.consumer.RecordingFile file = new jdk.jfr.consumer.RecordingFile(jfr)) {
@@ -405,8 +453,16 @@ final class PerfReport {
             gcMxCount += gc[0];
             gcMxMs += gc[1];
         }
-        // main-thread work per tick from the samples (in and between ticks, without idle)
-        double sampledPerTick = main.total * SAMPLE_MS / tickCount;
+        /*
+         * Main-thread work per tick: the thread's exact CPU time (in and between ticks, also native code), split by the
+         * samples. Idle samples (the tick loop waiting) take their share of the CPU time and are then left out. Without
+         * CPU time from the JVM: samples x 10 ms.
+         */
+        long allSamples = main.total + idle;
+        double cpuPerTick = snap.mainCpuNanos() / 1e6 / tickCount;
+        boolean byCpu = snap.mainCpuNanos() > 0 && allSamples > 0;
+        double msPerSample = byCpu ? cpuPerTick / allSamples : SAMPLE_MS / tickCount;
+        double sampledPerTick = main.total * msPerSample;
 
         report.chat.add("§8§m          §r §6§lLeistungsmessung §8§m          ");
         report.chat.add("§7" + Math.round(wallSeconds) + " s, Ø §f" + Math.round(playersAvg) + " §7Spieler (" + playersMin + "–"
@@ -466,8 +522,10 @@ final class PerfReport {
             report.chat.add("§6Haupt-Thread §7(ms Arbeit pro Tick, Anteil am 50-ms-Budget):");
             md.append("## Haupt-Thread nach Verursacher\n\n");
             md.append("Jede Stichprobe (alle 10 ms) zählt für das Plugin, dessen Code ihr auf dem Stapel am nächsten ist, sonst für ")
-                    .append("einen Teil des Servers. ms pro Tick = Stichproben × 10 ms ÷ Ticks; das umfasst auch die Arbeit, die Paper ")
-                    .append("zwischen den Ticks erledigt (Spieler-Pakete, Chunk-Aufgaben). ")
+                    .append("einen Teil des Servers. ")
+                    .append(byCpu ? "Die genaue CPU-Zeit des Haupt-Threads (" + ms(cpuPerTick) + " ms pro Tick) wird nach den Stichproben verteilt"
+                            : "ms pro Tick = Stichproben × 10 ms ÷ Ticks")
+                    .append("; das umfasst auch die Arbeit, die Paper zwischen den Ticks erledigt (Spieler-Pakete, Chunk-Aufgaben). ")
                     .append(main.total).append(" Stichproben mit Arbeit = ").append(ms(sampledPerTick)).append(" ms pro Tick")
                     .append(idle > 0 ? "; " + idle + " im Leerlauf zwischen den Ticks, nicht mitgezählt" : "").append(".\n\n");
             md.append("| Verursacher | Anteil | ms pro Tick | vom Budget | Stellen mit der meisten Zeit |\n|---|---|---|---|---|\n");
@@ -475,7 +533,7 @@ final class PerfReport {
             for (Map.Entry<String, long[]> entry : main.ranked()) {
                 long samples = entry.getValue()[0];
                 double share = samples / (double) Math.max(1, main.total);
-                double perTick = samples * SAMPLE_MS / tickCount;
+                double perTick = samples * msPerSample;
                 String owner = entry.getKey();
                 List<Map.Entry<String, long[]>> hot = main.topFrames(owner, 3);
                 StringBuilder where = new StringBuilder();
@@ -521,10 +579,12 @@ final class PerfReport {
                 Map.Entry<String, long[]> culprit = top.owners().isEmpty() ? null : sortedDesc(top.owners()).getFirst();
                 String why;
                 if (top.gcMs()[0] >= top.ms() / 2) why = ", vor allem eine GC-Pause (" + ms(top.gcMs()[0]) + " ms)";
-                else if (culprit != null) why = ", meist §f" + culprit.getKey() + " §7(" + culprit.getValue()[0] + " Stichproben)";
-                else why = " §7(ohne Stichprobe: Warten)";
+                else if (culprit != null && culprit.getValue()[0] >= 3) why = ", meist §f" + culprit.getKey() + " §7(" + culprit.getValue()[0] + " Stichproben)";
+                else why = " §7(kaum Stichproben: der Haupt-Thread hat vor allem gewartet" + (top.gcMs()[0] > 0 ? ", GC " + ms(top.gcMs()[0]) + " ms" : "") + ")";
                 report.chat.add("§7Schlimmste Spitze: §f" + ms(top.ms()) + " ms §7um " + CLOCK.format(top.start()) + why);
             }
+
+            causes(session, snap, main, msPerSample, md, report.chat);
 
             // other threads
             md.append("## Andere Threads (nicht im Tick-Budget)\n\n");
@@ -589,8 +649,8 @@ final class PerfReport {
 
         md.append("\n## Hinweise\n\n");
         md.append("- Die Aufschlüsselung ist eine Stichprobe (alle 10 ms). Anteile unter etwa 1 % sind grob.\n");
-        md.append("- Plugins werden über ihren Classloader erkannt. Code aus Bibliotheken, die ein Plugin über `libraries:` nachlädt, ")
-                .append("zählt beim Server.\n");
+        md.append("- Plugins werden über ihren Classloader erkannt, Bibliotheken aus `libraries:` über die Jars, die Paper dafür ")
+                .append("geladen hat. Eine Bibliothek, die auch der Server mitbringt, zählt beim Server (Paper nimmt dann dessen Kopie).\n");
         md.append("- „Messung selbst“ ist der Aufwand dieser Messung; die Aufnahme kostet zusätzlich etwa 1–2 % CPU.\n");
         if (session.keepRecording && recorded && !keepRefused && jfr != null) {
             md.append("- Die Aufnahme liegt als `").append(jfr.getFileName()).append("` daneben (öffnen mit JDK Mission Control).\n");
@@ -604,6 +664,89 @@ final class PerfReport {
         Files.writeString(file, md.toString(), StandardCharsets.UTF_8);
         report.chat.add("§7Ganzer Bericht: §f" + file.toString().replace('\\', '/') + " §7(/leistung berichte)");
         return report;
+    }
+
+    /*
+     * Work the server does later on a plugin's behalf (inventory sync, entity ticks and tracking) shows up under the
+     * server; these counts name the plugins most likely behind it.
+     */
+    private static void causes(PerfSession session, PerfSession.Snapshot snap, Tally main, double msPerSample, StringBuilder md,
+                               List<String> chat) {
+        PerfCauses causes = session.causes;
+        Set<String> plugins = new java.util.TreeSet<>();
+        plugins.addAll(causes.slotChanges.keySet());
+        plugins.addAll(causes.hotbarPlayers.keySet());
+        plugins.addAll(causes.openMenus.keySet());
+        plugins.addAll(causes.spawned.keySet());
+        plugins.addAll(snap.markedEntities().keySet());
+        if (plugins.isEmpty()) return;
+        double syncMs = main.owners.getOrDefault(INVENTORY_SYNC, new long[1])[0] * msPerSample;
+        double entityMs = 0;
+        for (Map.Entry<String, long[]> entry : main.owners.entrySet()) {
+            if (entry.getKey().startsWith("Server: Entit")) entityMs += entry.getValue()[0] * msPerSample;
+        }
+        int samples = Math.max(1, causes.samples);
+
+        md.append("## Wer steckt hinter der späteren Arbeit des Servers?\n\n");
+        md.append("Ändert ein Plugin Items, gleicht der Server sie im nächsten Tick des Spielers ab („Inventar-Abgleich“, hier ")
+                .append(ms(syncMs)).append(" ms pro Tick). Spawnt ein Plugin Displays oder Rahmen, tickt und verfolgt der Server ")
+                .append("sie danach jeden Tick („Entities“ und „Entity-Tracking“, hier zusammen ").append(ms(entityMs))
+                .append(" ms pro Tick). Das sieht keine Stichprobe beim Plugin, deshalb hier Zählungen: wessen Items sich ändern ")
+                .append("(an der Plugin-Markierung des Items, in jeder zehnten Sekunde gezählt), wessen Items in den Hotbars liegen, ")
+                .append("wessen Menüs offen sind und wessen Entities es gibt. Gezählt werden Änderungen im Inventar der Spieler ")
+                .append("(nicht in geöffneten Menüs); Menüs zählen nur, wenn ein Plugin als Besitzer eingetragen ist. Ein Item mit ")
+                .append("mehreren Markierungen zählt für jedes dieser Plugins. Alle Änderungen zusammen: ")
+                .append(String.format(Locale.GERMANY, "%.0f", causes.allSlotRate())).append(" pro s.\n\n");
+        md.append("| Plugin | Slot-Änderungen pro s | Spieler mit seinen Items in der Hotbar (Ø) | offene Menüs (Ø) | ")
+                .append("Entities mit seiner Markierung | während der Messung gespawnt |\n|---|---|---|---|---|---|\n");
+        String topSync = null;
+        double topRate = 0;
+        for (String plugin : plugins) {
+            double rate = causes.slotRate(plugin);
+            if (rate > topRate && !plugin.equals(PerfCauses.UNMARKED)) {
+                topRate = rate;
+                topSync = plugin;
+            }
+            double hotbar = causes.hotbarPlayers.getOrDefault(plugin, new long[1])[0] / (double) samples;
+            double menus = causes.openMenus.getOrDefault(plugin, new long[1])[0] / (double) samples;
+            md.append("| ").append(plugin).append(" | ").append(String.format(Locale.GERMANY, "%.0f", rate)).append(" | ")
+                    .append(String.format(Locale.GERMANY, "%.1f", hotbar)).append(" | ")
+                    .append(String.format(Locale.GERMANY, "%.1f", menus)).append(" | ")
+                    .append(entityList(snap.markedEntities().get(plugin))).append(" | ")
+                    .append(entityList(causes.spawned.get(plugin))).append(" |\n");
+        }
+        md.append('\n');
+        if (topSync != null && syncMs >= 0.05) {
+            chat.add("§7Inventar-Abgleich §f" + ms(syncMs) + " ms§7: häufigste geänderte Items von §f" + topSync + " §7("
+                    + String.format(Locale.GERMANY, "%.0f", topRate) + " von " + String.format(Locale.GERMANY, "%.0f", causes.allSlotRate())
+                    + " Änderungen/s)");
+        }
+        String topEntities = null;
+        int topCount = 0;
+        for (Map.Entry<String, Map<String, Integer>> entry : snap.markedEntities().entrySet()) {
+            int count = entry.getValue().values().stream().mapToInt(Integer::intValue).sum();
+            if (count > topCount) {
+                topCount = count;
+                topEntities = entry.getKey();
+            }
+        }
+        if (topEntities != null && entityMs >= 0.05) {
+            int all = snap.worlds().stream().mapToInt(PerfSession.WorldInfo::entities).sum();
+            chat.add("§7Entities §f" + ms(entityMs) + " ms§7: §f" + topCount + " §7von " + all + " tragen die Markierung von §f" + topEntities);
+        }
+    }
+
+    private static String entityList(@Nullable Map<String, Integer> types) {
+        if (types == null || types.isEmpty()) return "–";
+        List<Map.Entry<String, Integer>> list = new ArrayList<>(types.entrySet());
+        list.sort((a, b) -> Integer.compare(b.getValue(), a.getValue()));
+        int total = list.stream().mapToInt(Map.Entry::getValue).sum();
+        StringBuilder text = new StringBuilder().append(total).append(" (");
+        for (int i = 0; i < Math.min(3, list.size()); i++) {
+            if (i > 0) text.append(", ");
+            text.append(list.get(i).getValue()).append(' ').append(list.get(i).getKey());
+        }
+        return text.append(list.size() > 3 ? ", …)" : ")").toString();
     }
 
     private static @Nullable Spike spikeAt(List<Spike> spikes, Instant at) {
