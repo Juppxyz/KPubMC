@@ -34,6 +34,7 @@ import xyz.jupp.minecraft.economy.Services;
 import xyz.jupp.minecraft.economy.ShopViewListener;
 import xyz.jupp.minecraft.economy.Treasury;
 import xyz.jupp.minecraft.economy.Vault;
+import xyz.jupp.minecraft.jail.Bounties;
 import xyz.jupp.minecraft.jail.BountyHeadListener;
 import xyz.jupp.minecraft.jail.Deputies;
 import xyz.jupp.minecraft.jail.JailCells;
@@ -139,6 +140,7 @@ public final class Main extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new BountyHeadListener(), this);
         Bukkit.getPluginManager().registerEvents(new PrisonListener(), this);
         Bukkit.getPluginManager().registerEvents(new Deputies(), this);
+        Bukkit.getPluginManager().registerEvents(new ChatPrompt(), this);
 
         // afk
         Bukkit.getPluginManager().registerEvents(new AfkListener(), this);
@@ -208,7 +210,8 @@ public final class Main extends JavaPlugin {
         Logger.console("loaded " + mapAreas + " ready spawn areas and arenas");
         int jailCells = JailCells.load();
         int boardSpots = WantedBoard.load();
-        Logger.console("loaded " + jailCells + " ready jail cells, " + boardSpots + " wanted board spots");
+        int contracts = Bounties.load();
+        Logger.console("loaded " + jailCells + " ready jail cells, " + boardSpots + " wanted board spots, " + contracts + " open contracts");
         Logger.console("loaded " + Market.all().size() + " market items, " + Market.dailyOffers().size() + " daily offers, "
                 + Bauamt.templates().size() + " building templates, " + Bauamt.builds().size() + " builds");
         registerCommands();

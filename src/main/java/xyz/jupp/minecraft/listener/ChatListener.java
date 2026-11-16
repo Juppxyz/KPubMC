@@ -28,7 +28,8 @@ public class ChatListener implements Listener {
     private static final PlainTextComponentSerializer PLAIN = PlainTextComponentSerializer.plainText();
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.of("Europe/Berlin"));
 
-    @EventHandler
+    // ignoreCancelled: an answer to a question (ChatPrompt) or a muted line is no chat message to format
+    @EventHandler(ignoreCancelled = true)
     public void onChat(AsyncChatEvent event) {
         final Player player = event.getPlayer();
         final PlayerCacheObject pco = CacheHandler.getInstance().getPlayerInCache(player);

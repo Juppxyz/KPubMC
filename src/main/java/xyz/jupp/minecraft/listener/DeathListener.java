@@ -121,9 +121,12 @@ public class DeathListener implements Listener {
         long wantedEnd = playerCacheObject.getJailEnd();
         String playerTeamID = playerCacheObject.getTeamID();
         String killerTeamID = killer == null ? null : CacheHandler.getInstance().getPlayerInCache(killer).getTeamID();
-        boolean bounty = wanted && killer != null && killer != player && (playerTeamID == null || !playerTeamID.equals(killerTeamID));
-        UUID bountyID = bounty ? UUID.randomUUID() : null;
-        if (bounty) event.getDrops().add(Bounties.head(bountyID, player, playerTeamID, killer.getName()));
+        boolean outsider = killer != null && killer != player && (playerTeamID == null || !playerTeamID.equals(killerTeamID));
+        boolean bounty = wanted && outsider;
+        // players' money on someone who is not wanted (a contract): the head drops too, nobody is jailed
+        boolean contract = !wanted && outsider && Bounties.hasContract(player.getUniqueId());
+        UUID bountyID = bounty || contract ? UUID.randomUUID() : null;
+        if (bountyID != null) event.getDrops().add(Bounties.head(bountyID, player, playerTeamID, killer.getName()));
 
         Tasks.async(() -> {
             try {
@@ -138,7 +141,23 @@ public class DeathListener implements Listener {
                 return;
             }
             if (killer == null) return;
+            if (contract) recordContract(player, killer, bountyID, playerTeamID);
             settleTeamKill(player, killer, playerCacheObject, CacheHandler.getInstance().getPlayerInCache(killer));
+        });
+    }
+
+    // worker thread: the contract on a player who is not wanted went with the head; only the players' money is on it
+    private static void recordContract(Player player, Player killer, UUID bountyID, String playerTeamID) {
+        try {
+            Bounties.record(bountyID, player.getUniqueId(), player.getName(), playerTeamID, killer.getUniqueId(), 0, true);
+        } catch (RuntimeException e) {
+            Main.getInstance().getSLF4JLogger().error("Contract on {} could not be fixed", player.getName(), e);
+            return;
+        }
+        sync(() -> {
+            killer.sendMessage(Main.getChatPrefix() + "§fAuf §c" + player.getName() + " §fwar ein Kopfgeld von Spielern ausgesetzt. Bring den Kopf zum §9Sheriff§f.");
+            killer.playSound(killer.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1, 1);
+            player.sendMessage(Main.getChatPrefix() + "§cAuf dich war ein Kopfgeld ausgesetzt, §f" + killer.getName() + " §chat es sich geholt.");
         });
     }
 
@@ -173,7 +192,7 @@ public class DeathListener implements Listener {
             if (bountyID != null) {
                 bounty = Loans.bounty(player.getUniqueId(), wantedEnd);
                 // the money players put on the head goes with it
-                Bounties.record(bountyID, player.getUniqueId(), player.getName(), playerTeamID, killer.getUniqueId(), bounty);
+                Bounties.record(bountyID, player.getUniqueId(), player.getName(), playerTeamID, killer.getUniqueId(), bounty, false);
                 // the loan part of the bounty becomes debt of the defaulter (garnished like the rest)
                 Loans.chargeBounty(player.getUniqueId(), bounty);
             }

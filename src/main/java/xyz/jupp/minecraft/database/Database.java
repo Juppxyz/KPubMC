@@ -583,6 +583,11 @@ public final class Database {
                 refunded_at  TIMESTAMPTZ
             )""",
             "CREATE INDEX IF NOT EXISTS bounty_pledges_open_idx ON bounty_pledges (wanted_uuid) WHERE paid_at IS NULL AND refunded_at IS NULL",
+            // a contract: money on someone who is not wanted (Bounties.pledgeContract), with the sponsor's reason; its
+            // head pays only the players' money, no team points
+            "ALTER TABLE bounty_pledges ADD COLUMN IF NOT EXISTS reason TEXT",
+            "ALTER TABLE bounty_pledges ADD COLUMN IF NOT EXISTS contract BOOLEAN NOT NULL DEFAULT FALSE",
+            "ALTER TABLE bounties ADD COLUMN IF NOT EXISTS contract BOOLEAN NOT NULL DEFAULT FALSE",
             // the random item: one draw per player and day
             "CREATE TABLE IF NOT EXISTS random_draws (day DATE NOT NULL, player_uuid UUID NOT NULL, PRIMARY KEY (day, player_uuid))",
             // what every holder had at a measurement, so the growth compares the same holders on both days
