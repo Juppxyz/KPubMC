@@ -179,6 +179,12 @@ public final class PlayerRepository {
         return set;
     }
 
+    /** Test mode (admins): the running warrant counts as started at that time (epoch millis). */
+    public static void setWantedSince(@NotNull UUID uuid, long since) {
+        Database.update("UPDATE players SET wanted_since = ? WHERE uuid = ? AND is_wanted", new Timestamp(since), uuid);
+        log().info("warrant of {} backdated to {}", uuid, new Timestamp(since));
+    }
+
     /** Blocking: a wanted player was online on the run for these seconds more. */
     public static void addWantedSeconds(@NotNull UUID uuid, int seconds) {
         Database.update("UPDATE players SET wanted_seconds = wanted_seconds + ? WHERE uuid = ? AND is_wanted AND NOT jail", seconds, uuid);

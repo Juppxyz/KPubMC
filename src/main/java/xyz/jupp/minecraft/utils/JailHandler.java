@@ -128,6 +128,27 @@ public final class JailHandler {
         return markWantedUntilCaught(player, reason);
     }
 
+    /**
+     * Test mode (admins): wanted until caught, as if the warrant had run for days already (the sheriff's deputies and
+     * the sighting go by its age); no broadcast. false for a prisoner.
+     */
+    public static boolean markWantedForTest(@NotNull Player player, int days) {
+        PlayerCacheObject pco = cache(player);
+        if (pco.isJail()) return false;
+        wantedPlayers.add(player.getUniqueId());
+        long since = System.currentTimeMillis() - days * 24L * 60L * 60L * 1000L;
+        offMainThread(() -> {
+            synchronized (LOCK) {
+                // jailed meanwhile: the sentence stays as it is
+                if (pco.isJail()) return;
+                pco.setWantedUntil(0);
+                pco.backdateWanted(since);
+            }
+            refreshPlayerName(player, pco);
+        });
+        return true;
+    }
+
     /** Main thread: ends a warrant until caught (not a timed one, not a sentence); true if one was ended. */
     public static boolean clearWantedIfUntilCaught(@NotNull Player player) {
         PlayerCacheObject pco = cache(player);

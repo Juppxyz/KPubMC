@@ -353,11 +353,33 @@ public final class Bauamt {
         if (!template.enabled()) return OrderOutcome.DISABLED;
         if (!orderable(template, refreshFunding())) return OrderOutcome.UNAFFORDABLE;
         if (openOrders(player, template.id()) >= ORDERS_PER_TEMPLATE) return OrderOutcome.LIMIT;
+        addOrder(player, template);
+        return OrderOutcome.OK;
+    }
+
+    /**
+     * Test mode (admins, /bauamt testauftrag): an order whatever the treasury says. A young server has no income yet,
+     * so no grant and no order; with this one the building plan, the finish notice and the registration can be tried.
+     * The grant itself is still paid only as far as the treasury allows (no money from nothing). Worker.
+     */
+    public static @NotNull OrderOutcome takeTestOrder(@NotNull UUID player, @NotNull Blueprint template) {
+        if (!template.enabled()) return OrderOutcome.DISABLED;
+        if (openOrders(player, template.id()) >= ORDERS_PER_TEMPLATE) return OrderOutcome.LIMIT;
+        addOrder(player, template);
+        Main.getInstance().getSLF4JLogger().info("test order for {} ({}) without the treasury check", template.name(), player);
+        return OrderOutcome.OK;
+    }
+
+    private static void addOrder(UUID player, Blueprint template) {
         Long id = Database.queryOne("INSERT INTO bauamt_orders (player_uuid, template_id) VALUES (?, ?) RETURNING id", row -> row.getLong(1),
                 player, template.id());
         if (id == null) throw new IllegalStateException("no id returned");
         orders.add(new Order(id, player, template.id(), Instant.now()));
-        return OrderOutcome.OK;
+    }
+
+    /** Main thread: the building plan of the template into the inventory; false if the player has it already. */
+    public static boolean giveBuildingPlan(@NotNull Player player, @NotNull Blueprint template) {
+        return Bauplan.give(player, template);
     }
 
     /** The player's copies that wait for their grant. */

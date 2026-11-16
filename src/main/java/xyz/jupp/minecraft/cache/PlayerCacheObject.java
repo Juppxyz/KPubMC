@@ -215,6 +215,13 @@ public class PlayerCacheObject {
         return wantedSince;
     }
 
+    /** Test mode (admins): the running warrant counts as started at that time. Blocking. */
+    public void backdateWanted(long since) {
+        if (!isWanted) return;
+        wantedSince = since;
+        PlayerRepository.setWantedSince(uuid, since);
+    }
+
     /** Wanted right now: a warrant that has not run out, not in jail. */
     public boolean isWantedNow() {
         long end = jailEnd;

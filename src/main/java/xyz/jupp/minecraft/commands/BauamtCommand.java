@@ -1,5 +1,6 @@
 package xyz.jupp.minecraft.commands;
 
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.block.Block;
@@ -31,7 +32,7 @@ import java.util.regex.Pattern;
  */
 public class BauamtCommand implements TabExecutor {
 
-    private static final List<String> SUBCOMMANDS = List.of("pos1", "pos2", "vorlage", "liste", "info", "prüfen", "an", "aus", "belohnung", "löschen", "stand");
+    private static final List<String> SUBCOMMANDS = List.of("pos1", "pos2", "vorlage", "liste", "info", "prüfen", "an", "aus", "belohnung", "löschen", "stand", "testauftrag");
     private static final Pattern NAME = Pattern.compile("[\\p{L}\\p{N}_-]{2,24}");
     private static final int REACH = 64;
     private static final int MAX_EDGE = Blueprint.MAX_EDGE;
@@ -71,6 +72,7 @@ public class BauamtCommand implements TabExecutor {
                             + Items.format(funding.averageIncome()) + " §7am Tag §8| §fFörderung: §a" + funding.percent() + " % §7des Richtwerts"
                             + (funding.broke() ? " §c(Pleite: nichts)" : " §7(Reserve " + Items.format(funding.reserve())
                             + ", Tagesbudget noch " + Items.format(funding.budgetLeft()) + ")")));
+            case "testauftrag" -> testOrder(player, args);
             default -> help(player);
         }
         return true;
@@ -87,6 +89,7 @@ public class BauamtCommand implements TabExecutor {
         player.sendMessage("§8» §a/bauamt belohnung <Name> <Betrag> §8- §fRichtwert ändern");
         player.sendMessage("§8» §a/bauamt löschen <Name> §8- §fVorlage samt Bauten entfernen");
         player.sendMessage("§8» §a/bauamt stand §8- §fStaatskasse, Ø Einnahmen und aktuelle Förderquote");
+        player.sendMessage("§8» §a/bauamt testauftrag <Name> [Spieler] §8- §fTest: Auftrag ohne Prüfung der Staatskasse");
         player.sendMessage("§7Der Richtwert wird voll gezahlt, solange die Staatskasse ihre Ø Tageseinnahmen hält, darunter anteilig weniger.");
         player.sendMessage("§7Luft im Rahmen muss beim Nachbau frei bleiben; der Rahmen wird beim Speichern eng um die Blöcke gezogen.");
     }
@@ -279,6 +282,51 @@ public class BauamtCommand implements TabExecutor {
         }
     }
 
+    // test mode: an order without the treasury check (a young server has no income, so the Bauamt hands out none)
+    private static void testOrder(Player admin, String[] args) {
+        if (args.length < 2) {
+            fail(admin, "§fSo: §a/bauamt testauftrag <Vorlage> [Spieler]");
+            return;
+        }
+        Blueprint template = Bauamt.template(args[1]);
+        if (template == null) {
+            fail(admin, "§fDie Vorlage §e" + args[1] + " §fgibt es nicht. §7(/bauamt liste)");
+            return;
+        }
+        Player target = args.length >= 3 ? Bukkit.getPlayerExact(args[2]) : admin;
+        if (target == null) {
+            fail(admin, "§fSpieler nicht gefunden oder nicht online.");
+            return;
+        }
+        UUID uuid = target.getUniqueId();
+        Tasks.async(() -> {
+            Bauamt.OrderOutcome outcome;
+            try {
+                outcome = Bauamt.takeTestOrder(uuid, template);
+            } catch (RuntimeException e) {
+                Main.getInstance().getSLF4JLogger().error("Bauamt test order for {} failed", target.getName(), e);
+                outcome = null;
+            }
+            Bauamt.OrderOutcome result = outcome;
+            Tasks.sync(() -> {
+                if (result == Bauamt.OrderOutcome.OK) {
+                    boolean plan = target.isOnline() && Bauamt.giveBuildingPlan(target, template);
+                    target.sendMessage(Main.getChatPrefix() + "§fAuftrag angenommen §7(Test)§f: §e" + template.name()
+                            + "§f. Bau ihn irgendwo nach, beim letzten Block meldet sich das Bauamt."
+                            + (plan ? " Den §6Bauplan §fhast du jetzt im Inventar." : ""));
+                    if (target != admin) admin.sendMessage(Main.getChatPrefix() + "§fTest-Auftrag §e" + template.name() + " §ffür §a" + target.getName() + " §fvergeben.");
+                    admin.sendMessage(Main.getChatPrefix() + "§7Die Förderung für den fertigen Bau zahlt die Staatskasse nur, wenn sie es kann §7(/bauamt stand)§7.");
+                } else if (result == Bauamt.OrderOutcome.LIMIT) {
+                    fail(admin, "§f" + target.getName() + " hat schon " + Bauamt.ORDERS_PER_TEMPLATE + " offene Aufträge für §e" + template.name() + "§f.");
+                } else if (result == Bauamt.OrderOutcome.DISABLED) {
+                    fail(admin, "§fDie Vorlage §e" + template.name() + " §fist gesperrt. §7Freigeben: §a/bauamt an " + template.name());
+                } else {
+                    fail(admin, "§fDas hat nicht geklappt, Näheres im Log.");
+                }
+            });
+        });
+    }
+
     private static void fail(Player player, String message) {
         player.sendMessage(Main.getChatPrefix() + message);
     }
@@ -289,9 +337,13 @@ public class BauamtCommand implements TabExecutor {
         if (args.length == 1) {
             return SUBCOMMANDS.stream().filter(sub -> sub.startsWith(args[0].toLowerCase(Locale.ROOT))).toList();
         }
-        if (args.length == 2 && List.of("an", "aus", "belohnung", "löschen", "loeschen", "info", "prüfen", "pruefen").contains(args[0].toLowerCase(Locale.ROOT))) {
+        if (args.length == 2 && List.of("an", "aus", "belohnung", "löschen", "loeschen", "info", "prüfen", "pruefen", "testauftrag").contains(args[0].toLowerCase(Locale.ROOT))) {
             return Bauamt.templates().stream().map(Blueprint::name)
                     .filter(name -> name.toLowerCase(Locale.ROOT).startsWith(args[1].toLowerCase(Locale.ROOT))).toList();
+        }
+        if (args.length == 3 && args[0].equalsIgnoreCase("testauftrag")) {
+            return Bukkit.getOnlinePlayers().stream().map(Player::getName)
+                    .filter(name -> name.toLowerCase(Locale.ROOT).startsWith(args[2].toLowerCase(Locale.ROOT))).toList();
         }
         return List.of();
     }

@@ -13,6 +13,7 @@ import org.jetbrains.annotations.Nullable;
 import xyz.jupp.minecraft.economy.Loans;
 import xyz.jupp.minecraft.Main;
 import xyz.jupp.minecraft.cache.CacheHandler;
+import xyz.jupp.minecraft.jail.Deputies;
 import xyz.jupp.minecraft.jail.JailCells;
 import xyz.jupp.minecraft.jail.WantedBoard;
 import xyz.jupp.minecraft.utils.JailHandler;
@@ -25,7 +26,7 @@ import java.util.List;
 public class JailCommand implements CommandExecutor, TabCompleter {
 
     private static final String PREFIX = Main.getChatPrefix();
-    private static final List<String> SUBCOMMANDS = List.of("jail", "unjail", "wanted", "zelle", "zellen", "tafel");
+    private static final List<String> SUBCOMMANDS = List.of("jail", "unjail", "wanted", "testgesucht", "zelle", "zellen", "tafel");
     private static final List<String> WANTED_MODES = List.of("on", "off", "toggle");
     private static final List<String> CELL_ACTIONS = List.of("ecke1", "ecke2", "spawn", "löschen");
 
@@ -52,6 +53,7 @@ public class JailCommand implements CommandExecutor, TabCompleter {
                 case "jail" -> handleJail(sender, label, args);
                 case "unjail" -> handleUnjail(sender, label, args);
                 case "wanted" -> handleWanted(sender, label, args);
+                case "testgesucht" -> handleWantedTest(sender, label, args);
                 case "zelle" -> handleCell(sender, label, args);
                 case "zellen" -> handleCells(sender, label);
                 case "tafel" -> handleBoard(sender, label, args);
@@ -114,6 +116,37 @@ public class JailCommand implements CommandExecutor, TabCompleter {
             JailHandler.releasePlayer(target);
             Tasks.sync(() -> sender.sendMessage(PREFIX + "§a" + target.getName() + " §fwurde aus dem Gefängnis entlassen."));
         });
+    }
+
+    // /bestrafung testgesucht <Spieler> [Tage]: test mode, wanted as if the warrant had run that long already (no broadcast)
+    private void handleWantedTest(CommandSender sender, String label, String[] args) {
+        if (args.length < 2) {
+            sender.sendMessage(PREFIX + "§fNutze: §e/" + label + " testgesucht <Spieler> [Tage] §7(ohne Tage: " + Deputies.HUNT_AFTER_DAYS + ")");
+            return;
+        }
+        Player target = Bukkit.getPlayerExact(args[1]);
+        if (target == null) {
+            sender.sendMessage(PREFIX + "§cSpieler nicht gefunden oder nicht online.");
+            return;
+        }
+        int days = Deputies.HUNT_AFTER_DAYS;
+        if (args.length >= 3) {
+            try {
+                days = Integer.parseInt(args[2]);
+            } catch (NumberFormatException e) {
+                days = -1;
+            }
+            if (days < 0 || days > 365) {
+                sender.sendMessage(PREFIX + "§cUngültige Tage: §f" + args[2] + " §7(0 bis 365)");
+                return;
+            }
+        }
+        if (!JailHandler.markWantedForTest(target, days)) {
+            sender.sendMessage(PREFIX + "§c" + target.getName() + " sitzt im Gefängnis. §7Erst §e/" + label + " unjail " + target.getName());
+            return;
+        }
+        sender.sendMessage(PREFIX + "§a" + target.getName() + " §fist jetzt §4§lGESUCHT §7(Test, bis gefasst)§f, als liefe die Fahndung schon seit §e"
+                + days + " Tag" + (days == 1 ? "" : "en") + "§f. §7Beenden: §e/" + label + " wanted " + target.getName() + " off");
     }
 
     // /bestrafung wanted <Spieler> <on|off|toggle>
@@ -283,6 +316,8 @@ public class JailCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage("§e/" + label + " jail <Spieler> <Stunden> <Grund...> §7- Spieler inhaftieren");
         sender.sendMessage("§e/" + label + " unjail <Spieler> §7- Spieler freilassen");
         sender.sendMessage("§e/" + label + " wanted <Spieler> <on|off|toggle> §7- Wanted-Status setzen");
+        sender.sendMessage("§e/" + label + " testgesucht <Spieler> [Tage] §7- Test: gesucht, als liefe die Fahndung schon "
+                + Deputies.HUNT_AFTER_DAYS + " (oder <Tage>) Tage");
         sender.sendMessage("§e/" + label + " zelle <Name> <ecke1|ecke2|spawn|löschen> §7- Zelle einrichten");
         sender.sendMessage("§e/" + label + " zellen §7- alle Zellen mit Häftlingen");
         sender.sendMessage("§e/" + label + " tafel [<Platz> [entfernen]] §7- Gesucht-Tafel einrichten");
