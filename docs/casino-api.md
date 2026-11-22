@@ -25,7 +25,7 @@ Das Casino **kann nicht**:
 - Geld aus der Staatskasse nehmen.
 - Kreditgeld verspielen. Geld, das an einen Kredit gebunden ist, kann man bei Basil gar nicht als Bargeld abheben.
 
-Damit kann das Casino pro Saison höchstens sein Startkapital (Standard 100.000) plus das, was Spieler dort verloren haben, wieder ausgeben, und an einen einzelnen Spieler höchstens das Tageslimit (Standard 20.000 netto in 24 Stunden). Mehr Geld kann über das Casino nicht in die Wirtschaft kommen.
+Damit kann das Casino pro Saison höchstens sein Startkapital (Standard 100.000) plus das, was Spieler dort verloren haben, wieder ausgeben, und an einen einzelnen Spieler höchstens das Tageslimit (Standard 5.000 netto in 24 Stunden). Mehr Geld kann über das Casino nicht in die Wirtschaft kommen.
 
 ## Einbinden
 
@@ -214,6 +214,6 @@ Fürs Casino heißt das: die Saison zusammen mit den eigenen Daten speichern (si
 ## Für Admins
 
 - Startkapital in der `config.json` von KPubMC: `"casinoStartCapital": 100000`. Es gilt ab der nächsten Saison, eine laufende Kasse wird nicht verändert.
-- Tageslimit pro Spieler in der `config.json`: `"casinoDailyPayoutLimit": 20000` (0 = kein Limit).
+- Tageslimit pro Spieler in der `config.json`: `"casinoDailyPayoutLimit": 5000` (0 = kein Limit).
 - `/wirtschaft` zeigt den Stand der Casinokasse, wie viel das Casino in 24 Stunden netto an Spieler ausgezahlt hat und wer am meisten bekommen hat, und hat einen Notschalter **Casino**. Solange er an ist, sind Einsätze, Gewinne und Zahlungen an den Staat geschlossen.
 - Jede Buchung steht in der Tabelle `casino_ledger` mit Spieler, Spiel, Betrag und Zeit.

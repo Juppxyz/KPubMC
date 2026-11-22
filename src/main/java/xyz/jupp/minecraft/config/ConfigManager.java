@@ -56,7 +56,7 @@ public class ConfigManager {
     // the casino till's money at the start of a season (Casino, booked once when the till is empty), 0: none
     private static volatile int casinoStartCapital = 100_000;
     // the most cash one player may take out of the casino till in 24 hours, net (wins minus bets), 0: no limit
-    private static volatile int casinoDailyPayoutLimit = 20_000;
+    private static volatile int casinoDailyPayoutLimit = 5_000;
     // taxes on cash at Basil (withdrawing, paying in), times the daily tax factor
     private static volatile double cashWithdrawTax = 0.10;
     private static volatile double cashDepositTax = 0.05;
@@ -103,7 +103,7 @@ public class ConfigManager {
             treasuryTargetPerPlayer = Math.max(0, optInt(config, "treasuryTargetPerPlayer", 20_000));
             treasuryStartCapital = Math.max(0, optInt(config, "treasuryStartCapital", 25_000));
             casinoStartCapital = Math.max(0, optInt(config, "casinoStartCapital", 100_000));
-            casinoDailyPayoutLimit = Math.max(0, optInt(config, "casinoDailyPayoutLimit", 20_000));
+            casinoDailyPayoutLimit = Math.max(0, optInt(config, "casinoDailyPayoutLimit", 5_000));
             cashWithdrawTax = Math.max(0, Math.min(0.5, optDouble(config, "cashWithdrawTax", 0.10)));
             cashDepositTax = Math.max(0, Math.min(0.5, optDouble(config, "cashDepositTax", 0.05)));
             aiReview = !"false".equalsIgnoreCase(optString(config, "aiReview", "true"));

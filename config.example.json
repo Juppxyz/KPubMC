@@ -31,7 +31,7 @@
   "treasuryTargetPerPlayer": 20000,
   "treasuryStartCapital": 25000,
   "casinoStartCapital": 100000,
-  "casinoDailyPayoutLimit": 20000,
+  "casinoDailyPayoutLimit": 5000,
   "cashWithdrawTax": 0.10,
   "cashDepositTax": 0.05,
   "dntLoot": {
