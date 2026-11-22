@@ -13,7 +13,7 @@ public class KeepInventoryItem extends BlackMarketItem {
     private static final List<String> BASE_LORE = List.of("§eDiese kleine Wunderbox sichert", "§edeine Items und Level", " ", "§7§oNur einmal nutzbar!");
 
     public KeepInventoryItem() {
-        super("§6Box of Undying", Material.CHEST, 5000, KEY, BASE_LORE);
+        super("§6Box of Undying", Material.CHEST, 10000, KEY, BASE_LORE);
     }
 
 }

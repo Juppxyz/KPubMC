@@ -13,7 +13,7 @@ public class Flamethrower extends BlackMarketItem {
     private static final List<String> BASE_LORE = List.of("§cErzeugt einen explosiven Feuerball!", "", "§7§oNur einmal nutzbar!");
 
     public Flamethrower() {
-        super("§c§lFlammenwerfer", Material.BLAZE_ROD, 5000, KEY, BASE_LORE);
+        super("§c§lFlammenwerfer", Material.BLAZE_ROD, 2500, KEY, BASE_LORE);
     }
 
 }
