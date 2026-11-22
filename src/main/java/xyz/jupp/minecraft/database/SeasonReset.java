@@ -118,7 +118,7 @@ public final class SeasonReset {
      */
     static final List<String> KEEP = List.of(
             "market_items", "market_services", "market_adjustments", "market_meta", "command_log",
-            "bauamt_templates", "bauamt_maps", "bauamt_builds", "jail_cells", "wanted_board", "map_spawn", "map_areas");
+            "bauamt_templates", "bauamt_maps", "bauamt_builds", "jail_cells", "wanted_board", "death_board", "map_spawn", "map_areas");
 
     /** market_meta keys that belong to the season; the others (one-time migrations, catalog version) stay. */
     static final List<String> SEASON_META = List.of(

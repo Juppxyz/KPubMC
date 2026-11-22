@@ -216,6 +216,21 @@ public final class PlayerRepository {
     }
 
 
+    /** A player on the death board. */
+    public record Deaths(UUID uuid, int deaths) {}
+
+    /** Blocking: one more death (outside the arena) for the death board. */
+    public static void addDeath(UUID uuid) {
+        Database.update("UPDATE players SET deaths = deaths + 1, last_death = now() WHERE uuid = ?", uuid);
+    }
+
+    /** Blocking: the players with the most deaths; on a tie whoever got there first. */
+    public static List<Deaths> mostDeaths(int limit) {
+        return Database.query("SELECT uuid, deaths FROM players WHERE deaths > 0 ORDER BY deaths DESC, last_death ASC LIMIT ?",
+                row -> new Deaths(row.getObject("uuid", UUID.class), row.getInt("deaths")), limit);
+    }
+
+
     private static String signed(int value) {
         return String.format("%+d", value);
     }

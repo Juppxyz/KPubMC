@@ -2,7 +2,6 @@ package xyz.jupp.minecraft.commands;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.block.Block;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -16,6 +15,7 @@ import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.jail.Deputies;
 import xyz.jupp.minecraft.jail.JailCells;
 import xyz.jupp.minecraft.jail.WantedBoard;
+import xyz.jupp.minecraft.utils.HeadBoard;
 import xyz.jupp.minecraft.utils.JailHandler;
 import xyz.jupp.minecraft.utils.Tasks;
 
@@ -257,48 +257,7 @@ public class JailCommand implements CommandExecutor, TabCompleter {
 
     // /bestrafung tafel [<Platz> [entfernen]]: a place of the wanted board, set while looking at its head or its sign
     private void handleBoard(CommandSender sender, String label, String[] args) {
-        if (args.length < 2) {
-            sender.sendMessage(PREFIX + "§fGesucht-Tafel §7(die " + WantedBoard.SPOTS + " höchsten Kopfgelder)§8:");
-            for (int number = 1; number <= WantedBoard.SPOTS; number++) {
-                WantedBoard.Spot spot = WantedBoard.spots().get(number);
-                sender.sendMessage("§8» §e" + number + " " + (spot == null ? "§7nicht gesetzt"
-                        : "§7" + spot.world() + " " + spot.x() + " " + spot.y() + " " + spot.z()));
-            }
-            sender.sendMessage(PREFIX + "§fSetzen: §e/" + label + " tafel <Platz> §7(schau dabei auf den Kopf oder das Schild darunter)");
-            return;
-        }
-        int number;
-        try {
-            number = Integer.parseInt(args[1]);
-        } catch (NumberFormatException e) {
-            number = 0;
-        }
-        if (number < 1 || number > WantedBoard.SPOTS) {
-            sender.sendMessage(PREFIX + "§cDer Platz ist eine Zahl von 1 bis " + WantedBoard.SPOTS + ".");
-            return;
-        }
-        int place = number;
-        if (args.length >= 3 && (args[2].equalsIgnoreCase("entfernen") || args[2].equalsIgnoreCase("löschen"))) {
-            Tasks.supplyAsync(() -> WantedBoard.remove(place), removed -> sender.sendMessage(PREFIX + (removed
-                    ? "§fPlatz §e" + place + " §fgehört nicht mehr zur Tafel. §7(Kopf und Schild bleiben stehen.)"
-                    : "§cPlatz " + place + " war nicht gesetzt.")));
-            return;
-        }
-        if (!(sender instanceof Player player)) {
-            sender.sendMessage(PREFIX + "§cDie Tafel setzt man im Spiel, mit Blick auf den Kopf.");
-            return;
-        }
-        Block target = player.getTargetBlockExact(WantedBoard.TARGET_RANGE);
-        WantedBoard.Spot spot = target == null ? null : WantedBoard.find(place, target);
-        if (spot == null) {
-            sender.sendMessage(PREFIX + "§cSchau auf einen Kopf oder Schädel mit einem Schild darunter §7(bis 3 Blöcke tiefer)§c.");
-            return;
-        }
-        Tasks.async(() -> {
-            WantedBoard.save(spot);
-            Tasks.sync(() -> sender.sendMessage(PREFIX + "§fPlatz §e" + place + " §fder Gesucht-Tafel gesetzt. §7(Der Name kommt in Zeile "
-                    + (spot.signLine() + 1) + " des Schilds.)"));
-        });
+        WantedBoard.BOARD.command(sender, "/" + label + " tafel", Arrays.copyOfRange(args, 1, args.length));
     }
 
     private static String cellStatus(JailCells.Cell cell) {
@@ -346,9 +305,7 @@ public class JailCommand implements CommandExecutor, TabCompleter {
         }
 
         if (args[0].equalsIgnoreCase("tafel")) {
-            if (args.length == 2) return startingWith(java.util.stream.IntStream.rangeClosed(1, WantedBoard.SPOTS).mapToObj(String::valueOf).toList(), args[1]);
-            if (args.length == 3) return startingWith(List.of("entfernen"), args[2]);
-            return new ArrayList<>();
+            return new ArrayList<>(HeadBoard.complete(Arrays.copyOfRange(args, 1, args.length)));
         }
 
         if (args.length == 2 && !args[0].equalsIgnoreCase("zellen")) {

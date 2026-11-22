@@ -78,6 +78,9 @@ public final class Main extends JavaPlugin {
         this.getCommand("team").setExecutor(new TeamCommand());
         this.getCommand("ranking").setExecutor(new RankingCommand());
         this.getCommand("hover").setExecutor(new HoverTextCommand());
+        DeathBoardCommand deathBoard = new DeathBoardCommand();
+        this.getCommand("todestafel").setExecutor(deathBoard);
+        this.getCommand("todestafel").setTabCompleter(deathBoard);
         this.getCommand("head").setExecutor(new PlayerHeadsCommand());
         this.getCommand("warp").setExecutor(new WarpCommand());
         ItemCommand itemCommand = new ItemCommand();
@@ -162,7 +165,8 @@ public final class Main extends JavaPlugin {
         CombatLock.tickTask().runTaskTimer(this, 20L, 20L);
         Bauamt.startTask();
         PlayerSaves.start();
-        WantedBoard.startTask();
+        WantedBoard.BOARD.startTask();
+        DeathBoardCommand.BOARD.startTask();
         Deputies.startTask();
     }
 
@@ -214,9 +218,11 @@ public final class Main extends JavaPlugin {
         int mapAreas = Locations.load();
         Logger.console("loaded " + mapAreas + " ready spawn areas and arenas");
         int jailCells = JailCells.load();
-        int boardSpots = WantedBoard.load();
+        int boardSpots = WantedBoard.BOARD.load();
+        int deathSpots = DeathBoardCommand.BOARD.load();
         int contracts = Bounties.load();
-        Logger.console("loaded " + jailCells + " ready jail cells, " + boardSpots + " wanted board spots, " + contracts + " open contracts");
+        Logger.console("loaded " + jailCells + " ready jail cells, " + boardSpots + " wanted board spots, " + deathSpots
+                + " death board spots, " + contracts + " open contracts");
         Logger.console("loaded " + Market.all().size() + " market items, " + Market.dailyOffers().size() + " daily offers, "
                 + Bauamt.templates().size() + " building templates, " + Bauamt.builds().size() + " builds");
         registerCommands();

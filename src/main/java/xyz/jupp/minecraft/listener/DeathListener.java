@@ -21,6 +21,8 @@ import xyz.jupp.minecraft.economy.Loans;
 import xyz.jupp.minecraft.cache.CacheHandler;
 import xyz.jupp.minecraft.cache.PlayerCacheObject;
 import xyz.jupp.minecraft.cache.TeamCacheObject;
+import xyz.jupp.minecraft.commands.DeathBoardCommand;
+import xyz.jupp.minecraft.database.PlayerRepository;
 import xyz.jupp.minecraft.items.KeepInventoryItem;
 import xyz.jupp.minecraft.jail.Bounties;
 import xyz.jupp.minecraft.jail.Deputies;
@@ -129,6 +131,12 @@ public class DeathListener implements Listener {
         if (bountyID != null) event.getDrops().add(Bounties.head(bountyID, player, playerTeamID, killer.getName()));
 
         Tasks.async(() -> {
+            try {
+                PlayerRepository.addDeath(player.getUniqueId());
+                DeathBoardCommand.BOARD.refresh();
+            } catch (RuntimeException e) {
+                Main.getInstance().getSLF4JLogger().error("Death of {} could not be counted", player.getName(), e);
+            }
             try {
                 chargeDeathTax(player);
             } catch (RuntimeException e) {

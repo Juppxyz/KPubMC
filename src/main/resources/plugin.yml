@@ -25,6 +25,7 @@ commands:
   ranking:
   createshop:
   hover:
+  todestafel:
   head:
     aliases: [kopf]
     usage: /<command>

@@ -622,7 +622,23 @@ public final class Database {
                 created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
             )""",
             // the daily payout limit sums one player's last 24 hours
-            "CREATE INDEX IF NOT EXISTS casino_ledger_player_idx ON casino_ledger (player_uuid, created_at)"
+            "CREATE INDEX IF NOT EXISTS casino_ledger_player_idx ON casino_ledger (player_uuid, created_at)",
+            // deaths this season outside the arena (the death board); the last one decides a tie
+            "ALTER TABLE players ADD COLUMN IF NOT EXISTS deaths INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE players ADD COLUMN IF NOT EXISTS last_death TIMESTAMPTZ",
+            // the death board: per place the head block and the sign whose line gets the name (the deaths under it)
+            """
+            CREATE TABLE IF NOT EXISTS death_board (
+                spot      INTEGER PRIMARY KEY CHECK (spot BETWEEN 1 AND 3),
+                world     TEXT    NOT NULL,
+                x         INTEGER NOT NULL,
+                y         INTEGER NOT NULL,
+                z         INTEGER NOT NULL,
+                sign_x    INTEGER NOT NULL,
+                sign_y    INTEGER NOT NULL,
+                sign_z    INTEGER NOT NULL,
+                sign_line INTEGER NOT NULL DEFAULT 1 CHECK (sign_line BETWEEN 0 AND 3)
+            )"""
     );
 
     private static volatile HikariDataSource dataSource;
