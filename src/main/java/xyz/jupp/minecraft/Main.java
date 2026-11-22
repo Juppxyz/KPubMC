@@ -77,7 +77,9 @@ public final class Main extends JavaPlugin {
         this.getCommand("invites").setExecutor(new InvitesCommand());
         this.getCommand("team").setExecutor(new TeamCommand());
         this.getCommand("ranking").setExecutor(new RankingCommand());
-        this.getCommand("hover").setExecutor(new HoverTextCommand());
+        HoverTextCommand hover = new HoverTextCommand();
+        this.getCommand("hover").setExecutor(hover);
+        this.getCommand("hover").setTabCompleter(hover);
         DeathBoardCommand deathBoard = new DeathBoardCommand();
         this.getCommand("todestafel").setExecutor(deathBoard);
         this.getCommand("todestafel").setTabCompleter(deathBoard);
@@ -167,6 +169,7 @@ public final class Main extends JavaPlugin {
         PlayerSaves.start();
         WantedBoard.BOARD.startTask();
         DeathBoardCommand.BOARD.startTask();
+        HoverSpin.start();
         Deputies.startTask();
     }
 

@@ -46,7 +46,7 @@ public class HelpCommand implements CommandExecutor {
             player.sendMessage("§8§l» §a/config §8- §fLade die Config neu. ");
             player.sendMessage("§8§l» §a/shopadmin §8- §fVerwaltet Katalog, Preise und Tagesangebote.");
             player.sendMessage("§8§l» §a/spec §8- §fSei Undercover!");
-            player.sendMessage("§8§l» §a/hover <Text ..> §8- §fErstellt einen neuen HoverText");
+            player.sendMessage("§8§l» §a/hover <Text ..> §8- §fErstellt einen HoverText §7(/hover hilfe: Item, Größe, Hintergrund ...)");
             player.sendMessage("§8§l» §a/todestafel §8- §fKöpfe der 3 Spieler mit den meisten Toden §7(/todestafel <Platz>)");
             player.sendMessage("§8§l» §a/createshop §8- §fErstellt einen neuen Villager Händler.");
             player.sendMessage("§8§l» §a/createbankier §8- §fErstellt einen neuen Finanz Händler.");
