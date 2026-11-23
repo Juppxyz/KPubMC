@@ -36,7 +36,7 @@ public class MobLimiterListener implements Listener {
 
     private static final int NEARBY_ENTITY_RADIUS_XZ = 8;
     private static final int NEARBY_ENTITY_RADIUS_Y = 2;
-    private static final int NEARBY_ENTITY_LIMIT = 50;
+    private static final int NEARBY_ENTITY_LIMIT = 105;
 
     private static boolean isProtected(@Nullable TeamCacheObject claimingTeam) {
         return claimingTeam != null && claimingTeam.getLevel() >= 2 && !claimingTeam.isZoneOptionMobDamage();
